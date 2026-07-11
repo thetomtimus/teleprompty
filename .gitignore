@@ -5,6 +5,7 @@ build/
 xcuserdata/
 .swiftpm/
 .build/
+/PrivatePresenter.xcodeproj/
 
 # OMX runtime
 .omx/

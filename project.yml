@@ -1,0 +1,77 @@
+name: PrivatePresenter
+options:
+  minimumXcodeGenVersion: 2.45.4
+  deploymentTarget:
+    macOS: "14.0"
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+packages:
+  TeleprompterCore:
+    path: Packages/TeleprompterCore
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CLANG_ENABLE_MODULES: YES
+targets:
+  PrivatePresenter:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: PrivatePresenterApp
+    info:
+      path: PrivatePresenterApp/Info.plist
+    entitlements:
+      path: PrivatePresenterApp/Resources/PrivatePresenter.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.privatepresenter.teleprompter
+        PRODUCT_NAME: Private Presenter
+        PRODUCT_MODULE_NAME: PrivatePresenter
+        CODE_SIGN_ENTITLEMENTS: PrivatePresenterApp/Resources/PrivatePresenter.entitlements
+    dependencies:
+      - package: TeleprompterCore
+        product: TeleprompterCore
+      - sdk: Carbon.framework
+  PrivatePresenterAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: PrivatePresenterAppTests
+    dependencies:
+      - target: PrivatePresenter
+      - package: TeleprompterCore
+        product: TeleprompterCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.privatepresenter.teleprompter.tests
+  PrivatePresenterUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: PrivatePresenterUITests
+    dependencies:
+      - target: PrivatePresenter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.privatepresenter.teleprompter.uitests
+schemes:
+  PrivatePresenter:
+    shared: true
+    build:
+      targets:
+        PrivatePresenter: all
+        PrivatePresenterAppTests: [test]
+        PrivatePresenterUITests: [test]
+    test:
+      targets:
+        - PrivatePresenterAppTests
+        - PrivatePresenterUITests
