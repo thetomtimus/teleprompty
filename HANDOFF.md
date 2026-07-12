@@ -1,21 +1,28 @@
-# Private Presenter — Milestone 0 Handoff
+# Private Presenter — Milestone 0 Evidence and Milestone 1 Handoff
 
 ## Status and boundary
 
 - Branch: `main`
-- Planning baseline supplied for this run: `a58afbd`
-- Delivery: local-only; no remote, push, publication, signing, notarization, or
-  distribution
-- Current milestone: **Milestone 0 only (M0.1–M0.6)**
-- WSL status: source/static validation is the only evidence available here
-- macOS Swift/AppKit status: **PENDING**
-- Real Keynote + second-display/projector proof: **PENDING**
-- Milestone 1: **NOT STARTED — HARD STOP**
+- Current baseline: `cca4229be4299eadc0370e8c26fae6f71e621ffc`
+- Origin: `https://github.com/thetomtimus/teleprompty.git` (fetch and push)
+- Mac implementation underlying the physical run: `31dff6fdfa56a0987e0b76622c81939419096dbd`
+- macOS automated status: reported as tested for `31dff6f`; raw command logs and
+  authoritative test counts are not committed, and this WSL planning run did not
+  independently reproduce the macOS suite
+- Real Keynote + second-display/projector proof: **BLOCKED**, not PASS; see
+  `docs/validation/overlay-proof-result.md`
+- Next guarded slice: **Milestone 1 (M1.1–M1.4) is user-authorized** under
+  `docs/plans/2026-07-12-milestone-1-core-state-durability.md`
+- Hard gate: **M2 UI expansion, beta use, and readiness claims remain blocked**
+  until the dedicated M0 stabilization slice passes the complete physical matrix
 
-This handoff must not be read as a claim that the app compiled, its tests ran,
-or its overlay/privacy behavior passed on macOS. WSL cannot establish any of
-those facts. `docs/validation/overlay-proof-result.md` must not exist until a
-human performs the real physical gate and records the result.
+This handoff must not be read as an M0 pass. The 2026-07-12 physical run recorded
+positive evidence for extended Keynote placement, later overlay visibility,
+normal Keynote input/click-through, repeated toggling after the initial failure,
+and fail-closed disconnect/reconnect. It also recorded an initial focus/full-screen
+interruption and incomplete focus/key/main, physical-audience, Space, mirroring,
+level-comparison, opacity, unlock/drag/resize boundary, and hostile-recovery gates.
+Those defects remain explicit and the historical BLOCKED result must not be weakened.
 
 ## Milestone 0 implementation inventory
 
@@ -41,11 +48,10 @@ human performs the real physical gate and records the result.
   select/show/lock/hide controls, and physical-proof template:
   `WorkspaceFocusProbe.swift`, `DiagnosticHotKeyService.swift`, controller
   proof UI, `docs/validation/overlay-proof-template.md`, and this handoff.
-- Commit status: source is an intentional uncommitted M0 diff because this WSL
-  sandbox exposes `.git` read-only. Exact parent-closeout commit commands are
-  included below.
-- Deliberately absent: Milestone 1+ state/persistence/editor/scrolling/hotkey/
-  product-polish work and any fake `overlay-proof-result.md`.
+- Commit status: M0 source is committed through `31dff6f`; `cca4229` adds only the
+  truthful BLOCKED physical result.
+- Deliberately absent at this baseline: Milestone 1 state/persistence, editor,
+  scrolling, product hotkeys, menu, and product-polish work.
 
 ## WSL-safe verification
 
@@ -65,11 +71,14 @@ test -f Packages/TeleprompterCore/Package.swift
 test -f PrivatePresenterApp/Resources/PrivatePresenter.entitlements
 sha256sum -c docs/validation/source-artifact-checksums.sha256
 Scripts/verify-no-network.sh
-git remote -v
+test "$(git remote)" = origin
+test "$(git remote get-url origin)" = https://github.com/thetomtimus/teleprompty.git
+test "$(git remote get-url --push origin)" = https://github.com/thetomtimus/teleprompty.git
 git status --short
 ```
 
-Fresh WSL result record:
+Historical 2026-07-11 WSL result record (retained for provenance; superseded where
+it describes Git/commit state):
 
 - Date/time: `2026-07-11` (Asia/Seoul)
 - `./Scripts/verify-wsl.sh`: exit `0`; source/static verification passed and
@@ -88,7 +97,8 @@ Fresh WSL result record:
 - `Scripts/verify-no-network.sh`: exit `0`; no prohibited product network,
   web/JavaScript runtime, telemetry, automation, event-tap, or global-monitor
   surface was found.
-- `git remote -v`: empty; no remote exists.
+- `git remote -v`: was empty during that historical run; `origin` now intentionally
+  points to `https://github.com/thetomtimus/teleprompty.git`.
 - `git status --short`: intentional M0 diff (`.gitignore` modified; M0 source,
   tests, scripts, docs, and configuration untracked). Ignored `.omx` runtime
   state is not part of the delivery.
@@ -175,9 +185,9 @@ here after the run. Do not backfill passing results from WSL or source review.
 
 ### DEBUG proof controls
 
-- `.statusBar` is the default bounded proof level. The lower `.floating` level
-  did not appear over Keynote Presenter Display during the first real Mac test,
-  while `.statusBar` did.
+- `.statusBar` was the Debug level used by the guided physical run. The committed
+  result did not complete the required `.floating` versus `.statusBar` comparison,
+  so no lowest passing level is approved.
 - To retest the lower bounded level, run the Debug executable with
   `PRIVATE_PRESENTER_PROOF_LEVEL=floating`:
 
@@ -281,45 +291,20 @@ JavaScript runtime, network surface, telemetry, accounts, cloud, AI,
 Accessibility event tap, `CGEventTap`, or global `NSEvent` monitor fallback.
 The generated `PrivatePresenter.xcodeproj` remains ignored and uncommitted.
 
-## Hard stop and next command
+## Guarded next command and stop rule
 
-Do **not** begin Milestone 1 or visual product polish in this WSL run. The next
-maintainer's first command on macOS is:
+Run from the committed M1 planning baseline on macOS:
 
-```bash
-./Scripts/bootstrap-macos.sh
+```text
+$ralph Implement docs/plans/2026-07-12-milestone-1-core-state-durability.md
+exactly as a guarded M1-only TDD slice. Preserve the BLOCKED M0 result and the
+DEBUG proof harness, stop before M2, and require code-reviewer, verifier, and
+architect approval plus the plan's exact origin/main safety checks before push.
 ```
 
-Then run the automated macOS commands above and the complete real-hardware
-proof. Milestone 1 remains blocked until
-`docs/validation/overlay-proof-result.md` contains a passing Keynote
-full-screen Presenter Display plus extended second-display record.
-
-## Parent closeout commit (Git metadata is read-only in this WSL sandbox)
-
-After reviewing the intentional diff in a checkout where `.git` is writable,
-create the single plan-prescribed logical M0 commit locally:
-
-```bash
-git add .gitignore .xcodegen-version Config HANDOFF.md Makefile \
-  Packages PrivatePresenterApp PrivatePresenterAppTests PrivatePresenterUITests \
-  Scripts docs project.yml
-git commit -F - <<'EOF'
-Make the riskiest macOS behavior reproducible
-
-Milestone 0 establishes the native project shell, fail-closed display and frame
-policies, the bounded nonactivating panel/privacy proof harness, and honest
-environment-separated validation before any product expansion.
-
-Constraint: WSL cannot compile AppKit or satisfy the real Keynote/projector gate
-Rejected: Fake overlay result or later-milestone polish | violates the physical hard gate
-Confidence: medium
-Scope-risk: moderate
-Directive: Do not begin M1 until overlay-proof-result.md records a passing real-hardware gate
-Tested: ./Scripts/verify-wsl.sh; structure, policy, checksum, ignore, and no-remote checks
-Not-tested: XcodeGen generation, Swift/Xcode tests, AppKit behavior, and real Keynote/projector proof
-EOF
-git status --short
-```
-
-Do not add a remote, push, sign, notarize, publish, or distribute during closeout.
+The M1 exception does not authorize product polish or a readiness claim. After M1,
+run the dedicated M0 stabilization slice for focus/full-screen activation,
+unlock/drag/resize testability, mirroring, opacity, boundary containment, bounded
+level comparison, hostile recovery, Space switching, complete environment evidence,
+and physical audience isolation. Only a new complete physical run may change the
+historical gate result.

@@ -1,8 +1,8 @@
 # Private Presenter Teleprompter — Implementation Plan
 
 Status: **APPROVED** by sequential Planner → Architect → Critic consensus for a subsequent `$ralph` implementation run
-Repository baseline: `main` at `2bba07dd75537c6159016afff48b93a3f8d8d86d`
-Delivery boundary: local-only; no remote, push, publication, application implementation, signing, notarization, or distribution in this planning run
+Original planning baseline: `main` at `2bba07dd75537c6159016afff48b93a3f8d8d86d`; current M1 planning baseline: `cca4229be4299eadc0370e8c26fae6f71e621ffc`
+Delivery boundary: this planning run changes documentation only. `origin` is intentionally `https://github.com/thetomtimus/teleprompty.git`; implementation push is authorized only after the guarded slice's independent verification and origin/main safety checks.
 Toolchain contract: Xcode 16.0 or newer with Swift 6.0; Swift tools version 6.0; XcodeGen 2.45.4 exactly
 Product identity: app name `Private Presenter`; target/scheme `PrivatePresenter`; local-only bundle identifier `com.privatepresenter.teleprompter`
 Deployment target: macOS 14.0 unless Milestone 0 produces concrete evidence that a required API or reliable behavior needs newer
@@ -28,6 +28,10 @@ Hard boundaries:
 6. A real Mac, real Keynote, and an actual second display/projector are mandatory evidence. WSL, mocks, an ordinary desktop window, or a single-display full-screen test cannot satisfy the overlay/privacy gate.
 7. The full-screen overlay and private-display safety proof is the first product milestone and a hard stop before editor breadth or visual polish.
 8. `PRD.md` out-of-scope items remain deferred. Do not broaden v1 during implementation.
+
+### 2026-07-12 sequencing amendment
+
+`docs/validation/overlay-proof-result.md` truthfully records the physical M0 run as **BLOCKED**, not PASS. Tom explicitly authorized the substantially orthogonal M1 core-state/local-durability slice to proceed under `docs/plans/2026-07-12-milestone-1-core-state-durability.md`. This is not an M0 waiver: the unresolved focus/full-screen interruption, key/main diagnostics, unlock/drag/resize testability, mirroring, opacity, boundary containment, bounded-level comparison, hostile recovery, explicit Space switching, environment record, and physical audience-display checks remain must-fix gates before M2 UI expansion, beta use, or any readiness claim.
 
 ## 2. Evidence boundary and primary references
 
@@ -481,7 +485,7 @@ Run tasks in order. For each task: add the named failing test(s), observe the ta
 
 ### Milestone 0 — Technical overlay and private-display proof (first milestone)
 
-**Hard stop:** no Milestone 1 files or visual-product work until `docs/validation/overlay-proof-result.md` contains a passing real Keynote + second-display record. If the bounded panel levels fail, stop as a feasibility blocker.
+**Amended hard stop:** the historical physical result remains BLOCKED. Only the guarded, substantially orthogonal M1 slice may proceed under the 2026-07-12 companion plan. No M2/UI expansion, beta use, visual-product work, or readiness claim may proceed until a dedicated M0 stabilization slice fixes and reruns the complete physical matrix. If both bounded panel levels fail the complete rerun, stop as a feasibility blocker.
 
 | Task | RED tests (exact names) | Implementation paths | Target command |
 |---|---|---|---|
@@ -515,6 +519,8 @@ On a Mac running macOS 14 or later, with a current Keynote and a real second dis
 If `.floating` and `.statusBar` both fail, do not try `.screenSaver`, private APIs, or a focus-stealing window. Mark the milestone blocked with evidence and reassess feasibility.
 
 ### Milestone 1 — Core state and local durability
+
+Execute this milestone only through the approved companion plan: `docs/plans/2026-07-12-milestone-1-core-state-durability.md`. M1 completion does not imply M0 or product readiness; stop after M1 for the dedicated M0 stabilization slice.
 
 | Task | RED tests (exact names) | Implementation paths | Target command |
 |---|---|---|---|
@@ -608,7 +614,7 @@ git diff --exit-code 2bba07d -- PRD.md references/teleprompter-ui-reference.png 
    - persistence schema and migration state;
    - remaining risks and explicit deferrals;
    - source-artifact checksum confirmation;
-   - confirmation of no product network surface and local-only/no-remote status;
+   - confirmation of no product network surface plus exact expected `origin` fetch/push URLs and branch/push status;
    - exact first command for the next maintainer.
 4. Run prompt-to-acceptance audit, code review, verifier review, and final architect approval. Do not mark complete with a missing physical gate.
 
@@ -630,7 +636,9 @@ test -f Packages/TeleprompterCore/Package.swift
 test -f PrivatePresenterApp/Resources/PrivatePresenter.entitlements
 sha256sum -c docs/validation/source-artifact-checksums.sha256
 Scripts/verify-no-network.sh
-git remote -v                              # must remain empty
+test "$(git remote)" = origin
+test "$(git remote get-url origin)" = https://github.com/thetomtimus/teleprompty.git
+test "$(git remote get-url --push origin)" = https://github.com/thetomtimus/teleprompty.git
 git status --short
 ```
 
@@ -847,28 +855,25 @@ Team verification before shutdown: core tests → app/UI tests → analyze + Rel
 
 ## 19. Exact Ralph handoff
 
-Run from a **macOS checkout** at the planning commit:
+Run from a **macOS checkout** at the M1 planning commit:
 
 ```text
-$ralph Implement IMPLEMENTATION_PLAN.md exactly, milestone by milestone, using TDD.
-Start with Milestone 0 only. Do not begin Milestone 1 until
-docs/validation/overlay-proof-result.md records a passing real Keynote full-screen
-Presenter Display + extended second-display gate. Use XcodeGen 2.45.4, macOS 14.0,
-TeleprompterCore for pure policy, and the agent roster/staffing in the plan. Fail closed
-on mirroring, missing/ambiguous displays, API query failure, or absent manual evidence.
-Preserve PRD.md, references/teleprompter-ui-reference.png, design/concept.html, and
-design/teleprompter-concept.png byte-for-byte. Make local Lore-protocol commits only;
-do not add a remote, push, publish, sign for distribution, or implement deferred scope.
-Finish with all environment-separated verification, the complete PRD manual sequence,
-HANDOFF.md, prompt-to-acceptance audit, code review, verifier evidence, changed-files
-cleanup/re-verification, and explicit architect approval.
+$ralph Implement docs/plans/2026-07-12-milestone-1-core-state-durability.md
+exactly as the next guarded M1-only TDD slice. The 2026-07-12 amendment permits
+M1.1–M1.4 while docs/validation/overlay-proof-result.md remains BLOCKED; do not rewrite
+that result or claim M0 passed. Preserve the M0 DEBUG proof harness, PRD.md, and visual
+artifacts byte-for-byte. Do not begin editor, scrolling, product-hotkey, menu, visual,
+or M2 work. Finish with environment-separated verification plus independent
+code-reviewer, verifier, and architect approval. Then stop for the dedicated M0
+stabilization slice before M2/beta/readiness. Push only through the companion plan's
+clean-main, exact-origin, zero-behind, non-force safety gate.
 ```
 
 If Ralph starts in this WSL environment, it may implement and run source-static checks but must stop before claiming any Swift/AppKit/Keynote success. Resume the same local commit/milestone on macOS; no product question is required. A human/hardware evidence dependency is a gate, not permission to simulate or silently skip acceptance.
 
 ## 20. Completion definition
 
-Implementation is complete only when every matrix row has real evidence, M0 and final physical gates pass, all tests/analyze/Release build/static audits are green, no source-of-truth checksum changes, no known errors/pending tasks remain, `HANDOFF.md` is current, and verifier + architect approve. Failure of the Keynote overlay or display-safety proof blocks the product rather than permitting UI polish or a weaker privacy claim.
+The overall implementation is complete only when every matrix row has real evidence, M0 and final physical gates pass, all tests/analyze/Release build/static audits are green, no source-of-truth checksum changes, no known errors/pending tasks remain, `HANDOFF.md` is current, and verifier + architect approve. Completion of the guarded M1 companion slice is only an intermediate state: it must stop before M2 and cannot support beta/readiness language while M0 remains BLOCKED. Failure of the Keynote overlay or display-safety proof blocks the product rather than permitting UI polish or a weaker privacy claim.
 
 ## 21. Consensus-review changelog
 
