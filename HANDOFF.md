@@ -1,9 +1,11 @@
-# Private Presenter — Milestone 0 Evidence and Milestone 1 Handoff
+# Private Presenter — Guarded Milestone 1 Source Handoff
 
 ## Status and boundary
 
 - Branch: `main`
-- Current baseline: `cca4229be4299eadc0370e8c26fae6f71e621ffc`
+- Implementation parent: `dfaec0b3b933aca46907003530dead19ae01babc`
+- Working-tree status: M1.1–M1.4 source and tests are present but uncommitted;
+  this sandbox exposes `.git` read-only, so no Lore commits were created here
 - Origin: `https://github.com/thetomtimus/teleprompty.git` (fetch and push)
 - Mac implementation underlying the physical run: `31dff6fdfa56a0987e0b76622c81939419096dbd`
 - macOS automated status: reported as tested for `31dff6f`; raw command logs and
@@ -11,8 +13,10 @@
   independently reproduce the macOS suite
 - Real Keynote + second-display/projector proof: **BLOCKED**, not PASS; see
   `docs/validation/overlay-proof-result.md`
-- Next guarded slice: **Milestone 1 (M1.1–M1.4) is user-authorized** under
-  `docs/plans/2026-07-12-milestone-1-core-state-durability.md`
+- M1 execution status: the guarded M1.1–M1.4 source slice is implemented in the
+  WSL working tree; source/static checks are green, but Swift/Xcode/AppKit/APFS
+  validation and independent role approvals remain pending on macOS
+- Next guarded slice after Mac validation: **dedicated M0 stabilization**, not M2
 - Hard gate: **M2 UI expansion, beta use, and readiness claims remain blocked**
   until the dedicated M0 stabilization slice passes the complete physical matrix
 
@@ -23,6 +27,11 @@ and fail-closed disconnect/reconnect. It also recorded an initial focus/full-scr
 interruption and incomplete focus/key/main, physical-audience, Space, mirroring,
 level-comparison, opacity, unlock/drag/resize boundary, and hostile-recovery gates.
 Those defects remain explicit and the historical BLOCKED result must not be weakened.
+
+This handoff also must not be read as a completed M1 validation or a push
+authorization. WSL has no `swift` executable, the macOS bootstrap rejects this
+host, the tree is intentionally dirty/uncommitted, and no fresh fetch has been
+performed. M2, beta use, and readiness claims remain blocked.
 
 ## Milestone 0 implementation inventory
 
@@ -41,7 +50,8 @@ Those defects remain explicit and the historical BLOCKED result must not be weak
   `OverlayPanelConfigurationTests.swift`.
 - M0.5 minimal display/controller privacy coordination, ordered fail-closed
   effects, shield, selected-screen handling, and named tests:
-  `SystemDisplayService.swift`, `Privacy/*`, `DiagnosticHarnessModel.swift`,
+  `SystemDisplayService.swift`, `Privacy/*`, and the former
+  `DiagnosticHarnessModel.swift` implementation now mechanically renamed to `AppModel.swift`,
   both window controllers, and `AppModelTests.swift` /
   `OverlayPanelControllerTests.swift`.
 - M0.6 DEBUG proof harness, immutable configuration snapshot, minimal
@@ -50,8 +60,35 @@ Those defects remain explicit and the historical BLOCKED result must not be weak
   proof UI, `docs/validation/overlay-proof-template.md`, and this handoff.
 - Commit status: M0 source is committed through `31dff6f`; `cca4229` adds only the
   truthful BLOCKED physical result.
-- Deliberately absent at this baseline: Milestone 1 state/persistence, editor,
-  scrolling, product hotkeys, menu, and product-polish work.
+- Deliberately still absent after M1: editor UI, scrolling/display-link work,
+  production hotkey customization, menu/status item, product polish, accounts,
+  cloud/network, telemetry, signing/notarization, and distribution.
+
+## Milestone 1 source inventory
+
+- M1.1 durable core state: `ScriptDocument`, `ReadingAnchor`,
+  `TeleprompterPreferences`, `OverlaySession`, `KeyboardShortcut`, the PRD
+  default shortcut map, `PersistedSnapshot`, canonical v1 JSON, and
+  `CoreStateModelTests.swift`.
+- M1.2 refusal/restore policy: explicit v1 `SnapshotMigrator`, typed future and
+  legacy refusal, malformed-data handling without content disclosure, and
+  hidden/paused privacy-reassessment restore in `SnapshotMigratorTests.swift`.
+- M1.3 local durability: actor-isolated `SnapshotStore`, Foundation-only
+  filesystem/scheduling seams, 300 ms generation-safe debounce, flush/revision
+  conflict handling, sibling-temp atomic replacement contract, malformed
+  quarantine, future/quarantine-failure write blocking, privacy-safe diagnostics,
+  and `SnapshotStoreTests.swift`.
+- M1.4 single state owner: one `@MainActor @Observable AppModel`, typed
+  `AppCommand`/`AppEffect`, `DependencyContainer`, pure `PrivacyDirective`
+  planning, startup ordering seams, revision-bound clear flow, and mechanical
+  DEBUG/M0 harness wiring through the same model.
+- Audit/housekeeping: the validator inventories all M1 paths and named tests,
+  retains the Foundation-only core audit, adds product data-safety scans, and
+  `verify-wsl.sh` requires the exact expected fetch and push URLs for `origin`.
+
+These are source/test artifacts only until the Mac commands below pass. In
+particular, no WSL result proves Swift compilation, concurrency correctness,
+AppKit lifecycle behavior, APFS replacement semantics, or physical privacy.
 
 ## WSL-safe verification
 
@@ -76,6 +113,84 @@ test "$(git remote get-url origin)" = https://github.com/thetomtimus/teleprompty
 test "$(git remote get-url --push origin)" = https://github.com/thetomtimus/teleprompty.git
 git status --short
 ```
+
+Current guarded-M1 WSL record (`2026-07-12`, Asia/Seoul):
+
+- `command -v swift`: exit `1`; Swift is absent. Consequently no named M1 test
+  could be observed behavior-RED or GREEN here.
+- `./Scripts/bootstrap-macos.sh`: exit `1` with exactly
+  `error: bootstrap-macos.sh requires macOS.` This is the second explicit
+  environment RED and prevents XcodeGen/Xcode/AppKit execution on this host.
+- `bash -n Scripts/bootstrap-macos.sh Scripts/verify-macos.sh
+  Scripts/verify-no-network.sh Scripts/verify-wsl.sh`: exit `0`.
+- `python3 Scripts/validate_project_structure.py`: exit `0`, printing
+  `Project structure validation passed (Milestone 0–1 source).`
+- `git diff --check`, the XcodeGen pin, generated-project ignore/untracked
+  checks, `sha256sum -c docs/validation/source-artifact-checksums.sha256`,
+  `./Scripts/verify-no-network.sh`, and `./Scripts/verify-wsl.sh`: exit `0`.
+- Exact origin-name/fetch/push checks: exit `0`; both URLs are exactly
+  `https://github.com/thetomtimus/teleprompty.git`.
+- Cached refs only: `HEAD` and `origin/main` both resolve to
+  `dfaec0b3b933aca46907003530dead19ae01babc`, and
+  `git rev-list --left-right --count origin/main...HEAD` prints `0 0`. This is
+  **not** a fresh fetch/divergence proof; fetch remains mandatory before push.
+- No commits were created because `.git` is read-only in this sandbox. The
+  working tree must be committed from parent `dfaec0b3b933aca46907003530dead19ae01babc`
+  using the six logical Lore commits in the M1 plan after Mac validation/fixes.
+
+The requested RED→GREEN test order is represented by the named test sources and
+their corresponding implementations, but it was not executable in WSL. Do not
+rewrite the environment failures as application RED evidence and do not call
+the source/static gate a Swift test pass.
+
+### Writable-Git parent instructions
+
+After copying the complete working tree to a Mac checkout whose `HEAD` is exactly
+`dfaec0b3b933aca46907003530dead19ae01babc`, complete the pending tests/reviews
+and any required fixes. Then create the section 12 Lore commits by staging these
+path groups in order (use the matching section 12 intent as each commit's first
+line and include `Confidence`, `Scope-risk`, `Tested`, and `Not-tested` trailers):
+Each `# Commit` line below is a mandatory commit boundary before the next
+`git add`; populate its `Tested` trailer from the actual Mac output.
+
+```bash
+git add Scripts/verify-wsl.sh
+# Commit 1: Keep repository verification aligned with the intentional GitHub origin
+
+git add Packages/TeleprompterCore/Sources/TeleprompterCore/Models/KeyboardShortcut.swift \
+  Packages/TeleprompterCore/Sources/TeleprompterCore/Models/OverlaySession.swift \
+  Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ReadingAnchor.swift \
+  Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift \
+  Packages/TeleprompterCore/Sources/TeleprompterCore/Models/TeleprompterPreferences.swift \
+  Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/PersistedSnapshot.swift \
+  Packages/TeleprompterCore/Tests/TeleprompterCoreTests/CoreStateModelTests.swift
+# Commit 2: Make durable state explicit without persisting runtime playback
+
+git add Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/SnapshotMigrator.swift \
+  Packages/TeleprompterCore/Tests/TeleprompterCoreTests/SnapshotMigratorTests.swift
+# Commit 3: Refuse unsafe snapshots without guessing at user data
+
+git add PrivatePresenterApp/Interfaces/SnapshotFileSystem.swift \
+  PrivatePresenterApp/Interfaces/SnapshotScheduling.swift \
+  PrivatePresenterApp/Services/SnapshotStore.swift \
+  PrivatePresenterAppTests/SnapshotStoreTests.swift
+# Commit 4: Preserve the last good local script across interrupted saves
+
+git add -A -- PrivatePresenterApp/App PrivatePresenterApp/Controller \
+  PrivatePresenterApp/Overlay/OverlayPanelController.swift \
+  PrivatePresenterApp/Privacy PrivatePresenterApp/Services/DiagnosticHotKeyService.swift \
+  PrivatePresenterAppTests/AppModelTests.swift \
+  PrivatePresenterAppTests/OverlayPanelControllerTests.swift
+# Commit 5: Route script and session commands through one state owner
+
+git add Scripts/validate_project_structure.py HANDOFF.md IMPLEMENTATION_PLAN.md \
+  docs/plans/2026-07-12-milestone-1-core-state-durability.md
+# Commit 6: Make M1 source and privacy invariants auditable
+```
+
+Run `git diff --cached --check` and the command evidence relevant to each group
+before its commit, and verify `git status --short` is empty after the sixth.
+Do not commit generated project files, `.omx` state, or protected artifacts.
 
 Historical 2026-07-11 WSL result record (retained for provenance; superseded where
 it describes Git/commit state):
@@ -145,6 +260,47 @@ xcodebuild build \
 xcrun swift-format lint --recursive Packages PrivatePresenterApp PrivatePresenterAppTests PrivatePresenterUITests
 ./Scripts/verify-macos.sh
 ```
+
+All commands in this section remain pending; none passed in WSL. Run the M1
+targeted tests in plan order before accepting the full gate:
+
+```bash
+swift test --package-path Packages/TeleprompterCore --filter CoreStateModelTests
+swift test --package-path Packages/TeleprompterCore
+swift test --package-path Packages/TeleprompterCore --filter SnapshotMigratorTests
+swift test --package-path Packages/TeleprompterCore
+
+xcodebuild test -project PrivatePresenter.xcodeproj -scheme PrivatePresenter \
+  -configuration Debug -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO \
+  -only-testing:PrivatePresenterAppTests/SnapshotStoreTests
+
+xcodebuild test -project PrivatePresenter.xcodeproj -scheme PrivatePresenter \
+  -configuration Debug -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO \
+  -only-testing:PrivatePresenterAppTests/AppModelTests \
+  -only-testing:PrivatePresenterAppTests/OverlayPanelConfigurationTests \
+  -only-testing:PrivatePresenterAppTests/OverlayPanelControllerTests
+
+xcodebuild test -project PrivatePresenter.xcodeproj -scheme PrivatePresenter \
+  -configuration Debug -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO \
+  -skip-testing:PrivatePresenterUITests
+xcodebuild analyze -project PrivatePresenter.xcodeproj -scheme PrivatePresenter \
+  -configuration Debug -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO
+xcodebuild build -project PrivatePresenter.xcodeproj -scheme PrivatePresenter \
+  -configuration Release -destination 'platform=macOS,arch=arm64' \
+  -derivedDataPath .build/DerivedData-Release CODE_SIGNING_ALLOWED=NO
+xcrun swift-format lint --recursive Packages PrivatePresenterApp \
+  PrivatePresenterAppTests PrivatePresenterUITests
+./Scripts/verify-macos.sh
+```
+
+After fixes and full reruns, require fresh code-reviewer **APPROVE**, verifier
+**PASS with independent command evidence**, and architect **APPROVE**. Critical
+or high findings must be fixed and all affected gates rerun before commits or
+push safety may be evaluated.
 
 Run the Milestone 0 targeted gates as well:
 
@@ -284,6 +440,7 @@ The following artifacts must retain the plan-recorded SHA-256 values:
 b3c0e19bbef6285ece0fffa045032a806ccf915b8bb8415184e74f6556af2a2a  design/concept.html
 d8a42232d19d87a23b1a2aacbc1970cae75bd0f0c7a3b523c701c5a2fa79762e  design/teleprompter-concept.png
 352437f2fc06efbab7f7ea7ad910f56eaa65c87eaf2574d30df742019ea9ac92  references/teleprompter-ui-reference.png
+e6f63a252ead5e3fc16db43f94ecf0b2e8c31db055da0b26715ba60a2295b3da  docs/validation/overlay-proof-result.md
 ```
 
 Milestone 0 must retain a native-only runtime with no Electron, WebView,
@@ -291,20 +448,23 @@ JavaScript runtime, network surface, telemetry, accounts, cloud, AI,
 Accessibility event tap, `CGEventTap`, or global `NSEvent` monitor fallback.
 The generated `PrivatePresenter.xcodeproj` remains ignored and uncommitted.
 
-## Guarded next command and stop rule
+## Guarded next slice and stop rule
 
-Run from the committed M1 planning baseline on macOS:
-
-```text
-$ralph Implement docs/plans/2026-07-12-milestone-1-core-state-durability.md
-exactly as a guarded M1-only TDD slice. Preserve the BLOCKED M0 result and the
-DEBUG proof harness, stop before M2, and require code-reviewer, verifier, and
-architect approval plus the plan's exact origin/main safety checks before push.
-```
-
-The M1 exception does not authorize product polish or a readiness claim. After M1,
-run the dedicated M0 stabilization slice for focus/full-screen activation,
+First transfer this dirty tree from parent
+`dfaec0b3b933aca46907003530dead19ae01babc` to a writable-Git macOS checkout,
+run every pending Mac command above, fix critical/high review findings, and rerun
+affected gates. Do not commit or push an unverified WSL-only implementation.
+After verified M1 closeout, the next implementation slice is the dedicated M0
+stabilization slice for focus/full-screen activation,
 unlock/drag/resize testability, mirroring, opacity, boundary containment, bounded
 level comparison, hostile recovery, Space switching, complete environment evidence,
-and physical audience isolation. Only a new complete physical run may change the
-historical gate result.
+and physical audience isolation. It must preserve the DEBUG proof harness and
+rerun the complete physical matrix. Only a new complete physical run may change
+the historical `BLOCKED` result.
+
+Stop before M2/editor/scrolling/product-hotkey/menu/visual-polish work. Push is
+not authorized now: the Mac gates and independent approvals are pending, the
+tree is dirty/uncommitted, and cached `origin/main` equality is not a fresh
+fetch. Immediately before a later normal push, verify a clean `main`, exact
+fetch/push URLs, fetch `origin`, require zero behind and positive ahead, and
+never force-push.

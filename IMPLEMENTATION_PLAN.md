@@ -1,8 +1,8 @@
 # Private Presenter Teleprompter — Implementation Plan
 
-Status: **APPROVED** by sequential Planner → Architect → Critic consensus for a subsequent `$ralph` implementation run
-Original planning baseline: `main` at `2bba07dd75537c6159016afff48b93a3f8d8d86d`; current M1 planning baseline: `cca4229be4299eadc0370e8c26fae6f71e621ffc`
-Delivery boundary: this planning run changes documentation only. `origin` is intentionally `https://github.com/thetomtimus/teleprompty.git`; implementation push is authorized only after the guarded slice's independent verification and origin/main safety checks.
+Status: **GUARDED M1 SOURCE IMPLEMENTED IN WSL; MAC VALIDATION, INDEPENDENT APPROVALS, COMMITS, AND PUSH PENDING**
+Original planning baseline: `main` at `2bba07dd75537c6159016afff48b93a3f8d8d86d`; M1 companion-plan baseline: `cca4229be4299eadc0370e8c26fae6f71e621ffc`; guarded implementation parent: `dfaec0b3b933aca46907003530dead19ae01babc`
+Delivery boundary: M1.1–M1.4 source/tests and WSL-safe validator/audit changes are present in the uncommitted working tree. The sandbox exposes `.git` read-only, `swift` is absent, and the bootstrap requires macOS, so no Swift/Xcode/AppKit/APFS pass or Lore commit is claimed. `origin` is exactly `https://github.com/thetomtimus/teleprompty.git` for fetch and push; no push is authorized until all Mac gates, independent review, clean-tree, fresh-fetch, and origin/main divergence checks pass.
 Toolchain contract: Xcode 16.0 or newer with Swift 6.0; Swift tools version 6.0; XcodeGen 2.45.4 exactly
 Product identity: app name `Private Presenter`; target/scheme `PrivatePresenter`; local-only bundle identifier `com.privatepresenter.teleprompter`
 Deployment target: macOS 14.0 unless Milestone 0 produces concrete evidence that a required API or reliable behavior needs newer
@@ -521,6 +521,14 @@ If `.floating` and `.statusBar` both fail, do not try `.screenSaver`, private AP
 ### Milestone 1 — Core state and local durability
 
 Execute this milestone only through the approved companion plan: `docs/plans/2026-07-12-milestone-1-core-state-durability.md`. M1 completion does not imply M0 or product readiness; stop after M1 for the dedicated M0 stabilization slice.
+
+Execution record (`2026-07-12`): M1.1–M1.4 production/test sources, exact-origin
+verification, M1 validator inventory, Foundation-only core enforcement, and
+data-safety audits are present in the working tree. WSL-safe gates pass. Swift is
+absent (`command -v swift` exit `1`) and `./Scripts/bootstrap-macos.sh` exits `1`
+with `error: bootstrap-macos.sh requires macOS.`, so the named tests have not
+been observed behavior-RED/GREEN and the Mac gate remains pending. No commit or
+push was made. M0 remains **BLOCKED**; M2, beta use, and readiness remain blocked.
 
 | Task | RED tests (exact names) | Implementation paths | Target command |
 |---|---|---|---|

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the committed Milestone 0 project source without third-party modules."""
+"""Validate the committed Milestone 0–1 project source without third-party modules."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import plistlib
 import platform
+import re
 import subprocess
 import sys
 
@@ -25,12 +26,29 @@ REQUIRED_PATHS = (
     "Scripts/verify-macos.sh",
     "Scripts/verify-no-network.sh",
     "Packages/TeleprompterCore/Package.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ReadingAnchor.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/TeleprompterPreferences.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/OverlaySession.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/KeyboardShortcut.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/PersistedSnapshot.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/SnapshotMigrator.swift",
+    "Packages/TeleprompterCore/Tests/TeleprompterCoreTests/CoreStateModelTests.swift",
+    "Packages/TeleprompterCore/Tests/TeleprompterCoreTests/SnapshotMigratorTests.swift",
     "PrivatePresenterApp/Info.plist",
+    "PrivatePresenterApp/App/AppCommand.swift",
+    "PrivatePresenterApp/App/AppEffect.swift",
+    "PrivatePresenterApp/App/AppModel.swift",
+    "PrivatePresenterApp/App/DependencyContainer.swift",
+    "PrivatePresenterApp/Interfaces/SnapshotFileSystem.swift",
+    "PrivatePresenterApp/Interfaces/SnapshotScheduling.swift",
+    "PrivatePresenterApp/Services/SnapshotStore.swift",
     "PrivatePresenterApp/Resources/PrivatePresenter.entitlements",
     "PrivatePresenterApp/Services/DiagnosticHotKeyService.swift",
     "PrivatePresenterAppTests/OverlayPanelConfigurationTests.swift",
     "PrivatePresenterAppTests/OverlayPanelControllerTests.swift",
     "PrivatePresenterAppTests/AppModelTests.swift",
+    "PrivatePresenterAppTests/SnapshotStoreTests.swift",
     "PrivatePresenterUITests/PrivatePresenterUITestShell.swift",
     "docs/validation/source-artifact-checksums.sha256",
     "docs/validation/overlay-proof-template.md",
@@ -92,6 +110,69 @@ NAMED_TESTS = (
     "testControllerNeverReopensUnredactedOnExternalScreen",
     "testMissingDisplayStagesBuiltInHidden",
     "testRecoveryRequiresConfirmationAndNeverAutoResumes",
+    "testDefaultTitleAndPreferencesMatchPRD",
+    "testFontRangeClampsTo24Through96",
+    "testSpeedRangeClampsTo10Through240",
+    "testDefaultShortcutMapMatchesPRD",
+    "testReadingAnchorClampsWithoutSplittingUnicode",
+    "testCodableRoundTripPreservesUnicodeScript",
+    "testPersistedSnapshotExcludesPlayingState",
+    "testPersistedSnapshotExcludesRuntimeDisplayID",
+    "testCanonicalEncodingIsByteEqualForPermutedInput",
+    "testDuplicateFrameAndShortcutEntriesAreRejected",
+    "testUnknownShortcutModifierIsMalformed",
+    "testSnapshotAndDocumentSchemaMustAgree",
+    "testCoreProductionSourcesImportFoundationOnly",
+    "testV1MigratesIdempotently",
+    "testV1MigrationPreservesUnicodeAndRevision",
+    "testUnknownFutureSchemaFailsWithoutDataLoss",
+    "testUnsupportedLegacySchemaDoesNotGuess",
+    "testRestoreAlwaysReturnsPaused",
+    "testRestoreRequiresFreshPrivacyAssessmentBeforeShow",
+    "testMalformedSnapshotIsReported",
+    "testMigrationErrorsNeverContainScriptContent",
+    "testProductionURLUsesSandboxApplicationSupportSubdirectory",
+    "testSaveAtomicallyReplacesSnapshot",
+    "testFailedReplacePreservesLastKnownGoodSnapshot",
+    "testDebounceCoalescesRapidEdits",
+    "testStaleRevisionCannotOverwriteNewerPendingSnapshot",
+    "testEqualRevisionWithDifferentPayloadIsConflict",
+    "testFlushPersistsLatestRevision",
+    "testFlushCancelsPendingDebounceWithoutDuplicateWrite",
+    "testSaveArrivingAroundFlushCannotLetStaleWriteWin",
+    "testMalformedFileIsQuarantined",
+    "testQuarantineFailurePreservesSourceAndBlocksWrites",
+    "testFutureSchemaIsPreservedInPlace",
+    "testFutureSchemaBlocksSubsequentSaveAndFlushWithoutChangingBytes",
+    "testQuarantineCollisionDoesNotDeleteEvidence",
+    "testFailedWriteRetainsPendingSnapshotAndPersistedRevision",
+    "testScriptIsNeverWrittenToUserDefaults",
+    "testDiagnosticsAndErrorsDoNotContainScriptContent",
+    "testCommandsChangeStateBeforeEffects",
+    "testEmptyScriptCannotStart",
+    "testWhitespaceOnlyScriptCannotStart",
+    "testRestartPausesAtBeginning",
+    "testRelaunchReassessesPrivacyBeforeShow",
+    "testAppRuntimeRestoreAndPrivacyOrderingBlocksEarlyShow",
+    "testRestoreClearsCurrentSessionDisplayIdentity",
+    "testClearRequiresConfirmedCommand",
+    "testClearWaitsForSuccessfulPreClearFlush",
+    "testFailedPreClearFlushPreservesScript",
+    "testInterveningEditInvalidatesPendingClear",
+    "testStaleClearCompletionCannotEraseScript",
+    "testPostClearSnapshotPersistsImmediatelyWithoutDebounce",
+    "testConfirmedClearIncrementsRevisionsAndPersistsEmptySnapshot",
+    "testRuntimeAndControllerShareOneAuthoritativeModel",
+    "testAppRuntimeConstructsExactlyOneAppModel",
+)
+
+DATA_SAFETY_PATTERNS = (
+    r"\bUserDefaults\b",
+    r"\bprint\s*\(",
+    r"\bLogger\s*\(",
+    r"\bos_log\s*\(",
+    r"\bUNUserNotificationCenter\b",
+    r"\bNSUserNotification\b",
 )
 
 
@@ -157,6 +238,24 @@ def validate_xcode_listing() -> None:
         fail("generated project is missing shared PrivatePresenter scheme")
 
 
+def validate_data_safety() -> None:
+    violations: list[str] = []
+    sensitive_name = re.compile(r"\b(document|title|text|contextBefore|contextAfter)\b")
+    for path in (ROOT / "PrivatePresenterApp").rglob("*.swift"):
+        for line_number, raw_line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            code = raw_line.split("//", 1)[0]
+            if any(re.search(pattern, code) for pattern in DATA_SAFETY_PATTERNS):
+                violations.append(f"{path.relative_to(ROOT)}:{line_number}")
+            if "\\(" in code and sensitive_name.search(code):
+                violations.append(f"{path.relative_to(ROOT)}:{line_number}")
+            if "appendingPathComponent" in code and sensitive_name.search(code):
+                violations.append(f"{path.relative_to(ROOT)}:{line_number}")
+    if violations:
+        fail("unsafe local-data exposure marker in product source: " + ", ".join(violations))
+
+
 def main() -> None:
     missing = [path for path in REQUIRED_PATHS if not (ROOT / path).is_file()]
     if missing:
@@ -199,8 +298,9 @@ def main() -> None:
     missing_app_markers = [marker for marker in APP_SOURCE_MARKERS if marker not in app_sources]
     if missing_app_markers:
         fail("M0 proof harness is missing markers: " + ", ".join(missing_app_markers))
+    validate_data_safety()
     validate_xcode_listing()
-    print("Project structure validation passed (Milestone 0 source).")
+    print("Project structure validation passed (Milestone 0–1 source).")
 
 
 if __name__ == "__main__":

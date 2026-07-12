@@ -1,9 +1,10 @@
 # Private Presenter — Milestone 1 Core State and Local Durability
 
-Status: **APPROVED by sequential Planner → Architect → Critic consensus**
+Status: **GUARDED SOURCE IMPLEMENTATION PRESENT; MAC VALIDATION AND REQUIRED APPROVALS PENDING**
 Planning date: 2026-07-12
 Repository: `/home/thomas/teleprompty-review`
 Planning baseline: `cca4229be4299eadc0370e8c26fae6f71e621ffc` on `main`
+Implementation parent: `dfaec0b3b933aca46907003530dead19ae01babc` on `main`
 Mac implementation exercised physically: `31dff6fdfa56a0987e0b76622c81939419096dbd`
 Source plan: `IMPLEMENTATION_PLAN.md`, Milestone 1 (M1.1–M1.4)
 
@@ -21,7 +22,11 @@ This slice is complete only when:
 6. code-reviewer, verifier, and architect approve independently;
 7. the M0 physical record remains `BLOCKED`, with every unresolved M0 item still a gate before M2, beta use, or any readiness claim.
 
-No app code is implemented in this planning commit.
+No app code was implemented in the original planning commit. The guarded
+implementation now exists only as an uncommitted WSL working-tree diff from
+`dfaec0b`; this sandbox exposes `.git` read-only. It is not a validated M1
+completion until the pending Mac tests/build/analyze/format gates and independent
+code-reviewer, verifier, and architect reviews pass.
 
 ## 2. Sequencing amendment and M0 guardrails
 
@@ -52,7 +57,10 @@ Repository evidence establishes:
 - `docs/validation/overlay-proof-result.md` is honestly `BLOCKED` for the 2026-07-12 physical run.
 - Positive physical observations were limited to extended Keynote presentation placement, later overlay visibility, click-through/ordinary Keynote input/remote behavior, repeated toggles after the initial failure, and fail-closed disconnect/reconnect.
 - The user identifies `31dff6f` as the tested Mac implementation. The repository does not contain raw automated logs or authoritative test counts, so this plan records the macOS automated run as **user-reported**, not independently reproduced by this WSL/Linux planning environment.
-- Current WSL structure/checksum/no-network checks pass until `Scripts/verify-wsl.sh` reaches its obsolete no-remote assertion; `origin` is now intentionally configured as `https://github.com/thetomtimus/teleprompty.git`.
+- At planning time WSL verification stopped at the obsolete no-remote assertion.
+  The guarded implementation replaced it with exact expected fetch/push URL
+  checks; the current WSL/source-static gate passes with `origin` intentionally
+  set to `https://github.com/thetomtimus/teleprompty.git`.
 
 No WSL command, mock, unit test, code review, or screenshot can convert the physical M0 result into PASS.
 
@@ -623,4 +631,113 @@ Completed sequential review:
 - Architect iteration 2 (after revisions): **APPROVE**. Found the plan architecturally sound, data-safe, bounded, and executable without product questions; retained the macOS filesystem adapter as a verification risk rather than a planning blocker.
 - Critic (after Architect approval): **APPROVE**. Confirmed principle/option consistency, bounded scope, explicit data-safety/race handling, executable tests/commands, correct no-project-change determination, honest environment/evidence boundaries, complete M0 guardrails, and actionable rollback/push/Ralph gates.
 
-Consensus completed in the required Planner → Architect → Critic order. Planning approval authorizes only the Ralph handoff above, not direct implementation during this run.
+Consensus completed in the required Planner → Architect → Critic order. At the
+time, planning approval authorized only the Ralph handoff above; the subsequent
+guarded execution is recorded below and does not retroactively change that
+planning-run boundary.
+
+## 19. Guarded execution record — 2026-07-12
+
+### Source inventory and scope stop
+
+The uncommitted working tree contains only the approved M1 slice plus the
+bounded M0 compatibility wiring it directly touches:
+
+- **M1.1:** durable model/default/shortcut sources, `PersistedSnapshot`,
+  canonical v1 coding, and `CoreStateModelTests.swift`;
+- **M1.2:** explicit v1 migrator, future/legacy refusal, malformed handling,
+  paused/hidden privacy-reassessment restore, and `SnapshotMigratorTests.swift`;
+- **M1.3:** actor-isolated `SnapshotStore`, injected Foundation-only filesystem
+  and scheduler seams, debounce/flush/revision ordering, quarantine and
+  write-block safety, privacy-safe diagnostics, and `SnapshotStoreTests.swift`;
+- **M1.4:** one `@MainActor @Observable AppModel`, typed commands/effects,
+  dependency container, pure privacy directives, startup/test seams, mechanical
+  M0 harness compatibility, and additive `AppModelTests.swift` /
+  `OverlayPanelControllerTests.swift` regressions;
+- **audits:** M1 path/named-test inventory, retained Foundation-only core audit,
+  product data-safety scanning, and exact expected `origin` fetch/push URL checks.
+
+No M2/editor/scrolling/display-link/product-hotkey/menu/status-item/accounts/
+cloud/network/WebView/Electron/JavaScript/telemetry/signing/notarization/
+distribution work was added. `project.yml`, `Package.swift`, `PRD.md`, the three
+visual source artifacts, and `docs/validation/overlay-proof-result.md` were not
+modified by this slice.
+
+### RED/GREEN and WSL evidence boundary
+
+The exact environment-limited RED evidence is:
+
+```text
+$ command -v swift
+[exit 1]
+
+$ ./Scripts/bootstrap-macos.sh
+error: bootstrap-macos.sh requires macOS.
+[exit 1]
+```
+
+Therefore this WSL run did **not** observe the named Swift tests behavior-RED or
+GREEN and did not run Xcode, AppKit, Swift concurrency, APFS atomic-replacement,
+analyze, Release-build, or swift-format validation. The named test sources and
+corresponding implementation are present for the prescribed Mac RED→GREEN
+sequence; the environment failures above must not be represented as application
+test failures or passes.
+
+Fresh WSL-safe results from the repository root:
+
+```text
+bash -n Scripts/bootstrap-macos.sh Scripts/verify-macos.sh \
+  Scripts/verify-no-network.sh Scripts/verify-wsl.sh                 exit 0
+python3 Scripts/validate_project_structure.py                        exit 0
+  Project structure validation passed (Milestone 0–1 source).
+git diff --check                                                     exit 0
+XcodeGen pin and generated-project ignore/untracked checks           exit 0
+sha256sum -c docs/validation/source-artifact-checksums.sha256        exit 0
+./Scripts/verify-no-network.sh                                       exit 0
+./Scripts/verify-wsl.sh                                              exit 0
+exact origin name/fetch/push URL checks                              exit 0
+```
+
+Protected SHA-256 values at closeout:
+
+```text
+3980ec241d38901ef434b93afa3935ce5b8c3d1a14849ae2417ec6a940138f3d  PRD.md
+b3c0e19bbef6285ece0fffa045032a806ccf915b8bb8415184e74f6556af2a2a  design/concept.html
+d8a42232d19d87a23b1a2aacbc1970cae75bd0f0c7a3b523c701c5a2fa79762e  design/teleprompter-concept.png
+352437f2fc06efbab7f7ea7ad910f56eaa65c87eaf2574d30df742019ea9ac92  references/teleprompter-ui-reference.png
+e6f63a252ead5e3fc16db43f94ecf0b2e8c31db055da0b26715ba60a2295b3da  docs/validation/overlay-proof-result.md
+```
+
+### Mac verification and review still required
+
+Every command in sections 11.1–11.5 remains pending on a real Mac with Xcode 16
+or newer, Swift 6, and XcodeGen 2.45.4. In exact order: run the two targeted core
+suites and full core suite; bootstrap; run `SnapshotStoreTests`; run
+`AppModelTests` plus both retained M0 overlay suites; run the full app suite
+excluding only the placeholder UI shell; run analyze, Release build,
+swift-format lint, and `./Scripts/verify-macos.sh`; then smoke-test the DEBUG
+harness without calling it a physical pass. Fix all critical/high findings,
+rerun affected gates, and require fresh code-reviewer **APPROVE**, independent
+verifier **PASS with command evidence**, and architect **APPROVE**.
+
+### Git/push and next-slice state
+
+- Branch is `main`; fetch and push URLs both exactly equal
+  `https://github.com/thetomtimus/teleprompty.git`.
+- `HEAD` and the cached `origin/main` both resolve to
+  `dfaec0b3b933aca46907003530dead19ae01babc`; the cached divergence count is
+  `0 0`. No fresh fetch was performed, so this is not push-safety evidence.
+- No Lore commits were created because `.git` is read-only in this sandbox.
+  From a writable-Git Mac checkout at parent `dfaec0b`, apply/fix this working
+  tree and create the six logical commits in section 12 only after their
+  corresponding tests/gates pass.
+- No push was attempted or authorized: the tree is dirty/uncommitted and the
+  Mac gates plus three independent approvals remain pending. Before a later
+  normal push, rerun section 16 exactly, including fresh fetch, zero behind,
+  positive ahead, and clean-tree checks; never force-push.
+
+M0 remains **BLOCKED** and
+`docs/validation/overlay-proof-result.md` remains byte-for-byte unchanged. M2,
+beta use, and readiness remain blocked. After verified M1 closeout, the next
+implementation slice is the dedicated M0 stabilization and complete physical
+rerun described in section 2; stop before every M2 or product-polish surface.
