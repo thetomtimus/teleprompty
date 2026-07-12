@@ -11,9 +11,11 @@ test -f project.yml
 test -f Packages/TeleprompterCore/Package.swift
 test -f PrivatePresenterApp/Resources/PrivatePresenter.entitlements
 sha256sum -c docs/validation/source-artifact-checksums.sha256
-git diff --exit-code a58afbd -- PRD.md references/teleprompter-ui-reference.png design/concept.html design/teleprompter-concept.png
 ./Scripts/verify-no-network.sh
-test -z "$(git remote)"
+expected_origin='https://github.com/thetomtimus/teleprompty.git'
+test "$(git remote)" = 'origin'
+test "$(git remote get-url origin)" = "$expected_origin"
+test "$(git remote get-url --push origin)" = "$expected_origin"
 
 echo "WSL-safe source/static verification passed."
 echo "Not run here: Swift compilation, Xcode/AppKit tests, or the physical Keynote/display gate."
