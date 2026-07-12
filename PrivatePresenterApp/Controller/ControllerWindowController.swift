@@ -3,10 +3,15 @@ import SwiftUI
 
 @MainActor
 final class ControllerWindowController: NSWindowController {
-    private let model: DiagnosticHarnessModel
+    private let model: AppModel
+    private(set) var showCount = 0
+
+    var modelIdentity: ObjectIdentifier {
+        ObjectIdentifier(model)
+    }
 
     init(
-        model: DiagnosticHarnessModel,
+        model: AppModel,
         untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame()
     ) {
         self.model = model
@@ -33,6 +38,7 @@ final class ControllerWindowController: NSWindowController {
     /// positioned only on the current built-in candidate (or main screen fallback).
     func showShielded(on candidate: RuntimeDisplay?) {
         guard let window else { return }
+        showCount += 1
         let screenFrame = candidate?.visibleFrame ?? NSScreen.main?.visibleFrame
         if let screenFrame {
             let origin = NSPoint(

@@ -40,7 +40,7 @@ struct ControllerPrivacyShieldView: View {
     }
 
     private func visibleWarning(_ warning: String) -> String {
-        guard warning == DiagnosticHarnessModel.mirroringWarning else { return warning }
+        guard warning == AppModel.mirroringWarning else { return warning }
         return warning + " Your script is hidden until display privacy is confirmed again."
     }
 

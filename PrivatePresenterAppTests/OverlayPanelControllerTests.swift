@@ -4,6 +4,66 @@ import XCTest
 
 @MainActor
 final class OverlayPanelControllerTests: XCTestCase {
+    func testShowingNonactivatingPanelNeverActivatesOrMakesKeyOrMain() {
+        var operations: [OverlayPanelOperation] = []
+        let controller = OverlayPanelController(operationRecorder: { operations.append($0) })
+        let selected = NSRect(x: 0, y: 0, width: 1_440, height: 900)
+
+        controller.show(
+            proposedFrame: NSRect(x: 100, y: 100, width: 700, height: 350),
+            on: selected
+        )
+
+        XCTAssertTrue(operations.contains(.orderFrontRegardless))
+        XCTAssertFalse(operations.contains(.activateApplication))
+        XCTAssertFalse(operations.contains(.showWindow))
+        XCTAssertFalse(operations.contains(.makeKey))
+        XCTAssertFalse(operations.contains(.makeMain))
+        XCTAssertFalse(controller.teleprompterPanel.isKeyWindow)
+        XCTAssertFalse(controller.teleprompterPanel.isMainWindow)
+    }
+
+    func testLockingAndUnlockingNeverActivatesApplication() {
+        var operations: [OverlayPanelOperation] = []
+        let controller = OverlayPanelController(operationRecorder: { operations.append($0) })
+
+        controller.setLocked(true)
+        controller.setLocked(false)
+
+        XCTAssertEqual(
+            operations.filter {
+                if case .setLocked = $0 { true } else { false }
+            },
+            [.setLocked(true), .setLocked(false)]
+        )
+        XCTAssertFalse(operations.contains(.activateApplication))
+        XCTAssertFalse(operations.contains(.makeKey))
+        XCTAssertFalse(operations.contains(.makeMain))
+    }
+
+    func testOverlayInteractionIsDisabledOnlyWhileLockedAndRestoredWhenUnlocked() {
+        let controller = OverlayPanelController()
+
+        controller.setLocked(true)
+        XCTAssertTrue(controller.teleprompterPanel.ignoresMouseEvents)
+
+        controller.setLocked(false)
+        XCTAssertFalse(controller.teleprompterPanel.ignoresMouseEvents)
+    }
+
+#if DEBUG
+    func testDiagnosticChordDispatchesDirectlyWithoutRaisingController() {
+        let runtime = AppRuntime(proofLevel: .floating)
+        let commandCount = runtime.model.commandDispatchCount
+        let controllerShowCount = runtime.controllerWindowController.showCount
+
+        runtime.diagnosticHotKeyService.invokeForTesting()
+
+        XCTAssertEqual(runtime.model.commandDispatchCount, commandCount + 1)
+        XCTAssertEqual(runtime.controllerWindowController.showCount, controllerShowCount)
+    }
+#endif
+
     func testControllerCreatesExactlyOnePanel() {
         let controller = OverlayPanelController()
         let identity = ObjectIdentifier(controller.teleprompterPanel)
@@ -54,10 +114,9 @@ final class OverlayPanelControllerTests: XCTestCase {
     }
 
     func testTopologyEffectsPauseHideShieldBeforeQuery() {
-        var effects: [PrivacyEffect] = []
-        let coordinator = PrivacyCoordinator { effects.append($0) }
+        let coordinator = PrivacyCoordinator()
 
-        coordinator.topologyWillChange()
+        let effects = coordinator.topologyWillChange()
 
         XCTAssertEqual(
             Array(effects.prefix(6)),
@@ -74,7 +133,7 @@ final class OverlayPanelControllerTests: XCTestCase {
 
     func testMissingDisplayStagesBuiltInHidden() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let external = display(id: 2, builtIn: false, x: 1_440)
         model.refreshDisplays(.success([external]))
         model.selectDisplay(external.id)

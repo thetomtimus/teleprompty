@@ -1,0 +1,220 @@
+import Foundation
+import TeleprompterCore
+
+@MainActor
+final class AppEffectAdapter {
+    private let snapshotStore: SnapshotStore
+    private let overlayController: OverlayPanelController
+    private weak var model: AppModel?
+    private weak var controllerWindowController: ControllerWindowController?
+    private var persistenceTask: Task<Void, Never>?
+    private var persistenceGeneration: UInt64 = 0
+    private var isTerminationDraining = false
+    private var terminalFlushStarted = false
+    private var terminalFlushSucceeded = false
+    private let terminationFlushOverride: (@Sendable () async -> Bool)?
+
+    init(
+        snapshotStore: SnapshotStore,
+        overlayController: OverlayPanelController,
+        terminationFlushOverride: (@Sendable () async -> Bool)? = nil
+    ) {
+        self.snapshotStore = snapshotStore
+        self.overlayController = overlayController
+        self.terminationFlushOverride = terminationFlushOverride
+    }
+
+    func connect(model: AppModel, controller: ControllerWindowController) {
+        self.model = model
+        controllerWindowController = controller
+    }
+
+    func handle(_ effect: AppEffect) {
+        switch effect {
+        case let .scheduleSnapshot(snapshot):
+            enqueuePersistence { store in
+                try await store.scheduleSave(snapshot)
+            }
+        case let .flushSnapshot(token, requiredRevision):
+            enqueuePersistence { [weak self] store in
+                do {
+                    try await store.flush()
+                    let status = await store.status()
+                    let persistedRevision = status.persistedRevision ?? 0
+                    await self?.completeClear(
+                        token: token,
+                        persistedRevision: persistedRevision,
+                        succeeded: status.persistedRevision == requiredRevision
+                    )
+                } catch {
+                    await self?.completeClear(
+                        token: token,
+                        persistedRevision: requiredRevision,
+                        succeeded: false
+                    )
+                }
+            }
+        case let .saveSnapshotImmediately(snapshot):
+            enqueuePersistence(allowDuringTermination: true) { store in
+                try await store.scheduleSave(snapshot)
+                try await store.flush()
+            }
+        case .flushPersistence:
+            enqueuePersistence { store in
+                try await store.flush()
+            }
+        case let .stagePanelHidden(display):
+            overlayController.stageHidden(
+                proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
+                on: display.visibleFrame
+            )
+        case let .showPanel(display):
+            overlayController.show(
+                proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
+                on: display.visibleFrame
+            )
+        case .hidePanel:
+            overlayController.hide()
+        case let .setPanelLocked(locked):
+            overlayController.setLocked(locked)
+        case let .moveControllerWhileShielded(display):
+            controllerWindowController?.showShielded(on: display)
+            let model = model
+            Task { @MainActor in
+                await Task.yield()
+                model?.send(.completeShieldedMove(screenID: display.id))
+            }
+        case .resetViewport, .reassessPrivacy, .queryTopology, .evaluatePrivacy:
+            break
+        }
+    }
+
+    func flushForTermination() async -> Bool {
+        // Reject new durable intent at the model boundary, but drain any completion
+        // causally owned by an already-enqueued operation (notably pre-clear flush).
+        // Each such completion synchronously extends `persistenceGeneration` before
+        // its predecessor task returns, so the loop cannot miss its immediate save.
+        isTerminationDraining = true
+
+        while true {
+            let observedGeneration = persistenceGeneration
+            let observedTask = persistenceTask
+            _ = await observedTask?.value
+            await Task.yield()
+            guard observedGeneration == persistenceGeneration else { continue }
+            break
+        }
+
+        // This is the terminal barrier. `enqueuePersistence` refuses every later
+        // operation once it is set, and this flush is appended after the stable tail.
+        terminalFlushStarted = true
+        let precedingTask = persistenceTask
+        let snapshotStore = snapshotStore
+        let terminationFlushOverride = terminationFlushOverride
+        let expectedRevision = model?.snapshotRevision ?? 0
+        persistenceGeneration += 1
+        let terminalTask = Task { @MainActor [weak self] in
+            _ = await precedingTask?.value
+            let didFlush: Bool
+            if let terminationFlushOverride {
+                didFlush = await terminationFlushOverride()
+            } else {
+                do {
+                    try await snapshotStore.flush()
+                    let status = await snapshotStore.status()
+                    didFlush = status.persistedRevision == expectedRevision
+                        || (expectedRevision == 0 && status.persistedRevision == nil)
+                } catch {
+                    didFlush = false
+                }
+            }
+            self?.terminalFlushSucceeded = didFlush
+        }
+        persistenceTask = terminalTask
+        _ = await terminalTask.value
+        return terminalFlushSucceeded
+    }
+
+    private func enqueuePersistence(
+        allowDuringTermination: Bool = false,
+        _ operation: @escaping @Sendable (SnapshotStore) async throws -> Void
+    ) {
+        guard
+            !isTerminationDraining
+                || (allowDuringTermination && !terminalFlushStarted)
+        else { return }
+        let precedingTask = persistenceTask
+        let snapshotStore = snapshotStore
+        persistenceGeneration += 1
+        persistenceTask = Task { @MainActor in
+            _ = await precedingTask?.value
+            do {
+                try await operation(snapshotStore)
+            } catch {
+                // SnapshotStore retains pending data for retry and exposes only
+                // content-neutral diagnostics. No script content is surfaced here.
+            }
+        }
+    }
+
+    private func completeClear(
+        token: ClearToken,
+        persistedRevision: UInt64,
+        succeeded: Bool
+    ) {
+        model?.send(.completePreClearFlush(
+            token: token,
+            persistedRevision: persistedRevision,
+            succeeded: succeeded
+        ))
+    }
+}
+
+@MainActor
+final class DependencyContainer {
+    let snapshotStore: SnapshotStore
+    let overlayController: OverlayPanelController
+    let displayService: SystemDisplayService
+    let effectAdapter: AppEffectAdapter
+    private(set) var appModelConstructionCount = 0
+
+    init(
+        proofLevel: OverlayPanelLevel,
+        snapshotStore: SnapshotStore? = nil,
+        terminationFlushOverride: (@Sendable () async -> Bool)? = nil
+    ) {
+        let resolvedStore: SnapshotStore
+        if let snapshotStore {
+            resolvedStore = snapshotStore
+        } else if let productionStore = try? SnapshotStore.production() {
+            resolvedStore = productionStore
+        } else {
+            // A path-resolution failure remains fail-closed: this unusable root
+            // causes content-neutral load/save failures rather than alternate storage.
+            resolvedStore = SnapshotStore(
+                rootURL: URL(fileURLWithPath: "/dev/null/private-presenter-unavailable")
+            )
+        }
+
+        self.snapshotStore = resolvedStore
+        overlayController = OverlayPanelController(proofLevel: proofLevel)
+        displayService = SystemDisplayService()
+        effectAdapter = AppEffectAdapter(
+            snapshotStore: resolvedStore,
+            overlayController: overlayController,
+            terminationFlushOverride: terminationFlushOverride
+        )
+    }
+
+    func makeAppModel(restorationRequired: Bool = true) -> AppModel {
+        appModelConstructionCount += 1
+        let adapter = effectAdapter
+        return AppModel(
+            overlayController: overlayController,
+            restorationRequired: restorationRequired,
+            effectHandler: { [weak adapter] effect in
+                adapter?.handle(effect)
+            }
+        )
+    }
+}

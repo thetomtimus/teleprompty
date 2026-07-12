@@ -1,6 +1,6 @@
 import Foundation
 
-enum PrivacyEffect: Equatable, Sendable {
+enum PrivacyDirective: Equatable, Sendable {
     case pauseScrolling
     case hideOverlay
     case shieldController

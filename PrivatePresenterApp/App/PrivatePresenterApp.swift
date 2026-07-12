@@ -30,6 +30,7 @@ enum PrivatePresenterApplication {
 @MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let runtime: AppRuntime
+    private var terminationTask: Task<Void, Never>?
 
     init(runtime: AppRuntime) {
         self.runtime = runtime
@@ -43,7 +44,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        runtime.stop()
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard terminationTask == nil else { return .terminateLater }
+        terminationTask = Task { @MainActor [runtime, weak self] in
+            let didFlush = await runtime.stopAndFlush()
+            self?.terminationTask = nil
+            sender.reply(toApplicationShouldTerminate: didFlush)
+        }
+        return .terminateLater
     }
 }

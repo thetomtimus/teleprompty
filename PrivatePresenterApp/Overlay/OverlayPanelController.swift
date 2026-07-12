@@ -17,6 +17,17 @@ struct OverlayConfigurationSnapshot: Equatable, Sendable {
     let interiorIsFullyOpaque: Bool
 }
 
+enum OverlayPanelOperation: Equatable {
+    case orderOut
+    case applyContainedFrame
+    case orderFrontRegardless
+    case setLocked(Bool)
+    case activateApplication
+    case showWindow
+    case makeKey
+    case makeMain
+}
+
 /// Sole owner and creator of the process's one teleprompter panel.
 @MainActor
 final class OverlayPanelController: NSWindowController {
@@ -25,14 +36,18 @@ final class OverlayPanelController: NSWindowController {
     private(set) var selectedScreenFrame: NSRect?
     private(set) var appliedFrames: [NSRect] = []
     private var interactionStartFrame: NSRect?
+    private let operationRecorder: (OverlayPanelOperation) -> Void
 
     init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
-        proofLevel: OverlayPanelLevel = .statusBar
+        proofLevel: OverlayPanelLevel = .statusBar,
+        operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in }
     ) {
         let panel = TeleprompterPanel(contentRect: initialFrame, proofLevel: proofLevel)
         teleprompterPanel = panel
+        self.operationRecorder = operationRecorder
         interactionController = ClampedPanelInteractionController { [weak panel] frame in
+            operationRecorder(.applyContainedFrame)
             panel?.setFrame(frame, display: false)
         }
         super.init(window: panel)
@@ -63,6 +78,7 @@ final class OverlayPanelController: NSWindowController {
     func stageHidden(proposedFrame: NSRect, on screenFrame: NSRect) {
         selectedScreenFrame = screenFrame
         teleprompterPanel.containmentFrame = screenFrame
+        operationRecorder(.orderOut)
         teleprompterPanel.orderOut(nil)
         applyContainedFrame(proposedFrame)
     }
@@ -72,14 +88,17 @@ final class OverlayPanelController: NSWindowController {
         teleprompterPanel.containmentFrame = screenFrame
         applyContainedFrame(proposedFrame)
         // Intentionally neither makeKeyAndOrderFront nor NSApp.activate.
+        operationRecorder(.orderFrontRegardless)
         teleprompterPanel.orderFrontRegardless()
     }
 
     func hide() {
+        operationRecorder(.orderOut)
         teleprompterPanel.orderOut(nil)
     }
 
     func setLocked(_ locked: Bool) {
+        operationRecorder(.setLocked(locked))
         teleprompterPanel.setLocked(locked)
     }
 

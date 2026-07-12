@@ -75,5 +75,9 @@ final class DiagnosticHotKeyService {
     fileprivate func invoke() {
         action()
     }
+
+    func invokeForTesting() {
+        invoke()
+    }
 }
 #endif

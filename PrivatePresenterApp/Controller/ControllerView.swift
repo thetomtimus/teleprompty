@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ControllerView: View {
-    @Bindable var model: DiagnosticHarnessModel
+    @Bindable var model: AppModel
 
     var body: some View {
         if model.isShielded {

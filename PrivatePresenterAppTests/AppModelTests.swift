@@ -1,11 +1,457 @@
 import AppKit
+import TeleprompterCore
 import XCTest
 @testable import PrivatePresenter
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testCommandsChangeStateBeforeEffects() {
+        var model: AppModel!
+        var stateObservedByEffect = false
+        model = AppModel(
+            overlayController: OverlayPanelController(),
+            now: { Date(timeIntervalSince1970: 20) },
+            effectHandler: { effect in
+                if case .scheduleSnapshot = effect {
+                    stateObservedByEffect = model.document.text == "New lecture"
+                        && model.document.revision == 1
+                        && model.snapshotRevision == 1
+                }
+            }
+        )
+
+        model.send(.replaceScript(text: "New lecture"))
+
+        XCTAssertTrue(stateObservedByEffect)
+    }
+
+    func testEmptyScriptCannotStart() {
+        let model = AppModel(overlayController: OverlayPanelController())
+
+        model.send(.start)
+
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+    }
+
+    func testWhitespaceOnlyScriptCannotStart() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        model.send(.replaceScript(text: " \n\t "))
+
+        model.send(.start)
+
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+    }
+
+    func testRestartPausesAtBeginning() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        model.send(.replaceScript(text: "Lecture"))
+        model.send(.start)
+        model.setReadingPositionForTesting(utf16Offset: 4, pixelOffset: 120)
+
+        model.send(.restart)
+
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+        XCTAssertEqual(model.overlaySession.readingAnchor.utf16Offset, 0)
+        XCTAssertEqual(model.overlaySession.pixelOffset, 0)
+    }
+
+    func testRelaunchReassessesPrivacyBeforeShow() {
+        var effects: [AppEffect] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effects.append($0) }
+        )
+        model.send(.restore(snapshot(text: "Lecture")))
+
+        model.send(.showOverlay)
+
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertEqual(effects.first, .reassessPrivacy)
+        XCTAssertFalse(effects.contains(where: { if case .showPanel = $0 { true } else { false } }))
+    }
+
+    func testAppRuntimeRestoreAndPrivacyOrderingBlocksEarlyShow() async {
+        var startupEvents: [AppRuntimeStartupEvent] = []
+        let restored = snapshot(text: "Lecture")
+        let runtime = AppRuntime(
+            proofLevel: .floating,
+            startupSeams: AppRuntimeStartupSeams(
+                load: {
+                    return .loaded(RestoredState(snapshot: restored))
+                },
+                observeAndQuery: {
+                    return .success(RuntimeDisplayInventory(displays: []))
+                },
+                registerDiagnosticHotKey: {
+                    return 0
+                },
+                record: { startupEvents.append($0) }
+            )
+        )
+
+        await runtime.startForTesting(afterRestore: { runtime.model.send(.showOverlay) })
+
+        XCTAssertEqual(
+            startupEvents,
+            [
+                .shieldController,
+                .load,
+                .restore,
+                .observeAndQuery,
+                .evaluatePrivacy,
+                .registerDiagnosticHotKey,
+            ]
+        )
+        XCTAssertEqual(runtime.model.overlaySession.visibility, .hidden)
+    }
+
+    func testRestoreClearsCurrentSessionDisplayIdentity() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        model.setCurrentSessionDisplayIdentityForTesting(42, confirmed: true)
+
+        model.send(.restore(snapshot(text: "Lecture")))
+
+        XCTAssertNil(model.overlaySession.currentSessionDisplayID)
+        XCTAssertEqual(model.overlaySession.recoveryConfirmationState, .required)
+        XCTAssertFalse(model.isSelectionConfirmed)
+    }
+
+    func testRestoreAppliesPersistedLockAfterStateMutation() {
+        let controller = OverlayPanelController()
+        var model: AppModel!
+        var observedLockedState = false
+        model = AppModel(
+            overlayController: controller,
+            effectHandler: { effect in
+                guard case .setPanelLocked(true) = effect else { return }
+                observedLockedState = model.isLocked && model.preferences.isLocked
+                controller.setLocked(true)
+            }
+        )
+
+        model.send(.restore(snapshot(
+            text: "Lecture",
+            preferences: TeleprompterPreferences(isLocked: true)
+        )))
+
+        XCTAssertTrue(observedLockedState)
+        XCTAssertTrue(model.configurationSnapshot.isLocked)
+    }
+
+    func testClearRequiresConfirmedCommand() {
+        let model = modelWithScript()
+
+        model.send(.requestClear)
+
+        XCTAssertEqual(model.document.text, "Lecture")
+        XCTAssertNotNil(model.pendingClearToken)
+        XCTAssertFalse(model.isAwaitingPreClearFlush)
+    }
+
+    func testClearWaitsForSuccessfulPreClearFlush() {
+        var effects: [AppEffect] = []
+        let model = modelWithScript(effectHandler: { effects.append($0) })
+        model.send(.requestClear)
+        let token = try! XCTUnwrap(model.pendingClearToken)
+
+        model.send(.confirmClear(token: token))
+
+        XCTAssertEqual(model.document.text, "Lecture")
+        XCTAssertTrue(model.isAwaitingPreClearFlush)
+        XCTAssertTrue(effects.contains(.flushSnapshot(
+            token: token,
+            requiredRevision: model.snapshotRevision
+        )))
+    }
+
+    func testFailedPreClearFlushPreservesScript() {
+        let model = modelWithScript()
+        model.send(.requestClear)
+        let token = try! XCTUnwrap(model.pendingClearToken)
+        model.send(.confirmClear(token: token))
+
+        model.send(.completePreClearFlush(
+            token: token,
+            persistedRevision: model.snapshotRevision,
+            succeeded: false
+        ))
+
+        XCTAssertEqual(model.document.text, "Lecture")
+        XCTAssertEqual(model.localError, .preClearFlushFailed)
+    }
+
+    func testInterveningEditInvalidatesPendingClear() {
+        let model = modelWithScript()
+        model.send(.requestClear)
+
+        model.send(.replaceScript(text: "Revised lecture"))
+
+        XCTAssertNil(model.pendingClearToken)
+        XCTAssertEqual(model.document.text, "Revised lecture")
+    }
+
+    func testStaleClearCompletionCannotEraseScript() {
+        let model = modelWithScript()
+        model.send(.requestClear)
+        let token = try! XCTUnwrap(model.pendingClearToken)
+        model.send(.confirmClear(token: token))
+        let capturedRevision = model.snapshotRevision
+        model.send(.replaceScript(text: "Revised lecture"))
+
+        model.send(.completePreClearFlush(
+            token: token,
+            persistedRevision: capturedRevision,
+            succeeded: true
+        ))
+
+        XCTAssertEqual(model.document.text, "Revised lecture")
+    }
+
+    func testLockChangeInvalidatesAwaitingClearAndStaleCompletionPreservesScript() {
+        assertDurableChangeInvalidatesAwaitingClear { model in
+            model.send(.setLocked(true))
+        }
+    }
+
+    func testRestartInvalidatesAwaitingClearAndStaleCompletionPreservesScript() {
+        assertDurableChangeInvalidatesAwaitingClear { model in
+            model.send(.restart)
+        }
+    }
+
+    func testFingerprintChangeInvalidatesAwaitingClearAndStaleCompletionPreservesScript() {
+        let model = modelWithScript()
+        let builtIn = display(id: 1, builtIn: true, x: 0)
+        let projector = display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([builtIn, projector]))
+        model.send(.requestClear)
+        let token = try! XCTUnwrap(model.pendingClearToken)
+        model.send(.confirmClear(token: token))
+        let capturedRevision = model.snapshotRevision
+
+        model.send(.confirmSelectedDisplay)
+        model.send(.completePreClearFlush(
+            token: token,
+            persistedRevision: capturedRevision,
+            succeeded: true
+        ))
+
+        XCTAssertEqual(model.document.text, "Lecture")
+        XCTAssertNil(model.pendingClearToken)
+        XCTAssertEqual(model.localError, .clearRequestInvalidated)
+    }
+
+    func testPostClearSnapshotPersistsImmediatelyWithoutDebounce() {
+        var effects: [AppEffect] = []
+        let model = modelWithScript(effectHandler: { effects.append($0) })
+        model.send(.requestClear)
+        let token = try! XCTUnwrap(model.pendingClearToken)
+        model.send(.confirmClear(token: token))
+        let requiredRevision = model.snapshotRevision
+
+        model.send(.completePreClearFlush(
+            token: token,
+            persistedRevision: requiredRevision,
+            succeeded: true
+        ))
+
+        guard case let .saveSnapshotImmediately(saved)? = effects.last else {
+            return XCTFail("Expected immediate post-clear save")
+        }
+        XCTAssertEqual(saved.document.text, "")
+    }
+
+    func testConfirmedClearIncrementsRevisionsAndPersistsEmptySnapshot() {
+        var effects: [AppEffect] = []
+        let model = modelWithScript(effectHandler: { effects.append($0) })
+        let originalDocumentRevision = model.document.revision
+        let originalSnapshotRevision = model.snapshotRevision
+        model.send(.requestClear)
+        let token = try! XCTUnwrap(model.pendingClearToken)
+        model.send(.confirmClear(token: token))
+
+        model.send(.completePreClearFlush(
+            token: token,
+            persistedRevision: originalSnapshotRevision,
+            succeeded: true
+        ))
+
+        XCTAssertEqual(model.document.text, "")
+        XCTAssertEqual(model.document.revision, originalDocumentRevision + 1)
+        XCTAssertEqual(model.snapshotRevision, originalSnapshotRevision + 1)
+        XCTAssertEqual(model.overlaySession.readingAnchor.utf16Offset, 0)
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+        guard case let .saveSnapshotImmediately(saved)? = effects.last else {
+            return XCTFail("Expected immediate empty snapshot")
+        }
+        XCTAssertEqual(saved.revision, originalSnapshotRevision + 1)
+        XCTAssertEqual(saved.document.text, "")
+    }
+
+    func testRuntimeAndControllerShareOneAuthoritativeModel() {
+        let runtime = AppRuntime(proofLevel: .floating)
+
+        XCTAssertEqual(
+            runtime.controllerWindowController.modelIdentity,
+            ObjectIdentifier(runtime.model)
+        )
+    }
+
+    func testAppRuntimeConstructsExactlyOneAppModel() {
+        let runtime = AppRuntime(proofLevel: .floating)
+
+        XCTAssertEqual(runtime.dependencies.appModelConstructionCount, 1)
+    }
+
+    func testAllLoadFailuresRemainFailClosedAfterTopologyConfirmation() async {
+        let failures: [SnapshotLoadResult] = [
+            .recoveredMalformed(quarantineURL: URL(fileURLWithPath: "/tmp/generated-fixture.json")),
+            .unsupportedFutureSchema(found: 2, supported: 1),
+            .recoveryFailed(.readFailed),
+        ]
+        let builtIn = display(id: 1, builtIn: true, x: 0)
+        let projector = display(id: 2, builtIn: false, x: 1_440)
+
+        for failure in failures {
+            let runtime = AppRuntime(
+                proofLevel: .floating,
+                startupSeams: AppRuntimeStartupSeams(
+                    load: { failure },
+                    observeAndQuery: {
+                        .success(RuntimeDisplayInventory(displays: [builtIn, projector]))
+                    },
+                    registerDiagnosticHotKey: { 0 }
+                )
+            )
+
+            await runtime.startForTesting()
+            runtime.model.send(.confirmSelectedDisplay)
+            runtime.model.send(.showOverlay)
+
+            XCTAssertTrue(runtime.model.restorationCompleted)
+            XCTAssertFalse(runtime.model.isPersistenceLoadSafe)
+            XCTAssertTrue(runtime.model.isShielded)
+            XCTAssertFalse(runtime.model.isSelectionConfirmed)
+            XCTAssertEqual(runtime.model.overlaySession.visibility, .hidden)
+        }
+    }
+
+    func testExplicitSuccessfulRestoreReleasesLoadFailureLatchOnlyAfterShieldedMove() {
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            restorationRequired: true
+        )
+        let builtIn = display(id: 1, builtIn: true, x: 0)
+        let projector = display(id: 2, builtIn: false, x: 1_440)
+        model.send(.restoreFailed)
+        model.send(.restore(nil))
+        model.refreshDisplays(.success([builtIn, projector]))
+        model.send(.confirmSelectedDisplay)
+
+        XCTAssertTrue(model.isPersistenceLoadSafe)
+        XCTAssertTrue(model.isShielded)
+        model.send(.completeShieldedMove(screenID: builtIn.id))
+        model.send(.showOverlay)
+
+        XCTAssertFalse(model.isShielded)
+        XCTAssertEqual(model.overlaySession.visibility, .visible)
+    }
+
+    func testPrivacyEffectsObserveFullyCommittedShieldedState() {
+        var model: AppModel!
+        var observedCommittedState = false
+        let builtIn = display(id: 1, builtIn: true, x: 0)
+        let projector = display(id: 2, builtIn: false, x: 1_440)
+        model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effect in
+                guard case .moveControllerWhileShielded = effect else { return }
+                observedCommittedState = model.isShielded
+                    && model.isSelectionConfirmed
+                    && model.overlaySession.currentSessionDisplayID == builtIn.id
+                    && model.preferences.selectedDisplayFingerprint != nil
+            }
+        )
+        model.refreshDisplays(.success([builtIn, projector]))
+        observedCommittedState = false
+
+        model.send(.confirmSelectedDisplay)
+
+        XCTAssertTrue(observedCommittedState)
+        XCTAssertTrue(model.isShielded)
+    }
+
+    func testTerminationAwaitsFlushBeforeStoppingServices() async {
+        let gate = TerminationFlushGate()
+        var events: [AppRuntimeStartupEvent] = []
+        let dependencies = DependencyContainer(
+            proofLevel: .floating,
+            terminationFlushOverride: {
+                await gate.wait()
+                return true
+            }
+        )
+        let runtime = AppRuntime(
+            proofLevel: .floating,
+            dependencies: dependencies,
+            startupSeams: AppRuntimeStartupSeams(record: { events.append($0) })
+        )
+
+        let stopTask = Task { await runtime.stopAndFlush() }
+        await gate.waitUntilEntered()
+
+        XCTAssertEqual(events, [.flushPersistence])
+        await gate.release()
+        let didFlush = await stopTask.value
+        XCTAssertTrue(didFlush)
+        XCTAssertEqual(events, [.flushPersistence, .stopServices])
+    }
+
+    func testTerminationBarrierPersistsSuccessorImmediateSaveBeforeStoppingServices() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "private-presenter-generated-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SnapshotStore(
+            rootURL: root,
+            sleeper: TerminationNeverSleeper()
+        )
+        let dependencies = DependencyContainer(
+            proofLevel: .floating,
+            snapshotStore: store
+        )
+        var events: [AppRuntimeStartupEvent] = []
+        let runtime = AppRuntime(
+            proofLevel: .floating,
+            dependencies: dependencies,
+            startupSeams: AppRuntimeStartupSeams(record: { events.append($0) })
+        )
+        runtime.model.send(.restore(nil))
+        runtime.model.send(.replaceScript(text: "Lecture"))
+        runtime.model.send(.requestClear)
+        let token = try XCTUnwrap(runtime.model.pendingClearToken)
+        runtime.model.send(.confirmClear(token: token))
+
+        let didFlush = await runtime.stopAndFlush()
+
+        XCTAssertTrue(didFlush)
+        XCTAssertTrue(runtime.model.isTerminationQuiescing)
+        XCTAssertEqual(runtime.model.document.text, "")
+        let status = await store.status()
+        XCTAssertEqual(status.persistedRevision, 2)
+        let data = try Data(contentsOf: store.snapshotURL)
+        let persisted = try SnapshotMigrator().migrate(data)
+        XCTAssertEqual(persisted.revision, 2)
+        XCTAssertEqual(persisted.document.text, "")
+        XCTAssertEqual(events, [.flushPersistence, .stopServices])
+        runtime.model.send(.replaceScript(text: "late mutation"))
+        XCTAssertEqual(runtime.model.document.text, "")
+        XCTAssertEqual(runtime.model.snapshotRevision, 2)
+    }
+
     func testControllerStartsShielded() {
-        let model = DiagnosticHarnessModel(overlayController: OverlayPanelController())
+        let model = AppModel(overlayController: OverlayPanelController())
         XCTAssertTrue(model.isShielded)
         XCTAssertFalse(model.isSelectionConfirmed)
         XCTAssertTrue(model.isPaused)
@@ -13,7 +459,7 @@ final class AppModelTests: XCTestCase {
 
     func testControllerNeverReopensUnredactedOnExternalScreen() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let projector = display(id: 2, builtIn: false, x: 1_440)
 
         model.refreshDisplays(.success([projector]))
@@ -25,11 +471,12 @@ final class AppModelTests: XCTestCase {
 
     func testRecoveryRequiresConfirmationAndNeverAutoResumes() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let builtIn = display(id: 1, builtIn: true, x: 0)
         let projector = display(id: 2, builtIn: false, x: 1_440)
         model.refreshDisplays(.success([builtIn, projector]))
         model.confirmSelectedDisplay()
+        model.send(.completeShieldedMove(screenID: builtIn.id))
         model.showOverlay()
 
         model.topologyWillChange()
@@ -43,14 +490,18 @@ final class AppModelTests: XCTestCase {
 
     func testExplicitExternalConfirmationMovesWhileShieldedBeforeReveal() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
         let privateExternal = display(id: 3, builtIn: false, x: -1_440)
         var wasShieldedDuringMove = false
         var movedDisplayID: UInt32?
-        model.onConfirmedDisplay = { display in
-            wasShieldedDuringMove = model.isShielded
-            movedDisplayID = display.id
-        }
+        var model: AppModel!
+        model = AppModel(
+            overlayController: controller,
+            effectHandler: { effect in
+                guard case let .moveControllerWhileShielded(display) = effect else { return }
+                wasShieldedDuringMove = model.isShielded
+                movedDisplayID = display.id
+            }
+        )
 
         model.refreshDisplays(.success([privateExternal]))
         model.selectDisplay(privateExternal.id)
@@ -58,13 +509,15 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertTrue(wasShieldedDuringMove)
         XCTAssertEqual(movedDisplayID, privateExternal.id)
+        XCTAssertTrue(model.isShielded)
+        model.send(.completeShieldedMove(screenID: privateExternal.id))
         XCTAssertFalse(model.isShielded)
         XCTAssertTrue(model.isSelectionConfirmed)
     }
 
     func testMirroringFailsClosedWithRequiredWarning() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let mirrored = RuntimeDisplay(
             id: 1,
             localizedName: "Built-in Display",
@@ -81,7 +534,7 @@ final class AppModelTests: XCTestCase {
 
         model.refreshDisplays(.success([mirrored]))
 
-        XCTAssertEqual(model.warning, DiagnosticHarnessModel.mirroringWarning)
+        XCTAssertEqual(model.warning, AppModel.mirroringWarning)
         XCTAssertTrue(model.isShielded)
         XCTAssertFalse(model.isSelectionConfirmed)
         XCTAssertFalse(controller.teleprompterPanel.isVisible)
@@ -89,7 +542,7 @@ final class AppModelTests: XCTestCase {
 
     func testAnyMirroredPairBlocksNonmirroredSelection() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let privateDisplay = display(id: 1, builtIn: true, x: 0)
         let mirrorSource = mirroredDisplay(id: 2, name: "Mirror Source", sourceID: nil)
         let mirror = mirroredDisplay(id: 3, name: "Projector", sourceID: 2)
@@ -99,7 +552,7 @@ final class AppModelTests: XCTestCase {
         model.confirmSelectedDisplay()
         model.showOverlay()
 
-        XCTAssertEqual(model.warning, DiagnosticHarnessModel.mirroringWarning)
+        XCTAssertEqual(model.warning, AppModel.mirroringWarning)
         XCTAssertTrue(model.isShielded)
         XCTAssertFalse(model.isSelectionConfirmed)
         XCTAssertFalse(controller.teleprompterPanel.isVisible)
@@ -108,11 +561,11 @@ final class AppModelTests: XCTestCase {
     func testQueryFailureFailsClosed() {
         struct QueryFailure: Error {}
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
 
         model.refreshDisplays(.failure(QueryFailure()))
 
-        XCTAssertEqual(model.warning, DiagnosticHarnessModel.queryFailureWarning)
+        XCTAssertEqual(model.warning, AppModel.queryFailureWarning)
         XCTAssertTrue(model.isShielded)
         XCTAssertNil(model.selectedDisplayID)
         XCTAssertFalse(controller.teleprompterPanel.isVisible)
@@ -120,26 +573,28 @@ final class AppModelTests: XCTestCase {
 
     func testAmbiguousWeakDisplaysRequireExplicitSessionSelection() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let first = duplicateDisplay(id: 10, x: 0)
         let second = duplicateDisplay(id: 11, x: 1_440)
 
         model.refreshDisplays(.success([first, second]))
         model.selectDisplay(second.id)
 
-        XCTAssertEqual(model.warning, DiagnosticHarnessModel.ambiguityWarning)
+        XCTAssertEqual(model.warning, AppModel.ambiguityWarning)
         XCTAssertTrue(model.isShielded)
 
         model.confirmSelectedDisplay()
 
         XCTAssertEqual(model.selectedDisplayID, second.id)
         XCTAssertTrue(model.isSelectionConfirmed)
+        XCTAssertTrue(model.isShielded)
+        model.send(.completeShieldedMove(screenID: second.id))
         XCTAssertFalse(model.isShielded)
     }
 
     func testWeakBuiltInRemainsShieldedUntilCurrentSessionConfirmation() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let builtIn = display(id: 1, builtIn: true, x: 0)
 
         model.refreshDisplays(.success([builtIn]))
@@ -150,13 +605,15 @@ final class AppModelTests: XCTestCase {
         model.confirmSelectedDisplay()
 
         XCTAssertTrue(model.isSelectionConfirmed)
+        XCTAssertTrue(model.isShielded)
+        model.send(.completeShieldedMove(screenID: builtIn.id))
         XCTAssertFalse(model.isShielded)
-        XCTAssertEqual(model.warning, DiagnosticHarnessModel.noSeparationWarning)
+        XCTAssertEqual(model.warning, AppModel.noSeparationWarning)
     }
 
     func testOfflineSelectionCannotBeConfirmedOrShown() {
         let controller = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: controller)
+        let model = AppModel(overlayController: controller)
         let offline = RuntimeDisplay(
             id: 9,
             localizedName: "Offline Display",
@@ -184,7 +641,7 @@ final class AppModelTests: XCTestCase {
     func testSafeConfirmationPublishesOnlyAfterShieldedMove() {
         let controller = OverlayPanelController()
         let coordinator = PrivacyCoordinator()
-        let model = DiagnosticHarnessModel(
+        let model = AppModel(
             overlayController: controller,
             privacyCoordinator: coordinator
         )
@@ -195,16 +652,18 @@ final class AppModelTests: XCTestCase {
         model.confirmSelectedDisplay()
 
         XCTAssertEqual(
-            Array(coordinator.lastEffects.suffix(2)),
+            Array(coordinator.lastDirectives.suffix(2)),
             [.moveWindowsWhileShielded(screenID: builtIn.id), .publishSafeState]
         )
         XCTAssertTrue(model.isSelectionConfirmed)
+        XCTAssertTrue(model.isShielded)
+        model.send(.completeShieldedMove(screenID: builtIn.id))
         XCTAssertFalse(model.isShielded)
     }
 
     func testStaleProjectorFrameIsIgnoredWhileControllerRemainsShielded() {
         let overlay = OverlayPanelController()
-        let model = DiagnosticHarnessModel(overlayController: overlay)
+        let model = AppModel(overlayController: overlay)
         let staleProjectorFrame = NSRect(x: 1_700, y: 100, width: 620, height: 360)
         let controller = ControllerWindowController(
             model: model,
@@ -219,6 +678,59 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(
             builtIn.visibleFrame.contains(controller.window?.frame ?? .zero)
         )
+    }
+
+    private func modelWithScript(
+        effectHandler: @escaping @MainActor (AppEffect) -> Void = { _ in }
+    ) -> AppModel {
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            now: { Date(timeIntervalSince1970: 10) },
+            effectHandler: effectHandler
+        )
+        model.send(.replaceScript(text: "Lecture"))
+        return model
+    }
+
+    private func snapshot(
+        text: String,
+        preferences: TeleprompterPreferences = TeleprompterPreferences()
+    ) -> PersistedSnapshot {
+        PersistedSnapshot(
+            revision: 8,
+            document: ScriptDocument(
+                id: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+                text: text,
+                revision: 4,
+                updatedAt: Date(timeIntervalSince1970: 1)
+            ),
+            readingAnchor: ReadingAnchor(),
+            preferences: preferences,
+            shortcutBindings: KeyboardShortcut.defaultMap.map {
+                ShortcutBinding(action: $0.key, shortcut: $0.value)
+            }
+        )
+    }
+
+    private func assertDurableChangeInvalidatesAwaitingClear(
+        _ durableChange: (AppModel) -> Void
+    ) {
+        let model = modelWithScript()
+        model.send(.requestClear)
+        let token = try! XCTUnwrap(model.pendingClearToken)
+        model.send(.confirmClear(token: token))
+        let capturedRevision = model.snapshotRevision
+
+        durableChange(model)
+        model.send(.completePreClearFlush(
+            token: token,
+            persistedRevision: capturedRevision,
+            succeeded: true
+        ))
+
+        XCTAssertEqual(model.document.text, "Lecture")
+        XCTAssertNil(model.pendingClearToken)
+        XCTAssertEqual(model.localError, .clearRequestInvalidated)
     }
 
     private func display(id: UInt32, builtIn: Bool, x: CGFloat) -> RuntimeDisplay {
@@ -276,5 +788,41 @@ final class AppModelTests: XCTestCase {
             mirrorSourceID: nil,
             isInMirrorSet: false
         )
+    }
+}
+
+private actor TerminationFlushGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private var hasEntered = false
+    private var isReleased = false
+
+    func wait() async {
+        hasEntered = true
+        enteredContinuation?.resume()
+        enteredContinuation = nil
+        guard !isReleased else { return }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilEntered() async {
+        guard !hasEntered else { return }
+        await withCheckedContinuation { continuation in
+            enteredContinuation = continuation
+        }
+    }
+
+    func release() {
+        isReleased = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private struct TerminationNeverSleeper: SnapshotSleeper {
+    func sleep(for duration: Duration) async throws {
+        try await ContinuousClock().sleep(for: .seconds(3_600))
     }
 }
