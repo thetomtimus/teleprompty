@@ -12,10 +12,10 @@ enum PrivatePresenterApplication {
         ], let requestedLevel = OverlayPanelLevel(rawValue: requestedLevel) {
             proofLevel = requestedLevel
         } else {
-            proofLevel = .floating
+            proofLevel = .statusBar
         }
 #else
-        proofLevel = .floating
+        proofLevel = .statusBar
 #endif
         let runtime = AppRuntime(proofLevel: proofLevel)
         let delegate = AppDelegate(runtime: runtime)

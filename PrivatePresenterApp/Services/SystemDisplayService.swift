@@ -189,7 +189,8 @@ final class SystemDisplayService {
     private static func uuidString(for displayID: CGDirectDisplayID) -> String? {
         guard let unmanaged = CGDisplayCreateUUIDFromDisplayID(displayID) else { return nil }
         let uuid = unmanaged.takeRetainedValue()
-        return CFUUIDCreateString(nil, uuid).takeRetainedValue() as String
+        guard let value = CFUUIDCreateString(nil, uuid) else { return nil }
+        return value as String
     }
 }
 

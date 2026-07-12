@@ -9,7 +9,9 @@ fi
 ./Scripts/bootstrap-macos.sh
 python3 Scripts/validate_project_structure.py
 swift test --package-path Packages/TeleprompterCore
-xcodebuild test -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO
+# The UI-test shell is intentionally a skipped placeholder for the separate
+# physical Keynote/display gate. Running its unsigned runner cannot bootstrap.
+xcodebuild test -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO -skip-testing:PrivatePresenterUITests
 xcodebuild analyze -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO
 xcodebuild build -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/DerivedData-Release CODE_SIGNING_ALLOWED=NO
 xcrun swift-format lint --recursive Packages PrivatePresenterApp PrivatePresenterAppTests PrivatePresenterUITests

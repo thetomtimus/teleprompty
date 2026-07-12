@@ -27,8 +27,17 @@ targets:
       - path: PrivatePresenterApp
     info:
       path: PrivatePresenterApp/Info.plist
+      properties:
+        CFBundleDisplayName: Private Presenter
+        CFBundleShortVersionString: 0.1.0
+        CFBundleVersion: 1
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
     entitlements:
       path: PrivatePresenterApp/Resources/PrivatePresenter.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatepresenter.teleprompter
@@ -52,6 +61,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.privatepresenter.teleprompter.tests
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Private Presenter.app/Contents/MacOS/Private Presenter
   PrivatePresenterUITests:
     type: bundle.ui-testing
     platform: macOS

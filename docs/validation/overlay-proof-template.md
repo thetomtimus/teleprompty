@@ -35,7 +35,7 @@
 - Mirroring disabled at start: `YES` / `NO`
 - “Displays have separate Spaces” setting:
 - Screen selected in Private Presenter:
-- Initial panel level: `.floating`
+- Initial panel level: `.statusBar` (retained after `.floating` failed the Keynote visibility check)
 - Diagnostic show/hide chord: `Control-Option-H` (DEBUG only)
 
 ## Preconditions

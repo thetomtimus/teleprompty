@@ -10,7 +10,7 @@ final class AppRuntime {
     let diagnosticHotKeyService: DiagnosticHotKeyService
 #endif
 
-    init(proofLevel: OverlayPanelLevel = .floating) {
+    init(proofLevel: OverlayPanelLevel = .statusBar) {
         let overlayController = OverlayPanelController(proofLevel: proofLevel)
         let model = DiagnosticHarnessModel(overlayController: overlayController)
         let controllerWindowController = ControllerWindowController(model: model)

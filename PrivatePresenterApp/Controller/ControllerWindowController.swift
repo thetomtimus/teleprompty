@@ -20,6 +20,7 @@ final class ControllerWindowController: NSWindowController {
         )
         window.title = "Private Presenter — Overlay Proof"
         window.contentViewController = NSHostingController(rootView: ControllerView(model: model))
+        window.setFrame(initialFrame, display: false)
         super.init(window: window)
     }
 

@@ -175,12 +175,14 @@ here after the run. Do not backfill passing results from WSL or source review.
 
 ### DEBUG proof controls
 
-- `.floating` is the default bounded proof level.
-- To test the only alternate bounded level, run the Debug executable with
-  `PRIVATE_PRESENTER_PROOF_LEVEL=statusBar`:
+- `.statusBar` is the default bounded proof level. The lower `.floating` level
+  did not appear over Keynote Presenter Display during the first real Mac test,
+  while `.statusBar` did.
+- To retest the lower bounded level, run the Debug executable with
+  `PRIVATE_PRESENTER_PROOF_LEVEL=floating`:
 
   ```bash
-  PRIVATE_PRESENTER_PROOF_LEVEL=statusBar \
+  PRIVATE_PRESENTER_PROOF_LEVEL=floating \
     ".build/DerivedData/Build/Products/Debug/Private Presenter.app/Contents/MacOS/Private Presenter"
   ```
 

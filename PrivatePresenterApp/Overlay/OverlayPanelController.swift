@@ -28,7 +28,7 @@ final class OverlayPanelController: NSWindowController {
 
     init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
-        proofLevel: OverlayPanelLevel = .floating
+        proofLevel: OverlayPanelLevel = .statusBar
     ) {
         let panel = TeleprompterPanel(contentRect: initialFrame, proofLevel: proofLevel)
         teleprompterPanel = panel
@@ -72,7 +72,7 @@ final class OverlayPanelController: NSWindowController {
         teleprompterPanel.containmentFrame = screenFrame
         applyContainedFrame(proposedFrame)
         // Intentionally neither makeKeyAndOrderFront nor NSApp.activate.
-        teleprompterPanel.orderFront(nil)
+        teleprompterPanel.orderFrontRegardless()
     }
 
     func hide() {

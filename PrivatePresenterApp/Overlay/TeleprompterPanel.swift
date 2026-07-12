@@ -20,7 +20,7 @@ class TeleprompterPanel: NSPanel {
     private(set) var isOverlayLocked = false
     var containmentFrame: NSRect?
 
-    init(contentRect: NSRect, proofLevel: OverlayPanelLevel = .floating) {
+    init(contentRect: NSRect, proofLevel: OverlayPanelLevel = .statusBar) {
         super.init(
             contentRect: contentRect,
             styleMask: [.borderless, .nonactivatingPanel],
