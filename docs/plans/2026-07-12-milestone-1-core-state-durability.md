@@ -1,6 +1,6 @@
 # Private Presenter — Milestone 1 Core State and Local Durability
 
-Status: **GUARDED SOURCE IMPLEMENTATION PRESENT; MAC VALIDATION AND REQUIRED APPROVALS PENDING**
+Status: **M1 IMPLEMENTED; MAC VALIDATION USER-REPORTED PASS; M0 STABILIZATION NEXT**
 Planning date: 2026-07-12
 Repository: `/home/thomas/teleprompty-review`
 Planning baseline: `cca4229be4299eadc0370e8c26fae6f71e621ffc` on `main`
@@ -22,11 +22,14 @@ This slice is complete only when:
 6. code-reviewer, verifier, and architect approve independently;
 7. the M0 physical record remains `BLOCKED`, with every unresolved M0 item still a gate before M2, beta use, or any readiness claim.
 
-No app code was implemented in the original planning commit. The guarded
-implementation now exists only as an uncommitted WSL working-tree diff from
-`dfaec0b`; this sandbox exposes `.git` read-only. It is not a validated M1
-completion until the pending Mac tests/build/analyze/format gates and independent
-code-reviewer, verifier, and architect reviews pass.
+No app code was implemented in the original planning commit. Ralph subsequently
+implemented the guarded slice, Hermes created the six logical commits from
+`dfaec0b`, and Tom reported that the complete Mac verification plus proof-harness
+smoke test passed. Raw Mac command logs were not attached to the repository, so
+the Mac result remains explicitly user-reported rather than independently
+reproduced from WSL. Source-level code-reviewer and architect reviews approved;
+WSL/static verification passed independently. M1 is accepted for integration,
+while M0 remains BLOCKED and stabilization remains mandatory before M2.
 
 ## 2. Sequencing amendment and M0 guardrails
 
@@ -708,36 +711,28 @@ d8a42232d19d87a23b1a2aacbc1970cae75bd0f0c7a3b523c701c5a2fa79762e  design/telepro
 e6f63a252ead5e3fc16db43f94ecf0b2e8c31db055da0b26715ba60a2295b3da  docs/validation/overlay-proof-result.md
 ```
 
-### Mac verification and review still required
+### Mac verification and review follow-up
 
-Every command in sections 11.1–11.5 remains pending on a real Mac with Xcode 16
-or newer, Swift 6, and XcodeGen 2.45.4. In exact order: run the two targeted core
-suites and full core suite; bootstrap; run `SnapshotStoreTests`; run
-`AppModelTests` plus both retained M0 overlay suites; run the full app suite
-excluding only the placeholder UI shell; run analyze, Release build,
-swift-format lint, and `./Scripts/verify-macos.sh`; then smoke-test the DEBUG
-harness without calling it a physical pass. Fix all critical/high findings,
-rerun affected gates, and require fresh code-reviewer **APPROVE**, independent
-verifier **PASS with command evidence**, and architect **APPROVE**.
+Tom reported that the complete Mac verification commands and the existing DEBUG
+proof-harness smoke test passed for the six-commit M1 stack ending at
+`88d28cb950c4b2628075aaa408b8e7716864ae31`. Raw Mac command logs were not
+attached to the repository, so this is recorded as a user-reported platform pass,
+not an independently reproduced WSL result. Source-level code-reviewer and
+architect reviews approved, and Hermes independently reran the WSL/static gates.
 
 ### Git/push and next-slice state
 
 - Branch is `main`; fetch and push URLs both exactly equal
   `https://github.com/thetomtimus/teleprompty.git`.
-- `HEAD` and the cached `origin/main` both resolve to
-  `dfaec0b3b933aca46907003530dead19ae01babc`; the cached divergence count is
-  `0 0`. No fresh fetch was performed, so this is not push-safety evidence.
-- No Lore commits were created because `.git` is read-only in this sandbox.
-  From a writable-Git Mac checkout at parent `dfaec0b`, apply/fix this working
-  tree and create the six logical commits in section 12 only after their
-  corresponding tests/gates pass.
-- No push was attempted or authorized: the tree is dirty/uncommitted and the
-  Mac gates plus three independent approvals remain pending. Before a later
-  normal push, rerun section 16 exactly, including fresh fetch, zero behind,
-  positive ahead, and clean-tree checks; never force-push.
+- Hermes created the six logical commits from `dfaec0b`; the implementation stack
+  ends at `88d28cb950c4b2628075aaa408b8e7716864ae31`.
+- A fresh fetch showed the local stack six commits ahead and zero behind
+  `origin/main`; the working tree was clean before this documentation closeout.
+- A normal non-force push is authorized after this closeout commit and one final
+  WSL/static/origin safety check.
 
 M0 remains **BLOCKED** and
 `docs/validation/overlay-proof-result.md` remains byte-for-byte unchanged. M2,
-beta use, and readiness remain blocked. After verified M1 closeout, the next
-implementation slice is the dedicated M0 stabilization and complete physical
-rerun described in section 2; stop before every M2 or product-polish surface.
+beta use, and readiness remain blocked. The next implementation slice is the
+dedicated M0 stabilization and focused physical rerun described in section 2;
+stop before every M2 or product-polish surface.

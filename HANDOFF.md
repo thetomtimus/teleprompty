@@ -4,8 +4,8 @@
 
 - Branch: `main`
 - Implementation parent: `dfaec0b3b933aca46907003530dead19ae01babc`
-- Working-tree status: M1.1–M1.4 source and tests are present but uncommitted;
-  this sandbox exposes `.git` read-only, so no Lore commits were created here
+- Working-tree status: M1.1–M1.4 are committed in six logical local commits
+  ending at `88d28cb950c4b2628075aaa408b8e7716864ae31`
 - Origin: `https://github.com/thetomtimus/teleprompty.git` (fetch and push)
 - Mac implementation underlying the physical run: `31dff6fdfa56a0987e0b76622c81939419096dbd`
 - macOS automated status: reported as tested for `31dff6f`; raw command logs and
@@ -13,10 +13,10 @@
   independently reproduce the macOS suite
 - Real Keynote + second-display/projector proof: **BLOCKED**, not PASS; see
   `docs/validation/overlay-proof-result.md`
-- M1 execution status: the guarded M1.1–M1.4 source slice is implemented in the
-  WSL working tree; source/static checks are green, but Swift/Xcode/AppKit/APFS
-  validation and independent role approvals remain pending on macOS
-- Next guarded slice after Mac validation: **dedicated M0 stabilization**, not M2
+- M1 execution status: source/static checks passed independently; Tom reported
+  the complete Mac verification and DEBUG proof-harness smoke test passed. Raw
+  Mac logs are not committed, so that platform result remains user-reported.
+- Next guarded slice: **dedicated M0 stabilization**, not M2
 - Hard gate: **M2 UI expansion, beta use, and readiness claims remain blocked**
   until the dedicated M0 stabilization slice passes the complete physical matrix
 
@@ -28,10 +28,9 @@ interruption and incomplete focus/key/main, physical-audience, Space, mirroring,
 level-comparison, opacity, unlock/drag/resize boundary, and hostile-recovery gates.
 Those defects remain explicit and the historical BLOCKED result must not be weakened.
 
-This handoff also must not be read as a completed M1 validation or a push
-authorization. WSL has no `swift` executable, the macOS bootstrap rejects this
-host, the tree is intentionally dirty/uncommitted, and no fresh fetch has been
-performed. M2, beta use, and readiness claims remain blocked.
+This handoff records M1 acceptance using Tom's Mac-pass report plus independent
+WSL/static checks and source-level OMX reviews. It does not upgrade the BLOCKED
+M0 physical result, and M2, beta use, and readiness claims remain blocked.
 
 ## Milestone 0 implementation inventory
 
@@ -450,21 +449,17 @@ The generated `PrivatePresenter.xcodeproj` remains ignored and uncommitted.
 
 ## Guarded next slice and stop rule
 
-First transfer this dirty tree from parent
-`dfaec0b3b933aca46907003530dead19ae01babc` to a writable-Git macOS checkout,
-run every pending Mac command above, fix critical/high review findings, and rerun
-affected gates. Do not commit or push an unverified WSL-only implementation.
-After verified M1 closeout, the next implementation slice is the dedicated M0
-stabilization slice for focus/full-screen activation,
-unlock/drag/resize testability, mirroring, opacity, boundary containment, bounded
-level comparison, hostile recovery, Space switching, complete environment evidence,
-and physical audience isolation. It must preserve the DEBUG proof harness and
-rerun the complete physical matrix. Only a new complete physical run may change
-the historical `BLOCKED` result.
+M1 is accepted on Tom's reported Mac verification plus independent WSL/static
+checks and source-level OMX review. The six implementation commits are followed
+by a documentation closeout and may be pushed normally after the final origin
+safety check.
 
-Stop before M2/editor/scrolling/product-hotkey/menu/visual-polish work. Push is
-not authorized now: the Mac gates and independent approvals are pending, the
-tree is dirty/uncommitted, and cached `origin/main` equality is not a fresh
-fetch. Immediately before a later normal push, verify a clean `main`, exact
-fetch/push URLs, fetch `origin`, require zero behind and positive ahead, and
-never force-push.
+The next implementation slice is the dedicated M0 stabilization slice for
+focus/full-screen activation, unlock/drag/resize testability, mirroring, opacity,
+boundary containment, bounded level comparison, hostile recovery, Space
+switching, complete environment evidence, and physical audience isolation. It
+must preserve the DEBUG proof harness and rerun the focused physical matrix.
+Only a new complete physical run may change the historical `BLOCKED` result.
+
+Stop before M2/editor/scrolling/product-hotkey/menu/visual-polish work. M2 remains
+blocked until the stabilization fixes and focused physical rerun pass.
