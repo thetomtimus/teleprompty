@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the committed Milestone 0–1 project source without third-party modules."""
+"""Validate the committed Milestone 0 Phase A source without third-party modules."""
 
 from __future__ import annotations
 
@@ -25,6 +25,9 @@ REQUIRED_PATHS = (
     "Scripts/verify-wsl.sh",
     "Scripts/verify-macos.sh",
     "Scripts/verify-no-network.sh",
+    "Scripts/verify-m0-proof-provenance.sh",
+    "Scripts/test-verify-m0-proof-provenance.sh",
+    "Scripts/run-m0-phase-a-diagnosis.sh",
     "Packages/TeleprompterCore/Package.swift",
     "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift",
     "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ReadingAnchor.swift",
@@ -45,10 +48,15 @@ REQUIRED_PATHS = (
     "PrivatePresenterApp/Services/SnapshotStore.swift",
     "PrivatePresenterApp/Resources/PrivatePresenter.entitlements",
     "PrivatePresenterApp/Services/DiagnosticHotKeyService.swift",
+    "PrivatePresenterApp/Services/DiagnosticEvidenceRecorder.swift",
+    "PrivatePresenterApp/Services/DiagnosticObserverSet.swift",
     "PrivatePresenterAppTests/OverlayPanelConfigurationTests.swift",
     "PrivatePresenterAppTests/OverlayPanelControllerTests.swift",
     "PrivatePresenterAppTests/AppModelTests.swift",
     "PrivatePresenterAppTests/SnapshotStoreTests.swift",
+    "PrivatePresenterAppTests/DiagnosticEvidenceRecorderTests.swift",
+    "PrivatePresenterAppTests/DiagnosticHotKeyServiceTests.swift",
+    "PrivatePresenterAppTests/DiagnosticObserverLifecycleTests.swift",
     "PrivatePresenterUITests/PrivatePresenterUITestShell.swift",
     "docs/validation/source-artifact-checksums.sha256",
     "docs/validation/overlay-proof-template.md",
@@ -80,6 +88,114 @@ APP_SOURCE_MARKERS = (
     "case top, bottom, left, right",
     "case topLeft, topRight, bottomLeft, bottomRight",
     "WorkspaceFocusProbe.capture",
+    "PRIVATE_PRESENTER_ORDERING",
+    "PRIVATE_PRESENTER_CONTROLLER_COHORT",
+    "PRIVATE_PRESENTER_REPETITION",
+    "PRIVATE_PRESENTER_EVIDENCE_EXECUTABLE_SHA256",
+    "PRIVATE_PRESENTER_EVIDENCE_BUILD_LOG_SHA256",
+    "PRIVATE_PRESENTER_EVIDENCE_BUILD_MANIFEST",
+    "configurationBound",
+    "sessionCompletion",
+    "EVIDENCE_QUEUE_OVERFLOW",
+    "OverlayPanelOrderingMode",
+    "NSApplication.willBecomeActiveNotification",
+    "NSWorkspace.didActivateApplicationNotification",
+)
+
+PHASE_A_NAMED_TESTS = (
+    "testStabilizationRetainsV1CanonicalSnapshotAfterDiagnosticLockChange",
+    "testStabilizationRestoreRemainsHiddenPausedUntilPrivacyConfirmation",
+    "testStabilizationStartupRestoresBeforeTopologyAndRegistersControlsLast",
+    "testStabilizationRuntimeStillConstructsExactlyOneAppModel",
+    "testStabilizationServicesShareTheRuntimeModelIdentity",
+    "testDiagnosticStateNeverEntersPersistedSnapshot",
+    "testEvidenceEnvelopeCarriesSessionCorrelationSourceTimeSequenceAndFixedKind",
+    "testCarbonReceiptIsStampedBeforeMainDispatchForSameCorrelation",
+    "testCorrelatedEventsRetainStrictRecorderOrderAcrossDelayedSamples",
+    "testEvidenceUsesLocalApplicationSupportValidationDirectory",
+    "testEvidenceAppendDoesNotEraseEarlierEvents",
+    "testEvidenceWriterNeverPerformsFileIOOnHotKeyOrMainCriticalPath",
+    "testEvidenceAndFixedErrorsNeverContainScriptTitleContextOrRawEnvironment",
+    "testRecorderFailureDoesNotBlockPrivacyOrHotKeyDispatch",
+    "testRecorderFailurePermanentlyInvalidatesCellWhileActionsContinue",
+    "testSessionCompletionRequiresResolvedPathExistingFileAndSuccessfulFlush",
+    "testEvidenceHeaderBindsFullCommitLevelAndOrdering",
+    "testQueueSaturationAtomicallyInvalidatesCellWithoutDelayingHotKeyOrPrivacy",
+    "testQueueOverflowEmitsFixedFaultWhenCapacityReturns",
+    "testQueueOverflowCannotBecomeValidAfterSuccessfulFlush",
+    "testBoundedIngressRejectsNewestEnvelopeAtCapacityWithoutWaiting",
+    "testQueueOverflowInvalidationDoesNotRequireFaultEnvelopeCapacity",
+    "testOverflowFaultIsEmittedOnceAfterWriterCapacityReturns",
+    "testHotKeyDispatchContinuesWhileEvidenceQueueIsSaturated",
+    "testPrivacyDirectivesContinueInOrderWhileEvidenceQueueIsSaturated",
+    "testOverflowAndLaterSinkFailurePreserveFirstPermanentInvalidation",
+    "testConfigurationBoundIncludesControllerCohortAndRepetition",
+    "testOnlyRepetitionsOneThroughThreeAreAccepted",
+    "testInvalidRepetitionUsesFixedCodeWithoutEchoingInput",
+    "testConfigurationBoundIncludesExecutableSHA256AndBuildLogPathAndHash",
+    "testExecutableHashRequiresSixtyFourLowercaseHexCharacters",
+    "testInvalidExecutableHashUsesFixedCodeWithoutEchoingInput",
+    "testInvalidBuildLogHashUsesFixedCodeWithoutEchoingInput",
+    "testEvidenceWritesOnlyToSiblingPendingPathBeforeCompletion",
+    "testSessionCompletionIsLastSerializedEventBeforeSynchronization",
+    "testSynchronizationAndClosePrecedeAtomicFinalRename",
+    "testFinalPathAppearsOnlyAfterAtomicRename",
+    "testSynchronizationFailureNeverPublishesFinalEvidenceFile",
+    "testCloseFailureNeverPublishesFinalEvidenceFile",
+    "testAtomicRenameFailureNeverPublishesAcceptedFinalFile",
+    "testPendingFileIsNeverAcceptedAsProof",
+    "testFinalizationFailurePermanentlyInvalidatesCell",
+    "testControlOptionHRetainsVisibilityAction",
+    "testObserversInstallBeforeVisibilityHotKeyAndTearDownAfterUnregistration",
+    "testNoEventsAreAcceptedAfterObserverTeardown",
+    "testApplicationObserversCaptureWillAndDidBecomeActive",
+    "testApplicationObserversCaptureWillAndDidResignActive",
+    "testWorkspaceObserverCapturesDidActivateApplication",
+    "testWindowObserversRetainTransientKeyMainOrderAndOcclusionNotifications",
+    "testFocusSnapshotsUseImmediateNextRunLoop100msAnd500msSchedule",
+    "testDelayedSamplesAreCancelledAfterSessionTeardown",
+    "testPhaseAControllerObserverRecordsExistingShowShieldedEntryAndExit",
+    "testPhaseAControllerObserverRecordsFrameShowWindowAndShowCount",
+    "testPhaseAControllerObserverRecordsVisibilityOrderKeyMainAndOcclusion",
+    "testPhaseAInstrumentationDoesNotChangeControllerFrameVisibilityOrShowCount",
+    "testColdShowTraceSupportsControllerVisibleAndOrderedOutStates",
+    "testEvidenceDistinguishesVisibleDesktopSpaceAndOrderedOutCohorts",
+    "testObservedVisibleControllerMatchesVisibleDesktopSpaceCohort",
+    "testObservedOrderedOutControllerMatchesOrderedOutCohort",
+    "testMissingControllerWindowCausesCohortMismatch",
+    "testControllerCohortMismatchPermanentlyInvalidatesCellBeforeFirstHotKey",
+    "testObservedCohortValidationNeverPresentsOrOrdersController",
+    "testConfigurationBoundPrecedesCorrelatedCarbonReceipt",
+    "testNormalQuitWaitsForAllCorrelatedSamplesBeforeCompletion",
+    "testPostCorrelationQuitActivationIsTaggedAndExcludedFromFocusVerdict",
+    "testUncorrelatedActivationWithoutTerminationStillFailsFocusVerdict",
+    "testOrderedOutCohortQuitDoesNotPresentOrOrderController",
+    "testOrderingModesAreExactlyFrontAndFrontRegardless",
+    "testBothOrderingModesAvoidKeyMainAndExplicitActivation",
+    "testDefaultProofLevelRemainsStatusBarUntilPhysicalMatrix",
+    "testDefaultOrderingRemainsFrontRegardlessUntilPhysicalEvidence",
+    "testOrderingSelectionChoosesOnlyPassingMode",
+    "testOrderingSelectionRetainsCurrentSourceDefaultWhenBothModesAreEquivalent",
+    "testOrderingSelectionUsesSafetyVectorBeforeDefaultTieBreak",
+    "testOrderingSelectionRejectsLevelWhenNeitherModePasses",
+    "testLevelSelectionPrefersFloatingOnlyAfterCompletePassingOrdering",
+    "testConfigurationSnapshotExportsCommitOrderingAndLevel",
+    "testActivationPolicyIsSetOnlyAtBootstrap",
+    "testForbiddenWindowLevelsAndFocusWorkaroundsAreAbsent",
+)
+
+PROVENANCE_FIXTURE_TESTS = (
+    "testProvenanceVerifierAcceptsMatchingCleanManifest",
+    "testProvenanceVerifierRejectsExecutableHashMismatch",
+    "testProvenanceVerifierRejectsBuildLogHashMismatch",
+    "testProvenanceVerifierRejectsCommitMismatch",
+    "testProvenanceVerifierRejectsMissingBuildLog",
+    "testProvenanceVerifierRejectsDirtyTree",
+    "testSameExecutableHashIsRequiredAcrossSmokeAndPhysicalEvidence",
+    "testProvenanceVerifierRejectsWrongBuildLogCommit",
+    "testProvenanceVerifierRejectsMissingOrDuplicateBuildLogCleanStatus",
+    "testProvenanceVerifierRejectsIncompleteCorrelation",
+    "testProvenanceVerifierRejectsDuplicateCorrelationEvent",
 )
 
 NAMED_TESTS = (
@@ -256,6 +372,66 @@ def validate_data_safety() -> None:
         fail("unsafe local-data exposure marker in product source: " + ", ".join(violations))
 
 
+def validate_historical_result_prefix() -> None:
+    baseline = git(
+        "show",
+        "940e1821f36c4125b0f81f623a6d24a015c22dcc:"
+        "docs/validation/overlay-proof-result.md",
+    )
+    if baseline.returncode != 0:
+        fail("historical overlay result baseline is unavailable")
+    baseline_bytes = baseline.stdout.encode("utf-8")
+    current = (ROOT / "docs/validation/overlay-proof-result.md").read_bytes()
+    import hashlib
+
+    if len(baseline_bytes) != 14_486:
+        fail("historical overlay result baseline length changed")
+    if hashlib.sha256(baseline_bytes).hexdigest() != (
+        "e6f63a252ead5e3fc16db43f94ecf0b2e8c31db055da0b26715ba60a2295b3da"
+    ):
+        fail("historical overlay result baseline hash changed")
+    if not current.startswith(baseline_bytes):
+        fail("overlay result no longer begins with the immutable historical prefix")
+
+
+def validate_phase_a_prohibited_surfaces() -> None:
+    violations: list[str] = []
+    prohibited = (
+        r"\bNSApp\.activate\s*\(",
+        r"\bNSRunningApplication\b[^\n]*\.activate\s*\(",
+        r"\bmakeKeyAndOrderFront\s*\(",
+        r"\.screenSaver\b",
+        r"\bCGWindowLevelForKey\s*\(",
+        r"\bGetEventDispatcherTarget\s*\(",
+        r"\bperformWindowDrag\s*\(",
+        r"\bNSWindow\.Level\s*\(\s*rawValue",
+        r"\bstyleMask[^\n]*(?:insert|formUnion)[^\n]*\.resizable",
+        r"\bstyleMask\s*[:=][^\n]*\.resizable",
+        r"\b(?:AXUIElement|AXObserver|AXIsProcessTrusted)\b",
+        r"\bimport\s+ApplicationServices\b",
+    )
+    for path in (ROOT / "PrivatePresenterApp").rglob("*.swift"):
+        for line_number, raw_line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            code = raw_line.split("//", 1)[0]
+            if any(re.search(pattern, code) for pattern in prohibited):
+                violations.append(f"{path.relative_to(ROOT)}:{line_number}")
+    hot_key_source = read("PrivatePresenterApp/Services/DiagnosticHotKeyService.swift")
+    if "GetApplicationEventTarget()" not in hot_key_source:
+        violations.append("DiagnosticHotKeyService.swift:application-target-missing")
+    if "kVK_ANSI_L" in hot_key_source or "Control-Option-L" in hot_key_source:
+        violations.append("DiagnosticHotKeyService.swift:phase-b-lock-chord")
+    panel_source = read("PrivatePresenterApp/Overlay/TeleprompterPanel.swift")
+    level_cases = re.findall(r"^\s*case\s+(\w+)\s*$", panel_source, re.MULTILINE)
+    allowed_level_cases = {"floating", "statusBar", "front", "frontRegardless"}
+    unexpected_level_cases = set(level_cases).difference(allowed_level_cases)
+    if unexpected_level_cases:
+        violations.append("TeleprompterPanel.swift:unexpected-bounded-enum-case")
+    if violations:
+        fail("prohibited Phase A behavior marker in product source: " + ", ".join(violations))
+
+
 def main() -> None:
     missing = [path for path in REQUIRED_PATHS if not (ROOT / path).is_file()]
     if missing:
@@ -283,6 +459,16 @@ def main() -> None:
     missing_tests = [name for name in NAMED_TESTS if name not in swift_sources]
     if missing_tests:
         fail("missing required named tests: " + ", ".join(missing_tests))
+    phase_a_inventory = swift_sources + "\n" + read(
+        "Scripts/test-verify-m0-proof-provenance.sh"
+    )
+    missing_phase_a_tests = [
+        name
+        for name in (*PHASE_A_NAMED_TESTS, *PROVENANCE_FIXTURE_TESTS)
+        if name not in phase_a_inventory
+    ]
+    if missing_phase_a_tests:
+        fail("missing required Phase A named tests: " + ", ".join(missing_phase_a_tests))
     core_imports = [
         line.strip()
         for path in (ROOT / "Packages/TeleprompterCore/Sources").rglob("*.swift")
@@ -299,8 +485,10 @@ def main() -> None:
     if missing_app_markers:
         fail("M0 proof harness is missing markers: " + ", ".join(missing_app_markers))
     validate_data_safety()
+    validate_historical_result_prefix()
+    validate_phase_a_prohibited_surfaces()
     validate_xcode_listing()
-    print("Project structure validation passed (Milestone 0–1 source).")
+    print("Project structure validation passed (Milestone 0 Phase A source).")
 
 
 if __name__ == "__main__":

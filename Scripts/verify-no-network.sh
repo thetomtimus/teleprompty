@@ -2,8 +2,9 @@
 set -euo pipefail
 
 readonly PRODUCT_PATHS=(Packages/TeleprompterCore/Sources PrivatePresenterApp project.yml Config)
-readonly FORBIDDEN_SOURCE_PATTERN='Electron|import[[:space:]]+(WebKit|JavaScriptCore|Network)|WKWebView|WebView|JSContext|URLSession|URLRequest|NSURLConnection|CFHTTP|NWConnection|CGEventTap|CGEvent\.tapCreate|AXIsProcessTrusted|addGlobalMonitorForEvents|Sentry|Firebase|Amplitude|Mixpanel|telemetry|analytics'
+readonly FORBIDDEN_SOURCE_PATTERN='Electron|import[[:space:]]+(WebKit|JavaScriptCore|Network|ApplicationServices)|WKWebView|WebView|JSContext|URLSession|URLRequest|NSURLConnection|CFHTTP|NWConnection|CGEventTap|CGEvent\.tapCreate|AXIsProcessTrusted|AXUIElement|AXObserver|addGlobalMonitorForEvents|Sentry|Firebase|Amplitude|Mixpanel|telemetry|analytics'
 readonly FORBIDDEN_ENTITLEMENT_PATTERN='com\.apple\.security\.network\.(client|server)|com\.apple\.security\.automation\.apple-events|com\.apple\.security\.device\.(audio-input|camera)|com\.apple\.security\.personal-information|com\.apple\.developer\.icloud|NSAppTransportSecurity'
+readonly FORBIDDEN_PHASE_A_PATTERN='NSApp\.activate[[:space:]]*\(|NSRunningApplication[^[:cntrl:]]*\.activate[[:space:]]*\(|makeKeyAndOrderFront[[:space:]]*\(|\.screenSaver([^[:alnum:]_]|$)|NSWindow\.Level[[:space:]]*\([[:space:]]*rawValue|CGWindowLevelForKey[[:space:]]*\(|GetEventDispatcherTarget[[:space:]]*\(|performWindowDrag[[:space:]]*\(|styleMask[^[:cntrl:]]*(insert|formUnion)[^[:cntrl:]]*\.resizable|styleMask[[:space:]]*[:=][^[:cntrl:]]*\.resizable'
 
 for path in "${PRODUCT_PATHS[@]}"; do
   if [[ ! -e "$path" ]]; then
@@ -20,5 +21,18 @@ if grep -RInE --include='*.plist' --include='*.entitlements' --include='*.yml' "
   echo "error: prohibited entitlement or transport configuration found." >&2
   exit 1
 fi
+if grep -RInE --include='*.swift' "$FORBIDDEN_PHASE_A_PATTERN" \
+  Packages/TeleprompterCore/Sources PrivatePresenterApp \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//'; then
+  echo "error: prohibited Phase A focus/window/Carbon behavior marker found." >&2
+  exit 1
+fi
 
-echo "No prohibited product network, web runtime, telemetry, automation, event-tap, or global-monitor surface found."
+hot_key_source='PrivatePresenterApp/Services/DiagnosticHotKeyService.swift'
+grep -q 'GetApplicationEventTarget()' "$hot_key_source"
+if grep -qE 'kVK_ANSI_L|Control-Option-L' "$hot_key_source"; then
+  echo "error: Phase B lock chord is not permitted in Phase A." >&2
+  exit 1
+fi
+
+echo "No prohibited product network, web runtime, telemetry, automation, focus workaround, event-tap, global-monitor, or Phase B hot-key surface found."

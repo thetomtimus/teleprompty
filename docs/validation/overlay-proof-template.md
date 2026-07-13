@@ -4,21 +4,33 @@
 >
 > This file is a test procedure, not evidence that the gate passed. Run it on a
 > real Mac with Keynote and a real second display/projector. Only after the run,
-> copy this template to `docs/validation/overlay-proof-result.md` and replace
-> every blank with observed evidence. WSL, mocks, a single display, and an
-> ordinary desktop window cannot satisfy this gate.
+> use it as the checklist for a new append-only current-decision entry in
+> `docs/validation/overlay-proof-result.md`. Never replace or edit that file's
+> 14,486-byte historical prefix. WSL, mocks, a single display, and an ordinary
+> desktop window cannot satisfy this gate.
 
 ## Result identity
 
 - Overall result: `NOT RUN` / `PASS` / `FAIL` / `BLOCKED`
 - Date and local time:
 - Tester:
-- Implementation commit:
-- Working tree status before test:
-- Evidence directory (repository-local or other local path; do not publish):
-- DEBUG immutable configuration snapshot:
-- Snapshot digest or identifier:
-- DEBUG stale-controller-frame seed (step 14):
+- Exact clean implementation commit (40 lowercase hex):
+- Working tree status before proof build and each cell:
+- Proof executable local path and SHA-256:
+- Proof build-log local path and SHA-256:
+- Proof manifest resolved local path:
+- Focused-smoke executable SHA-256:
+- Physical-matrix executable SHA-256:
+- Smoke/physical executable equality: `YES` / `NO`
+- Evidence root (local path; do not publish private media):
+- DEBUG immutable configuration identifier:
+- Declared and observed controller cohort:
+- Repetition (`1`, `2`, or `3`):
+- Correlation windows closed before quit: `YES` / `NO`
+- Terminal `sessionCompletion`: `YES` / `NO`
+- Pending evidence sibling absent: `YES` / `NO`
+- Proof validity: `valid` / `invalid(<fixed code>)`
+- DEBUG stale-controller-frame seed (later Phase B step 14):
 
 ## Required environment record
 
@@ -35,8 +47,12 @@
 - Mirroring disabled at start: `YES` / `NO`
 - “Displays have separate Spaces” setting:
 - Screen selected in Private Presenter:
-- Initial panel level: `.statusBar` (retained after `.floating` failed the Keynote visibility check)
-- Diagnostic show/hide chord: `Control-Option-H` (DEBUG only)
+- Candidate levels: `.floating`, `.statusBar` only
+- Candidate ordering modes: `front`, `frontRegardless` only
+- Phase A source defaults: `.statusBar` / `frontRegardless`
+- Phase A controller cohorts: `visibleDesktopSpace`, `orderedOut`
+- Phase A repetitions: `1`, `2`, `3`
+- Diagnostic show/hide chord: `Control-Option-H` (DEBUG only; Phase A has no L)
 
 ## Preconditions
 
@@ -44,14 +60,99 @@
 - [ ] A current Keynote is installed.
 - [ ] A real second display or projector is connected in **extended** mode.
 - [ ] The generated project was bootstrapped with XcodeGen `2.45.4`.
-- [ ] The Debug app and tests completed successfully on this Mac.
+- [ ] The Debug app and all Phase A named tests completed successfully on this Mac.
+- [ ] `Scripts/verify-m0-proof-provenance.sh` accepted the manifest immediately
+      before this launch; the clean HEAD, executable, and build-log hashes match.
+- [ ] The same copied proof executable will be used for every Phase A cell.
+- [ ] No prior Private Presenter process or `.pending` evidence file remains.
 - [ ] The controller starts shielded and the intended private screen has been
       selected and explicitly confirmed.
 - [ ] A harmless test script is loaded; no private lecture content appears in
       screenshots, logs, filenames, or status/menu text.
 - [ ] The evidence capture can show both physical displays at the same time.
 
-## Mandatory 15-step physical gate
+## Mandatory Phase A causal diagnosis — stop before Phase B
+
+Phase A is diagnosis only. It preserves Control-Option-H and observes the current
+combined controller `showShielded`/`showWindow` lifecycle. It does **not** add L,
+split controller placement/presentation, change topology or activation policy,
+change the Carbon target, or change drag/resize/opacity behavior.
+
+Build the proof app from a clean HEAD using the recipe in the stabilization plan,
+then run the exact matrix from an interactive terminal:
+
+```bash
+./Scripts/verify-m0-proof-provenance.sh "$MANIFEST"
+./Scripts/run-m0-phase-a-diagnosis.sh "$MANIFEST" "$EVIDENCE_ROOT"
+```
+
+The runner enumerates exactly:
+
+```text
+2 levels × 2 ordering modes × 2 controller cohorts × 3 repetitions = 24 cells
+```
+
+Use `./Scripts/run-m0-phase-a-diagnosis.sh --list` to audit the matrix without
+launching the app. `--list` is source/tooling evidence only; it is not a Mac run.
+For every cold cell:
+
+1. start from the exact clean proof commit and independently verify manifest,
+   executable, and build-log provenance before launch;
+2. prepare the declared controller cohort without manufacturing it through the
+   cohort validator (`visibleDesktopSpace` or explicitly closed/`orderedOut`);
+3. enter a fresh Keynote full-screen Presenter Display, capture the pre-H state,
+   press H for the first show, then capture command-receipt, after-application,
+   next-main-run-loop, `+100 ms`, and `+500 ms` states;
+4. repeat H hide/show, verify Keynote remains frontmost/full-screen, explicitly
+   switch to another **macOS Space** and return, and wait for the final
+   `correlationWindowClosed`;
+5. exit Keynote full screen, then activate Private Presenter solely to Cmd-Q;
+   that activation must be tagged `postCorrelationQuit` and an ordered-out
+   cohort must not present/order the controller;
+6. require normal process exit, verify provenance again, then require exactly
+   one new final evidence file, no pending sibling, exactly one terminal
+   `sessionCompletion`, matching commit/configuration/cohort/repetition/hashes,
+   matching observed cohort, and no permanent invalidation; and
+7. reject and rerun the cell on any mismatch, recorder fault, unresolved path,
+   incomplete publication, duplicate completion, or `EVIDENCE_QUEUE_OVERFLOW`.
+
+### Per-correlation focus/window record
+
+| Observation | Before H | Receipt | After apply | Next loop | +100 ms | +500 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| Frontmost PID / bundle ID |  |  |  |  |  |  |
+| Private Presenter policy / `isActive` |  |  |  |  |  |  |
+| Panel visible / key / main / order / occlusion |  |  |  |  |  |  |
+| Controller visible / key / main / shielded |  |  |  |  |  |  |
+| Controller show count / order-on count |  |  |  |  |  |  |
+| Keynote Presenter Display full-screen |  |  |  |  |  |  |
+| Correlation ID and evidence sequence |  |  |  |  |  |  |
+
+### Phase A causal decision output required from Tom
+
+After all 24 cells are valid, preserve every evidence file and return a causal
+note containing:
+
+- exact instrumented commit, executable/build-log/manifest paths and hashes;
+- a 24-row outcome table with configuration/cohort/repetition, validity, focus/
+  full-screen result, activation chronology, panel visibility/key/main result,
+  controller `showShielded`/`showWindow`/presentation/order-on chronology, and
+  local evidence/media paths;
+- whether activation preceded or followed panel ordering in each failing cell;
+- whether any controller presentation/order-on event occurred in each cohort;
+- the matching hypothesis/decision-table branch from plan section 5, or
+  `NOT ISOLATED`;
+- the proposed permitted regression/fix branch, or `NONE — KEEP BLOCKED`; and
+- explicit confirmation that no Phase B code was applied during diagnosis.
+
+Any invalid or incomplete cell, or a cause outside the permitted public paths,
+keeps M0 and M2 blocked. Do not select a fix or default from timing alone.
+
+## Later complete 15-step physical gate (Phase B only after causal selection)
+
+The following complete gate is retained for the later evidence-selected Phase B
+slice. It is not authorized or executable as part of this Phase A handoff.
+
 
 For every step, record `PASS`, `FAIL`, or `BLOCKED`, observations, and local
 evidence paths. Do not mark the overall result `PASS` unless all 15 steps pass.
@@ -135,11 +236,13 @@ a presentation remote.
 Hide/show with the diagnostic chord while Keynote stays active.
 
 - Result:
-- Chord used:
-- Controller registration status:
-- Keynote PID/bundle ID before:
-- Keynote PID/bundle ID after:
-- Key window before/after:
+- H registration OSStatus and direct typed visibility command evidence:
+- L registration OSStatus and direct typed lock command evidence (Phase B only):
+- Keynote PID/bundle ID before/immediate/next-loop/+100 ms/+500 ms:
+- App policy/active before/immediate/next-loop/+100 ms/+500 ms:
+- Panel visible/key/main/locked before/immediate/next-loop/+100 ms/+500 ms:
+- Controller visible/key/main/shielded/presentation count at every sample:
+- Correlation closure and terminal publication evidence:
 - Observations:
 - Evidence paths:
 
@@ -189,11 +292,14 @@ Run `.floating` first; test `.statusBar` only if necessary. Record and keep the
 lowest configuration that passes every case.
 
 - Result:
-- `.floating` result and evidence:
-- Why `.statusBar` was or was not tested:
-- `.statusBar` result and evidence (if tested):
-- Lowest passing level retained:
-- Immutable configuration snapshot matches retained level: `YES` / `NO`
+- `.floating` / `front` result, safety vector, and evidence:
+- `.floating` / `frontRegardless` result, safety vector, and evidence:
+- Why `.statusBar` was or was not required:
+- `.statusBar` / `front` result, safety vector, and evidence:
+- `.statusBar` / `frontRegardless` result, safety vector, and evidence:
+- Lowest passing level and deterministic ordering retained:
+- Tie-break/source-default reason:
+- Configuration matches source defaults at the exact commit: `YES` / `NO`
 
 ### 12. Prove the rounded reading surface is opaque
 
@@ -242,8 +348,9 @@ text.
 
 ### 15. Save the real result record
 
-Save evidence in `docs/validation/overlay-proof-result.md` with date/tester,
-focus/window observations, and paths to local screenshots/photos/video.
+Append a new current-decision ledger to `docs/validation/overlay-proof-result.md`
+with date/tester, focus/window observations, proof hashes, and paths to local
+screenshots/photos/video. The historical 14,486-byte prefix must remain exact.
 
 - Result:
 - Result-record path:
@@ -255,7 +362,12 @@ focus/window observations, and paths to local screenshots/photos/video.
 ## Required configuration conclusion
 
 - Overall gate result:
+- Exact clean implementation commit:
 - Retained window level:
+- Retained ordering mode:
+- Configuration matches source defaults: `YES` / `NO`
+- Evidence validity and 24/24 Phase A completion:
+- Proof executable/build-log/manifest hashes reverified:
 - Retained style mask:
 - Retained collection behavior:
 - Locked `ignoresMouseEvents` value:
@@ -269,7 +381,9 @@ focus/window observations, and paths to local screenshots/photos/video.
 
 ## Stop rule
 
-If `.floating` and `.statusBar` both fail, do not try `.screenSaver`, private
-APIs, or a focus-stealing window. Mark Milestone 0 blocked with evidence and
-reassess feasibility. Do not begin Milestone 1 or visual product polish until a
-real `overlay-proof-result.md` records a passing gate.
+During Phase A, stop after the valid 24-cell causal note. Do not implement any
+Phase B behavior or begin M2. If the cause is not isolated to a permitted public
+branch, keep M0/M2 blocked. During the later complete matrix, if both bounded
+levels/orderings fail, do not try `.screenSaver`, raw/private levels, focus
+return, or a focus-stealing window; append a truthful BLOCKED result and reassess
+feasibility.

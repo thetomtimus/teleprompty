@@ -8,6 +8,7 @@ fi
 
 ./Scripts/bootstrap-macos.sh
 python3 Scripts/validate_project_structure.py
+./Scripts/test-verify-m0-proof-provenance.sh
 swift test --package-path Packages/TeleprompterCore
 # The UI-test shell is intentionally a skipped placeholder for the separate
 # physical Keynote/display gate. Running its unsigned runner cannot bootstrap.
@@ -22,4 +23,4 @@ if git ls-files 'PrivatePresenter.xcodeproj/*' | grep -q .; then
   exit 1
 fi
 
-echo "macOS automated verification passed. The physical Keynote/display gate is still separate and mandatory."
+echo "macOS automated verification passed. The clean proof build and 24-cell Phase A Keynote/display diagnosis are still separate and mandatory."
