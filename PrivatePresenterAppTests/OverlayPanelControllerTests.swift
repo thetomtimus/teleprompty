@@ -188,6 +188,119 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertTrue(selected.contains(controller.teleprompterPanel.frame))
     }
 
+#if DEBUG
+    func testPhaseAControllerObserverRecordsExistingShowShieldedEntryAndExit() {
+        var operations: [ControllerWindowOperation] = []
+        let controller = makeControllerWindowController { operations.append($0) }
+
+        controller.showShielded(on: nil)
+
+        XCTAssertEqual(operations.first, .showShieldedEntry)
+        XCTAssertEqual(operations.last, .showShieldedExit)
+    }
+
+    func testPhaseAControllerObserverRecordsFrameShowWindowAndShowCount() {
+        var operations: [ControllerWindowOperation] = []
+        let controller = makeControllerWindowController { operations.append($0) }
+        let countBefore = controller.showCount
+
+        controller.showShielded(on: nil)
+
+        XCTAssertTrue(operations.contains(.showWindow))
+        XCTAssertEqual(controller.showCount, countBefore + 1)
+        if NSScreen.main != nil {
+            XCTAssertTrue(operations.contains(.frameChanged))
+        }
+    }
+
+    func testPhaseAControllerObserverRecordsVisibilityOrderKeyMainAndOcclusion() {
+        let controller = makeControllerWindowController()
+        controller.showShielded(on: nil)
+
+        let state = controller.window?.diagnosticState
+
+        XCTAssertEqual(state?.isVisible, controller.window?.isVisible)
+        XCTAssertEqual(state?.isKey, controller.window?.isKeyWindow)
+        XCTAssertEqual(state?.isMain, controller.window?.isMainWindow)
+        XCTAssertEqual(state?.occlusionState, controller.window?.occlusionState.rawValue)
+    }
+
+    func testPhaseAInstrumentationDoesNotChangeControllerFrameVisibilityOrShowCount() {
+        let observed = makeControllerWindowController { _ in }
+        let unobserved = makeControllerWindowController()
+
+        observed.showShielded(on: nil)
+        unobserved.showShielded(on: nil)
+
+        XCTAssertEqual(observed.window?.frame, unobserved.window?.frame)
+        XCTAssertEqual(observed.window?.isVisible, unobserved.window?.isVisible)
+        XCTAssertEqual(observed.showCount, unobserved.showCount)
+    }
+
+    func testColdShowTraceSupportsControllerVisibleAndOrderedOutStates() {
+        let visible = makeControllerWindowController()
+        visible.showShielded(on: nil)
+        let orderedOut = makeControllerWindowController()
+        orderedOut.close()
+
+        XCTAssertEqual(visible.observedDiagnosticCohort(), .visibleDesktopSpace)
+        XCTAssertEqual(orderedOut.observedDiagnosticCohort(), .orderedOut)
+    }
+
+    func testEvidenceDistinguishesVisibleDesktopSpaceAndOrderedOutCohorts() {
+        let visible = makeDiagnosticConfiguration(cohort: .visibleDesktopSpace)
+        let orderedOut = makeDiagnosticConfiguration(cohort: .orderedOut)
+
+        XCTAssertNotEqual(visible.configurationIdentifier, orderedOut.configurationIdentifier)
+        XCTAssertEqual(visible.declaredControllerCohort.rawValue, "visibleDesktopSpace")
+        XCTAssertEqual(orderedOut.declaredControllerCohort.rawValue, "orderedOut")
+    }
+
+    func testObservedVisibleControllerMatchesVisibleDesktopSpaceCohort() {
+        let controller = makeControllerWindowController()
+        controller.showShielded(on: nil)
+
+        XCTAssertEqual(controller.observedDiagnosticCohort(), .visibleDesktopSpace)
+    }
+
+    func testObservedOrderedOutControllerMatchesOrderedOutCohort() {
+        let controller = makeControllerWindowController()
+        controller.close()
+
+        XCTAssertEqual(controller.observedDiagnosticCohort(), .orderedOut)
+    }
+
+    func testMissingControllerWindowCausesCohortMismatch() {
+        let controller = makeControllerWindowController()
+        controller.window = nil
+
+        XCTAssertNil(controller.observedDiagnosticCohort())
+    }
+
+    func testObservedCohortValidationNeverPresentsOrOrdersController() {
+        let controller = makeControllerWindowController()
+        controller.close()
+        let showCount = controller.showCount
+        let visible = controller.window?.isVisible
+
+        _ = controller.observedDiagnosticCohort()
+
+        XCTAssertEqual(controller.showCount, showCount)
+        XCTAssertEqual(controller.window?.isVisible, visible)
+    }
+
+    func testOrderedOutCohortQuitDoesNotPresentOrOrderController() async {
+        let runtime = AppRuntime(proofLevel: .floating)
+        runtime.controllerWindowController.close()
+        let showCount = runtime.controllerWindowController.showCount
+
+        _ = await runtime.stopAndFlush()
+
+        XCTAssertEqual(runtime.controllerWindowController.showCount, showCount)
+        XCTAssertFalse(runtime.controllerWindowController.window?.isVisible ?? false)
+    }
+#endif
+
     private func display(id: UInt32, builtIn: Bool, x: CGFloat) -> RuntimeDisplay {
         RuntimeDisplay(
             id: id,
@@ -203,4 +316,17 @@ final class OverlayPanelControllerTests: XCTestCase {
             isInMirrorSet: false
         )
     }
+
+#if DEBUG
+    private func makeControllerWindowController(
+        operationRecorder: @escaping (ControllerWindowOperation) -> Void = { _ in }
+    ) -> ControllerWindowController {
+        let model = AppModel(overlayController: OverlayPanelController())
+        return ControllerWindowController(
+            model: model,
+            untrustedInitialFrame: NSRect(x: 0, y: 0, width: 620, height: 360),
+            operationRecorder: operationRecorder
+        )
+    }
+#endif
 }

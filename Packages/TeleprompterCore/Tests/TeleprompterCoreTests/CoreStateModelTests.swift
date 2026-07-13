@@ -257,6 +257,46 @@ final class CoreStateModelTests: XCTestCase {
         }
     }
 
+    func testStabilizationRetainsV1CanonicalSnapshotAfterDiagnosticLockChange() throws {
+        var preferences = TeleprompterPreferences(isLocked: false)
+        XCTAssertFalse(preferences.isLocked)
+        preferences.isLocked = true
+        let snapshot = makeSnapshot(
+            text: "Generated stabilization fixture",
+            preferences: preferences
+        )
+
+        let data = try snapshot.canonicalData()
+        let decoded = try PersistedSnapshot.canonicalDecoder().decode(
+            PersistedSnapshot.self,
+            from: data
+        )
+
+        XCTAssertEqual(PersistedSnapshot.currentSchemaVersion, 1)
+        XCTAssertEqual(decoded.schemaVersion, 1)
+        XCTAssertEqual(decoded.document.schemaVersion, 1)
+        XCTAssertTrue(decoded.preferences.isLocked)
+    }
+
+    func testDiagnosticStateNeverEntersPersistedSnapshot() throws {
+        let keys = try recursiveKeys(in: makeSnapshot().canonicalData())
+        let diagnosticOnlyKeys: Set<String> = [
+            "configurationBound",
+            "controllerCohort",
+            "correlationID",
+            "diagnosticEvent",
+            "evidencePath",
+            "executableSHA256",
+            "orderingMode",
+            "proofStatus",
+            "repetition",
+            "sessionCompletion",
+            "sessionID",
+        ]
+
+        XCTAssertTrue(keys.isDisjoint(with: diagnosticOnlyKeys))
+    }
+
     func testCoreProductionSourcesImportFoundationOnly() throws {
         let testsURL = URL(fileURLWithPath: #filePath)
         let packageURL = testsURL
@@ -285,6 +325,7 @@ final class CoreStateModelTests: XCTestCase {
 
     private func makeSnapshot(
         text: String = "Generated test fixture",
+        preferences: TeleprompterPreferences = .init(),
         panelFrames: [PersistedPanelFrame] = [],
         shortcutBindings: [ShortcutBinding] = []
     ) -> PersistedSnapshot {
@@ -299,7 +340,7 @@ final class CoreStateModelTests: XCTestCase {
             revision: 11,
             document: document,
             readingAnchor: .init(utf16Offset: 3, viewportFraction: 0.25, document: text),
-            preferences: .init(),
+            preferences: preferences,
             panelFrames: panelFrames,
             shortcutBindings: shortcutBindings
         )

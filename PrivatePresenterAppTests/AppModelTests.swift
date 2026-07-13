@@ -303,6 +303,71 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(runtime.dependencies.appModelConstructionCount, 1)
     }
 
+    func testStabilizationRestoreRemainsHiddenPausedUntilPrivacyConfirmation() {
+        let model = AppModel(overlayController: OverlayPanelController())
+
+        model.send(.restore(snapshot(text: "Generated stabilization fixture")))
+        model.send(.showOverlay)
+
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+        XCTAssertTrue(model.isShielded)
+        XCTAssertFalse(model.isSelectionConfirmed)
+    }
+
+    func testStabilizationStartupRestoresBeforeTopologyAndRegistersControlsLast() async {
+        var events: [AppRuntimeStartupEvent] = []
+        let restored = snapshot(text: "Generated stabilization fixture")
+        let runtime = AppRuntime(
+            proofLevel: .floating,
+            startupSeams: AppRuntimeStartupSeams(
+                load: { .loaded(RestoredState(snapshot: restored)) },
+                observeAndQuery: { .success(RuntimeDisplayInventory(displays: [])) },
+                registerDiagnosticHotKey: { 0 },
+                record: { events.append($0) }
+            )
+        )
+
+        await runtime.startForTesting()
+
+        let restore = try? XCTUnwrap(events.firstIndex(of: .restore))
+        let topology = try? XCTUnwrap(events.firstIndex(of: .observeAndQuery))
+        let privacy = try? XCTUnwrap(events.firstIndex(of: .evaluatePrivacy))
+        let controls = try? XCTUnwrap(events.firstIndex(of: .registerDiagnosticHotKey))
+        XCTAssertNotNil(restore)
+        XCTAssertNotNil(topology)
+        XCTAssertNotNil(privacy)
+        XCTAssertNotNil(controls)
+        if let restore, let topology, let privacy, let controls {
+            XCTAssertLessThan(restore, topology)
+            XCTAssertLessThan(topology, privacy)
+            XCTAssertLessThan(privacy, controls)
+            XCTAssertEqual(controls, events.count - 1)
+        }
+    }
+
+    func testStabilizationRuntimeStillConstructsExactlyOneAppModel() {
+        let runtime = AppRuntime(proofLevel: .floating)
+
+        XCTAssertEqual(runtime.dependencies.appModelConstructionCount, 1)
+    }
+
+#if DEBUG
+    func testStabilizationServicesShareTheRuntimeModelIdentity() {
+        let runtime = AppRuntime(proofLevel: .floating)
+        let dispatchesBefore = runtime.model.commandDispatchCount
+
+        runtime.diagnosticHotKeyService.invokeForTesting()
+
+        XCTAssertEqual(
+            runtime.controllerWindowController.modelIdentity,
+            ObjectIdentifier(runtime.model)
+        )
+        XCTAssertEqual(runtime.model.commandDispatchCount, dispatchesBefore + 1)
+        XCTAssertEqual(runtime.dependencies.appModelConstructionCount, 1)
+    }
+#endif
+
     func testAllLoadFailuresRemainFailClosedAfterTopologyConfirmation() async {
         let failures: [SnapshotLoadResult] = [
             .recoveredMalformed(quarantineURL: URL(fileURLWithPath: "/tmp/generated-fixture.json")),
