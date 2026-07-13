@@ -1,9 +1,21 @@
 import AppKit
 import SwiftUI
 
+#if DEBUG
+enum ControllerWindowOperation: Equatable, Sendable {
+    case showShieldedEntry
+    case frameChanged
+    case showWindow
+    case showShieldedExit
+}
+#endif
+
 @MainActor
 final class ControllerWindowController: NSWindowController {
     private let model: AppModel
+#if DEBUG
+    private let operationRecorder: (ControllerWindowOperation) -> Void
+#endif
     private(set) var showCount = 0
 
     var modelIdentity: ObjectIdentifier {
@@ -12,9 +24,15 @@ final class ControllerWindowController: NSWindowController {
 
     init(
         model: AppModel,
-        untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame()
+        untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame(),
+#if DEBUG
+        operationRecorder: @escaping (ControllerWindowOperation) -> Void = { _ in }
+#endif
     ) {
         self.model = model
+#if DEBUG
+        self.operationRecorder = operationRecorder
+#endif
         let initialFrame = untrustedInitialFrame
             ?? NSRect(x: 0, y: 0, width: 620, height: 360)
         let window = NSWindow(
@@ -38,6 +56,9 @@ final class ControllerWindowController: NSWindowController {
     /// positioned only on the current built-in candidate (or main screen fallback).
     func showShielded(on candidate: RuntimeDisplay?) {
         guard let window else { return }
+#if DEBUG
+        operationRecorder(.showShieldedEntry)
+#endif
         showCount += 1
         let screenFrame = candidate?.visibleFrame ?? NSScreen.main?.visibleFrame
         if let screenFrame {
@@ -52,9 +73,25 @@ final class ControllerWindowController: NSWindowController {
                 maximumSize: screenFrame.size
             )
             window.setFrame(clamped, display: false)
+#if DEBUG
+            operationRecorder(.frameChanged)
+#endif
         }
+#if DEBUG
+        operationRecorder(.showWindow)
+#endif
         showWindow(nil)
+#if DEBUG
+        operationRecorder(.showShieldedExit)
+#endif
     }
+
+#if DEBUG
+    func observedDiagnosticCohort() -> DiagnosticControllerCohort? {
+        guard let window else { return nil }
+        return window.isVisible ? .visibleDesktopSpace : .orderedOut
+    }
+#endif
 
     static func debugSeedFrame() -> NSRect? {
 #if DEBUG

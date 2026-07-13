@@ -1,6 +1,7 @@
 #if DEBUG
 import Carbon.HIToolbox
 import Dispatch
+import Foundation
 
 private let diagnosticHotKeyEventHandler: EventHandlerUPP = {
     _, _, userInfo in
@@ -8,9 +9,7 @@ private let diagnosticHotKeyEventHandler: EventHandlerUPP = {
     let service = Unmanaged<DiagnosticHotKeyService>
         .fromOpaque(userInfo)
         .takeUnretainedValue()
-    DispatchQueue.main.async {
-        service.invoke()
-    }
+    service.receiveCarbonEvent()
     return noErr
 }
 
@@ -19,11 +18,21 @@ private let diagnosticHotKeyEventHandler: EventHandlerUPP = {
 final class DiagnosticHotKeyService {
     static let chordDescription = "Control-Option-H"
 
-    private let action: @MainActor () -> Void
+    private nonisolated let carbonReceipt: @Sendable (UUID) -> Void
+    private let action: @MainActor (UUID) -> Void
     private var eventHandler: EventHandlerRef?
     private var hotKey: EventHotKeyRef?
 
     init(action: @escaping @MainActor () -> Void) {
+        carbonReceipt = { _ in }
+        self.action = { _ in action() }
+    }
+
+    init(
+        carbonReceipt: @escaping @Sendable (UUID) -> Void,
+        action: @escaping @MainActor (UUID) -> Void
+    ) {
+        self.carbonReceipt = carbonReceipt
         self.action = action
     }
 
@@ -72,12 +81,24 @@ final class DiagnosticHotKeyService {
         eventHandler = nil
     }
 
-    fileprivate func invoke() {
-        action()
+    fileprivate nonisolated func receiveCarbonEvent() {
+        let correlationID = UUID()
+        carbonReceipt(correlationID)
+        DispatchQueue.main.async { [weak self] in
+            self?.invoke(correlationID: correlationID)
+        }
+    }
+
+    fileprivate func invoke(correlationID: UUID) {
+        action(correlationID)
     }
 
     func invokeForTesting() {
-        invoke()
+        invoke(correlationID: UUID())
+    }
+
+    nonisolated func receiveCarbonEventForTesting() {
+        receiveCarbonEvent()
     }
 }
 #endif

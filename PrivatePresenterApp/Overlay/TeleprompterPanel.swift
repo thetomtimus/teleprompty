@@ -1,17 +1,66 @@
 import AppKit
 
-@MainActor
-enum OverlayPanelLevel: String, CaseIterable, Sendable {
+enum OverlayPanelLevel: String, Codable, CaseIterable, Sendable {
     case floating
     case statusBar
 
-    var appKitLevel: NSWindow.Level {
+    @MainActor var appKitLevel: NSWindow.Level {
         switch self {
         case .floating: .floating
         case .statusBar: .statusBar
         }
     }
 }
+
+#if DEBUG
+enum OverlayPanelOrderingMode: String, Codable, CaseIterable, Sendable {
+    case front
+    case frontRegardless
+}
+
+struct OverlayConfigurationCandidate: Equatable, Sendable {
+    let level: OverlayPanelLevel
+    let ordering: OverlayPanelOrderingMode
+    let completePass: Bool
+    let activationTransitions: Int
+    let controllerPresentationOperations: Int
+    let panelKeyMainTransitions: Int
+    let missedVisibilitySamples: Int
+
+    var safetyVector: [Int] {
+        [
+            activationTransitions,
+            controllerPresentationOperations,
+            panelKeyMainTransitions,
+            missedVisibilitySamples,
+        ]
+    }
+}
+
+enum OverlayConfigurationSelector {
+    static func select(
+        from candidates: [OverlayConfigurationCandidate],
+        sourceDefaultLevel: OverlayPanelLevel = .statusBar,
+        sourceDefaultOrdering: OverlayPanelOrderingMode = .frontRegardless
+    ) -> OverlayConfigurationCandidate? {
+        let passing = candidates.filter(\.completePass)
+        guard !passing.isEmpty else { return nil }
+        return passing.min { lhs, rhs in
+            if lhs.safetyVector != rhs.safetyVector {
+                return lhs.safetyVector.lexicographicallyPrecedes(rhs.safetyVector)
+            }
+            let lhsDefault = lhs.level == sourceDefaultLevel
+                && lhs.ordering == sourceDefaultOrdering
+            let rhsDefault = rhs.level == sourceDefaultLevel
+                && rhs.ordering == sourceDefaultOrdering
+            if lhsDefault != rhsDefault { return lhsDefault }
+            if lhs.level != rhs.level { return lhs.level == .floating }
+            if lhs.ordering != rhs.ordering { return lhs.ordering == sourceDefaultOrdering }
+            return false
+        }
+    }
+}
+#endif
 
 /// The single AppKit-owned overlay. The nonopaque window exists only to permit clear
 /// pixels outside the rounded card; the hosted card itself always paints an opaque fill.

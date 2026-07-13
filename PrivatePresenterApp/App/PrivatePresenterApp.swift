@@ -5,19 +5,20 @@ import AppKit
 enum PrivatePresenterApplication {
     static func main() {
         let application = NSApplication.shared
-        let proofLevel: OverlayPanelLevel
 #if DEBUG
-        if let requestedLevel = ProcessInfo.processInfo.environment[
-            "PRIVATE_PRESENTER_PROOF_LEVEL"
-        ], let requestedLevel = OverlayPanelLevel(rawValue: requestedLevel) {
-            proofLevel = requestedLevel
-        } else {
-            proofLevel = .statusBar
-        }
+        let resolution = DiagnosticProofConfiguration.resolve()
+        let evidenceRecorder = DiagnosticEvidenceRecorder.production(resolution: resolution)
+        let runtime = AppRuntime(
+            proofLevel: resolution.configuration.proofLevel,
+            diagnosticConfiguration: resolution.configuration,
+            diagnosticEvidenceRecorder: evidenceRecorder,
+            enforcesDiagnosticControllerCohort: !resolution.faults.contains(
+                .configControllerCohortInvalid
+            )
+        )
 #else
-        proofLevel = .statusBar
+        let runtime = AppRuntime(proofLevel: .statusBar)
 #endif
-        let runtime = AppRuntime(proofLevel: proofLevel)
         let delegate = AppDelegate(runtime: runtime)
         application.setActivationPolicy(.regular)
         application.delegate = delegate

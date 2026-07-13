@@ -37,6 +37,8 @@ final class AppModel {
 #if DEBUG
     private(set) var focusEvidence: [LabeledFocusSnapshot] = []
     private(set) var diagnosticHotKeyStatus = "Control-Option-H not registered"
+    @ObservationIgnored private let diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder?
+    @ObservationIgnored private(set) var diagnosticCorrelationID: UUID?
 #endif
 
     @ObservationIgnored private let overlayController: OverlayPanelController
@@ -67,6 +69,9 @@ final class AppModel {
         document: ScriptDocument? = nil,
         now: @escaping @MainActor () -> Date = { Date() },
         restorationRequired: Bool = false,
+#if DEBUG
+        diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder? = nil,
+#endif
         effectHandler: (@MainActor (AppEffect) -> Void)? = nil
     ) {
         self.overlayController = overlayController
@@ -81,6 +86,9 @@ final class AppModel {
         restorationCompleted = !restorationRequired
         isPersistenceLoadSafe = !restorationRequired
         proofConfigurationSnapshot = overlayController.configurationSnapshot
+#if DEBUG
+        self.diagnosticEvidenceRecorder = diagnosticEvidenceRecorder
+#endif
         self.effectHandler = effectHandler ?? { effect in
             Self.applyDefault(effect, overlayController: overlayController)
         }
@@ -236,12 +244,27 @@ final class AppModel {
             : "Control-Option-H registration failed (OSStatus \(status))"
     }
 
-    func toggleOverlayFromDiagnosticHotKey() {
+    func toggleOverlayFromDiagnosticHotKey(correlationID: UUID? = nil) {
+        diagnosticCorrelationID = correlationID
+        let command: DiagnosticCommandName = overlaySession.visibility == .visible
+            ? .hideOverlay
+            : .showOverlay
+        diagnosticEvidenceRecorder?.record(
+            kind: .commandBefore,
+            correlationID: correlationID,
+            payload: DiagnosticEventPayload(command: command)
+        )
         if overlaySession.visibility == .visible {
             send(.hideOverlay)
         } else {
             send(.showOverlay)
         }
+        diagnosticEvidenceRecorder?.record(
+            kind: .commandAfter,
+            correlationID: correlationID,
+            payload: DiagnosticEventPayload(command: command)
+        )
+        diagnosticCorrelationID = nil
     }
 
     func captureFocus(label: String) {
@@ -626,6 +649,13 @@ final class AppModel {
     private func applyPrivacyDirectives(_ directives: [PrivacyDirective]) -> [AppEffect] {
         var externalEffects: [AppEffect] = []
         for directive in directives {
+#if DEBUG
+            diagnosticEvidenceRecorder?.record(
+                kind: .directiveBefore,
+                correlationID: diagnosticCorrelationID,
+                payload: DiagnosticEventPayload(privacyDirective: directive.diagnosticName)
+            )
+#endif
             switch directive {
             case .pauseScrolling:
                 overlaySession.playbackPhase = .paused
@@ -653,6 +683,13 @@ final class AppModel {
             case .publishSafeState:
                 break
             }
+#if DEBUG
+            diagnosticEvidenceRecorder?.record(
+                kind: .directiveAfter,
+                correlationID: diagnosticCorrelationID,
+                payload: DiagnosticEventPayload(privacyDirective: directive.diagnosticName)
+            )
+#endif
         }
         return externalEffects
     }
@@ -727,6 +764,13 @@ final class AppModel {
 
     private func emit(_ effects: [AppEffect]) {
         for effect in effects {
+#if DEBUG
+            diagnosticEvidenceRecorder?.record(
+                kind: .effectEmitted,
+                correlationID: diagnosticCorrelationID,
+                payload: DiagnosticEventPayload(effect: effect.diagnosticName)
+            )
+#endif
             effectHandler(effect)
         }
     }
@@ -772,3 +816,37 @@ final class AppModel {
         isSelectionConfirmed = confirmed
     }
 }
+
+#if DEBUG
+private extension PrivacyDirective {
+    var diagnosticName: DiagnosticPrivacyDirectiveName {
+        switch self {
+        case .pauseScrolling: .pauseScrolling
+        case .hideOverlay: .hideOverlay
+        case .shieldController: .shieldController
+        case .invalidatePendingShow: .invalidatePendingShow
+        case .queryTopology: .queryTopology
+        case .evaluatePrivacy: .evaluatePrivacy
+        case .moveWindowsWhileShielded: .moveWindowsWhileShielded
+        case .requestConfirmation: .requestConfirmation
+        case .publishSafeState: .publishSafeState
+        }
+    }
+}
+
+extension AppEffect {
+    var diagnosticName: DiagnosticEffectName {
+        switch self {
+        case .stagePanelHidden: .stagePanelHidden
+        case .showPanel: .showPanel
+        case .hidePanel: .hidePanel
+        case .setPanelLocked: .setPanelLocked
+        case .moveControllerWhileShielded: .moveControllerWhileShielded
+        case .scheduleSnapshot, .flushSnapshot, .saveSnapshotImmediately,
+             .flushPersistence, .resetViewport, .reassessPrivacy,
+             .queryTopology, .evaluatePrivacy:
+            .other
+        }
+    }
+}
+#endif
