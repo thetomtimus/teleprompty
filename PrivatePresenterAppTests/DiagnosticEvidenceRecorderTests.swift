@@ -9,7 +9,8 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
         let harness = makeDiagnosticRecorderHarness(clock: { 42 })
 
         XCTAssertTrue(harness.recorder.record(kind: .carbonReceived, correlationID: correlationID))
-        XCTAssertTrue(await harness.recorder.finish())
+        let didFinish = await harness.recorder.finish()
+        XCTAssertTrue(didFinish)
 
         let event = harness.sink.envelopes.first { $0.kind == .carbonReceived }
         XCTAssertEqual(event?.sessionID, harness.recorder.sessionID)
@@ -56,7 +57,9 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
             .focusDelayed500Milliseconds,
             .correlationWindowClosed,
         ]
-        kinds.forEach { harness.recorder.record(kind: $0, correlationID: correlationID) }
+        for kind in kinds {
+            harness.recorder.record(kind: kind, correlationID: correlationID)
+        }
         _ = await harness.recorder.finish()
 
         let events = harness.sink.envelopes.filter { $0.correlationID == correlationID }
@@ -166,7 +169,8 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
     func testSessionCompletionRequiresResolvedPathExistingFileAndSuccessfulFlush() async {
         let harness = makeDiagnosticRecorderHarness()
 
-        XCTAssertTrue(await harness.recorder.finish())
+        let didFinish = await harness.recorder.finish()
+        XCTAssertTrue(didFinish)
 
         let finalURL = try! XCTUnwrap(harness.recorder.finalURL)
         XCTAssertTrue(FileManager.default.fileExists(atPath: finalURL.path))
@@ -215,7 +219,8 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
         harness.sink.unblockFirstAppend()
         XCTAssertTrue(harness.sink.waitForAppendCount(3))
 
-        XCTAssertTrue(await harness.recorder.finish())
+        let didFinish = await harness.recorder.finish()
+        XCTAssertTrue(didFinish)
         XCTAssertEqual(harness.recorder.proofStatus, .invalid(.evidenceQueueOverflow))
     }
 
@@ -308,7 +313,8 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
         XCTAssertTrue(model.isShielded)
         XCTAssertEqual(harness.recorder.proofStatus, .invalid(.evidenceQueueOverflow))
         harness.sink.unblockFirstAppend()
-        XCTAssertTrue(await harness.recorder.finish())
+        let didFinish = await harness.recorder.finish()
+        XCTAssertTrue(didFinish)
     }
 
     func testOverflowAndLaterSinkFailurePreserveFirstPermanentInvalidation() async {
@@ -440,7 +446,8 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
     func testSynchronizationFailureNeverPublishesFinalEvidenceFile() async {
         let harness = makeDiagnosticRecorderHarness(failure: .synchronize)
 
-        XCTAssertFalse(await harness.recorder.finish())
+        let didFinish = await harness.recorder.finish()
+        XCTAssertFalse(didFinish)
         XCTAssertFalse(harness.sink.operations.contains("publish"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: harness.recorder.finalURL!.path))
     }
@@ -448,7 +455,8 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
     func testCloseFailureNeverPublishesFinalEvidenceFile() async {
         let harness = makeDiagnosticRecorderHarness(failure: .close)
 
-        XCTAssertFalse(await harness.recorder.finish())
+        let didFinish = await harness.recorder.finish()
+        XCTAssertFalse(didFinish)
         XCTAssertFalse(harness.sink.operations.contains("publish"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: harness.recorder.finalURL!.path))
     }
@@ -456,7 +464,8 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
     func testAtomicRenameFailureNeverPublishesAcceptedFinalFile() async {
         let harness = makeDiagnosticRecorderHarness(failure: .publish)
 
-        XCTAssertFalse(await harness.recorder.finish())
+        let didFinish = await harness.recorder.finish()
+        XCTAssertFalse(didFinish)
         XCTAssertFalse(FileManager.default.fileExists(atPath: harness.recorder.finalURL!.path))
         XCTAssertEqual(harness.recorder.proofStatus, .invalid(.evidenceFinalizeFailed))
     }
@@ -482,7 +491,7 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
         XCTAssertTrue(harness.sink.waitUntilFirstAppendStarts())
         XCTAssertTrue(harness.recorder.record(kind: .commandBefore))
         XCTAssertFalse(harness.recorder.record(kind: .commandAfter))
-        for _ in 0 ..< extraDrops {
+        for _ in 0..<extraDrops {
             XCTAssertFalse(harness.recorder.record(kind: .effectEmitted))
         }
         return harness

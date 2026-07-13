@@ -1,6 +1,7 @@
 import AppKit
 import TeleprompterCore
 import XCTest
+
 @testable import PrivatePresenter
 
 @MainActor
@@ -13,7 +14,8 @@ final class AppModelTests: XCTestCase {
             now: { Date(timeIntervalSince1970: 20) },
             effectHandler: { effect in
                 if case .scheduleSnapshot = effect {
-                    stateObservedByEffect = model.document.text == "New lecture"
+                    stateObservedByEffect =
+                        model.document.text == "New lecture"
                         && model.document.revision == 1
                         && model.snapshotRevision == 1
                 }
@@ -129,10 +131,12 @@ final class AppModelTests: XCTestCase {
             }
         )
 
-        model.send(.restore(snapshot(
-            text: "Lecture",
-            preferences: TeleprompterPreferences(isLocked: true)
-        )))
+        model.send(
+            .restore(
+                snapshot(
+                    text: "Lecture",
+                    preferences: TeleprompterPreferences(isLocked: true)
+                )))
 
         XCTAssertTrue(observedLockedState)
         XCTAssertTrue(model.configurationSnapshot.isLocked)
@@ -158,10 +162,12 @@ final class AppModelTests: XCTestCase {
 
         XCTAssertEqual(model.document.text, "Lecture")
         XCTAssertTrue(model.isAwaitingPreClearFlush)
-        XCTAssertTrue(effects.contains(.flushSnapshot(
-            token: token,
-            requiredRevision: model.snapshotRevision
-        )))
+        XCTAssertTrue(
+            effects.contains(
+                .flushSnapshot(
+                    token: token,
+                    requiredRevision: model.snapshotRevision
+                )))
     }
 
     func testFailedPreClearFlushPreservesScript() {
@@ -170,11 +176,12 @@ final class AppModelTests: XCTestCase {
         let token = try! XCTUnwrap(model.pendingClearToken)
         model.send(.confirmClear(token: token))
 
-        model.send(.completePreClearFlush(
-            token: token,
-            persistedRevision: model.snapshotRevision,
-            succeeded: false
-        ))
+        model.send(
+            .completePreClearFlush(
+                token: token,
+                persistedRevision: model.snapshotRevision,
+                succeeded: false
+            ))
 
         XCTAssertEqual(model.document.text, "Lecture")
         XCTAssertEqual(model.localError, .preClearFlushFailed)
@@ -198,11 +205,12 @@ final class AppModelTests: XCTestCase {
         let capturedRevision = model.snapshotRevision
         model.send(.replaceScript(text: "Revised lecture"))
 
-        model.send(.completePreClearFlush(
-            token: token,
-            persistedRevision: capturedRevision,
-            succeeded: true
-        ))
+        model.send(
+            .completePreClearFlush(
+                token: token,
+                persistedRevision: capturedRevision,
+                succeeded: true
+            ))
 
         XCTAssertEqual(model.document.text, "Revised lecture")
     }
@@ -230,11 +238,12 @@ final class AppModelTests: XCTestCase {
         let capturedRevision = model.snapshotRevision
 
         model.send(.confirmSelectedDisplay)
-        model.send(.completePreClearFlush(
-            token: token,
-            persistedRevision: capturedRevision,
-            succeeded: true
-        ))
+        model.send(
+            .completePreClearFlush(
+                token: token,
+                persistedRevision: capturedRevision,
+                succeeded: true
+            ))
 
         XCTAssertEqual(model.document.text, "Lecture")
         XCTAssertNil(model.pendingClearToken)
@@ -249,13 +258,14 @@ final class AppModelTests: XCTestCase {
         model.send(.confirmClear(token: token))
         let requiredRevision = model.snapshotRevision
 
-        model.send(.completePreClearFlush(
-            token: token,
-            persistedRevision: requiredRevision,
-            succeeded: true
-        ))
+        model.send(
+            .completePreClearFlush(
+                token: token,
+                persistedRevision: requiredRevision,
+                succeeded: true
+            ))
 
-        guard case let .saveSnapshotImmediately(saved)? = effects.last else {
+        guard case .saveSnapshotImmediately(let saved)? = effects.last else {
             return XCTFail("Expected immediate post-clear save")
         }
         XCTAssertEqual(saved.document.text, "")
@@ -270,18 +280,19 @@ final class AppModelTests: XCTestCase {
         let token = try! XCTUnwrap(model.pendingClearToken)
         model.send(.confirmClear(token: token))
 
-        model.send(.completePreClearFlush(
-            token: token,
-            persistedRevision: originalSnapshotRevision,
-            succeeded: true
-        ))
+        model.send(
+            .completePreClearFlush(
+                token: token,
+                persistedRevision: originalSnapshotRevision,
+                succeeded: true
+            ))
 
         XCTAssertEqual(model.document.text, "")
         XCTAssertEqual(model.document.revision, originalDocumentRevision + 1)
         XCTAssertEqual(model.snapshotRevision, originalSnapshotRevision + 1)
         XCTAssertEqual(model.overlaySession.readingAnchor.utf16Offset, 0)
         XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
-        guard case let .saveSnapshotImmediately(saved)? = effects.last else {
+        guard case .saveSnapshotImmediately(let saved)? = effects.last else {
             return XCTFail("Expected immediate empty snapshot")
         }
         XCTAssertEqual(saved.revision, originalSnapshotRevision + 1)
@@ -352,7 +363,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(runtime.dependencies.appModelConstructionCount, 1)
     }
 
-#if DEBUG
+    #if DEBUG
     func testStabilizationServicesShareTheRuntimeModelIdentity() {
         let runtime = AppRuntime(proofLevel: .floating)
         let dispatchesBefore = runtime.model.commandDispatchCount
@@ -366,7 +377,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(runtime.model.commandDispatchCount, dispatchesBefore + 1)
         XCTAssertEqual(runtime.dependencies.appModelConstructionCount, 1)
     }
-#endif
+    #endif
 
     func testAllLoadFailuresRemainFailClosedAfterTopologyConfirmation() async {
         let failures: [SnapshotLoadResult] = [
@@ -431,7 +442,8 @@ final class AppModelTests: XCTestCase {
             overlayController: OverlayPanelController(),
             effectHandler: { effect in
                 guard case .moveControllerWhileShielded = effect else { return }
-                observedCommittedState = model.isShielded
+                observedCommittedState =
+                    model.isShielded
                     && model.isSelectionConfirmed
                     && model.overlaySession.currentSessionDisplayID == builtIn.id
                     && model.preferences.selectedDisplayFingerprint != nil
@@ -562,7 +574,7 @@ final class AppModelTests: XCTestCase {
         model = AppModel(
             overlayController: controller,
             effectHandler: { effect in
-                guard case let .moveControllerWhileShielded(display) = effect else { return }
+                guard case .moveControllerWhileShielded(let display) = effect else { return }
                 wasShieldedDuringMove = model.isShielded
                 movedDisplayID = display.id
             }
@@ -787,11 +799,12 @@ final class AppModelTests: XCTestCase {
         let capturedRevision = model.snapshotRevision
 
         durableChange(model)
-        model.send(.completePreClearFlush(
-            token: token,
-            persistedRevision: capturedRevision,
-            succeeded: true
-        ))
+        model.send(
+            .completePreClearFlush(
+                token: token,
+                persistedRevision: capturedRevision,
+                succeeded: true
+            ))
 
         XCTAssertEqual(model.document.text, "Lecture")
         XCTAssertNil(model.pendingClearToken)

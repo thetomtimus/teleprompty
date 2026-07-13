@@ -28,29 +28,40 @@ struct AppRuntimeStartupSeams {
     var observeAndQuery: (@MainActor () -> Result<RuntimeDisplayInventory, Error>)?
     var registerDiagnosticHotKey: (@MainActor () -> Int32)?
     var record: @MainActor (AppRuntimeStartupEvent) -> Void
-#if DEBUG
+    #if DEBUG
     var recordDiagnosticLifecycle: @MainActor (AppRuntimeDiagnosticLifecycleEvent) -> Void
-#endif
+    #endif
 
+    #if DEBUG
     init(
         load: (@MainActor () async -> SnapshotLoadResult)? = nil,
         observeAndQuery: (@MainActor () -> Result<RuntimeDisplayInventory, Error>)? = nil,
         registerDiagnosticHotKey: (@MainActor () -> Int32)? = nil,
         record: @escaping @MainActor (AppRuntimeStartupEvent) -> Void = { _ in },
-#if DEBUG
-        recordDiagnosticLifecycle: @escaping @MainActor (
-            AppRuntimeDiagnosticLifecycleEvent
-        ) -> Void = { _ in }
-#endif
+        recordDiagnosticLifecycle:
+            @escaping @MainActor (
+                AppRuntimeDiagnosticLifecycleEvent
+            ) -> Void = { _ in }
     ) {
         self.load = load
         self.observeAndQuery = observeAndQuery
         self.registerDiagnosticHotKey = registerDiagnosticHotKey
         self.record = record
-#if DEBUG
         self.recordDiagnosticLifecycle = recordDiagnosticLifecycle
-#endif
     }
+    #else
+    init(
+        load: (@MainActor () async -> SnapshotLoadResult)? = nil,
+        observeAndQuery: (@MainActor () -> Result<RuntimeDisplayInventory, Error>)? = nil,
+        registerDiagnosticHotKey: (@MainActor () -> Int32)? = nil,
+        record: @escaping @MainActor (AppRuntimeStartupEvent) -> Void = { _ in }
+    ) {
+        self.load = load
+        self.observeAndQuery = observeAndQuery
+        self.registerDiagnosticHotKey = registerDiagnosticHotKey
+        self.record = record
+    }
+    #endif
 }
 
 @MainActor
@@ -60,52 +71,93 @@ final class AppRuntime {
     let model: AppModel
     let controllerWindowController: ControllerWindowController
     let displayService: SystemDisplayService
-#if DEBUG
+    #if DEBUG
     let diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder?
     let diagnosticConfiguration: DiagnosticProofConfiguration?
     let enforcesDiagnosticControllerCohort: Bool
     lazy var diagnosticObserverSet: DiagnosticObserverSet? = makeDiagnosticObserverSet()
     lazy var diagnosticHotKeyService: DiagnosticHotKeyService = makeDiagnosticHotKeyService()
-#endif
+    #endif
 
     private let startupSeams: AppRuntimeStartupSeams
     private var startupTask: Task<Void, Never>?
-#if DEBUG
+    #if DEBUG
     private var activeDiagnosticCorrelations: [UUID] = []
     private var currentDiagnosticCorrelationID: UUID?
     private var firstShowCohortValidated = false
     private var hasClosedDiagnosticCorrelation = false
     private var isNormalTerminationFinalizing = false
-#endif
+    #endif
 
-    init(
+    #if DEBUG
+    convenience init(
         proofLevel: OverlayPanelLevel = .statusBar,
-#if DEBUG
         diagnosticConfiguration: DiagnosticProofConfiguration? = nil,
         diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder? = nil,
         enforcesDiagnosticControllerCohort: Bool = true,
-#endif
         dependencies: DependencyContainer? = nil,
         startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
     ) {
+        self.init(
+            proofLevel: proofLevel,
+            diagnosticConfigurationObject: diagnosticConfiguration,
+            diagnosticEvidenceRecorderObject: diagnosticEvidenceRecorder,
+            enforcesDiagnosticControllerCohort: enforcesDiagnosticControllerCohort,
+            dependencies: dependencies,
+            startupSeams: startupSeams
+        )
+    }
+    #else
+    convenience init(
+        proofLevel: OverlayPanelLevel = .statusBar,
+        dependencies: DependencyContainer? = nil,
+        startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
+    ) {
+        self.init(
+            proofLevel: proofLevel,
+            diagnosticConfigurationObject: nil,
+            diagnosticEvidenceRecorderObject: nil,
+            enforcesDiagnosticControllerCohort: true,
+            dependencies: dependencies,
+            startupSeams: startupSeams
+        )
+    }
+    #endif
+
+    private init(
+        proofLevel: OverlayPanelLevel,
+        diagnosticConfigurationObject: Any?,
+        diagnosticEvidenceRecorderObject: AnyObject?,
+        enforcesDiagnosticControllerCohort: Bool,
+        dependencies suppliedDependencies: DependencyContainer?,
+        startupSeams: AppRuntimeStartupSeams
+    ) {
+        #if DEBUG
+        let diagnosticConfiguration =
+            diagnosticConfigurationObject
+            as? DiagnosticProofConfiguration
+        let diagnosticEvidenceRecorder =
+            diagnosticEvidenceRecorderObject
+            as? DiagnosticEvidenceRecorder
+        #endif
         let dependencies: DependencyContainer
-        if let supplied = dependencies {
+        if let supplied = suppliedDependencies {
             dependencies = supplied
         } else {
-#if DEBUG
+            #if DEBUG
             dependencies = DependencyContainer(
                 proofLevel: proofLevel,
                 orderingMode: diagnosticConfiguration?.ordering ?? .frontRegardless,
                 diagnosticRecorder: diagnosticEvidenceRecorder
             )
-#else
+            #else
             dependencies = DependencyContainer(proofLevel: proofLevel)
-#endif
+            #endif
         }
         let model = dependencies.makeAppModel(restorationRequired: true)
+        #if DEBUG
         let controllerWindowController = ControllerWindowController(
             model: model,
-#if DEBUG
             operationRecorder: { [weak diagnosticEvidenceRecorder, weak model] operation in
                 diagnosticEvidenceRecorder?.record(
                     kind: .controllerOperation,
@@ -113,8 +165,10 @@ final class AppRuntime {
                     payload: DiagnosticEventPayload(controllerOperation: operation.diagnosticName)
                 )
             }
-#endif
         )
+        #else
+        let controllerWindowController = ControllerWindowController(model: model)
+        #endif
 
         self.dependencies = dependencies
         overlayController = dependencies.overlayController
@@ -122,11 +176,11 @@ final class AppRuntime {
         self.controllerWindowController = controllerWindowController
         displayService = dependencies.displayService
         self.startupSeams = startupSeams
-#if DEBUG
+        #if DEBUG
         self.diagnosticConfiguration = diagnosticConfiguration
         self.diagnosticEvidenceRecorder = diagnosticEvidenceRecorder
         self.enforcesDiagnosticControllerCohort = enforcesDiagnosticControllerCohort
-#endif
+        #endif
 
         dependencies.effectAdapter.connect(
             model: model,
@@ -159,7 +213,7 @@ final class AppRuntime {
         startupSeams.record(.flushPersistence)
         let didFlush = await dependencies.effectAdapter.flushForTermination()
         guard didFlush else { return false }
-#if DEBUG
+        #if DEBUG
         isNormalTerminationFinalizing = true
         diagnosticHotKeyService.unregister()
         startupSeams.recordDiagnosticLifecycle(.unregisterHotKey)
@@ -171,7 +225,7 @@ final class AppRuntime {
         startupSeams.recordDiagnosticLifecycle(.tearDownObservers)
         _ = await diagnosticEvidenceRecorder?.finish()
         startupSeams.recordDiagnosticLifecycle(.finalizeEvidence)
-#endif
+        #endif
         displayService.stopObserving()
         controllerWindowController.close()
         startupSeams.record(.stopServices)
@@ -179,13 +233,13 @@ final class AppRuntime {
     }
 
     private func runStartup(afterRestore: @MainActor () -> Void = {}) async {
-#if DEBUG
+        #if DEBUG
         diagnosticObserverSet?.install(
             panel: overlayController.teleprompterPanel,
             controller: controllerWindowController.window
         )
         startupSeams.recordDiagnosticLifecycle(.installObservers)
-#endif
+        #endif
         startupSeams.record(.shieldController)
         controllerWindowController.showShielded(on: nil)
 
@@ -199,7 +253,7 @@ final class AppRuntime {
         guard !Task.isCancelled else { return }
 
         switch loadResult {
-        case let .loaded(restored):
+        case .loaded(let restored):
             model.send(.restore(restored.snapshot))
         case .notFound:
             model.send(.restore(nil))
@@ -224,7 +278,7 @@ final class AppRuntime {
         receive(inventoryResult)
         startupSeams.record(.evaluatePrivacy)
 
-#if DEBUG
+        #if DEBUG
         let status: Int32
         if let register = startupSeams.registerDiagnosticHotKey {
             status = register()
@@ -234,20 +288,21 @@ final class AppRuntime {
         model.setDiagnosticHotKeyStatus(status)
         startupSeams.recordDiagnosticLifecycle(.registerHotKey)
         startupSeams.record(.registerDiagnosticHotKey)
-#endif
+        #endif
     }
 
     private func receive(_ result: Result<RuntimeDisplayInventory, Error>) {
         model.refreshDisplayInventory(result)
     }
 
-#if DEBUG
+    #if DEBUG
     func validateControllerCohortBeforeFirstHotKey() -> Bool {
         guard !firstShowCohortValidated else { return true }
         guard enforcesDiagnosticControllerCohort else { return true }
         guard let configuration = diagnosticConfiguration,
-              let recorder = diagnosticEvidenceRecorder,
-              let observed = controllerWindowController.observedDiagnosticCohort() else {
+            let recorder = diagnosticEvidenceRecorder,
+            let observed = controllerWindowController.observedDiagnosticCohort()
+        else {
             diagnosticEvidenceRecorder?.invalidate(.controllerCohortMismatch)
             return diagnosticConfiguration == nil
         }
@@ -332,12 +387,12 @@ final class AppRuntime {
             controllerShielded: model.isShielded
         )
     }
-#endif
+    #endif
 }
 
 #if DEBUG
-private extension ControllerWindowOperation {
-    var diagnosticName: DiagnosticControllerOperationName {
+extension ControllerWindowOperation {
+    fileprivate var diagnosticName: DiagnosticControllerOperationName {
         switch self {
         case .showShieldedEntry: .showShieldedEntry
         case .frameChanged: .frameChanged
@@ -347,8 +402,8 @@ private extension ControllerWindowOperation {
     }
 }
 
-private extension DiagnosticFocusState {
-    static let unavailable = DiagnosticFocusState(
+extension DiagnosticFocusState {
+    fileprivate static let unavailable = DiagnosticFocusState(
         frontmostProcessIdentifier: nil,
         frontmostBundleIdentifier: nil,
         applicationIsActive: false,

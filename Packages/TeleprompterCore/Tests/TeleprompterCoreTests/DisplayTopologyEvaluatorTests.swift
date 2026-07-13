@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import TeleprompterCore
 
 final class DisplayTopologyEvaluatorTests: XCTestCase {
@@ -219,11 +220,12 @@ final class DisplayTopologyEvaluatorTests: XCTestCase {
     ) -> DisplayDescriptor {
         DisplayDescriptor(
             sessionID: id,
-            fingerprint: suppliedFingerprint ?? fingerprint(
-                uuid: "uuid-\(id)",
-                name: name,
-                builtIn: builtIn
-            ),
+            fingerprint: suppliedFingerprint
+                ?? fingerprint(
+                    uuid: "uuid-\(id)",
+                    name: name,
+                    builtIn: builtIn
+                ),
             localizedName: name,
             isBuiltIn: builtIn,
             isMain: builtIn,

@@ -17,9 +17,10 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
         await settleNotificationTasks()
         _ = await harness.recorder.recorder.finish()
 
-        XCTAssertFalse(harness.recorder.sink.envelopes.contains { envelope in
-            envelope.payload.applicationLifecycle == .didBecomeActive
-        })
+        XCTAssertFalse(
+            harness.recorder.sink.envelopes.contains { envelope in
+                envelope.payload.applicationLifecycle == .didBecomeActive
+            })
     }
 
     func testApplicationObserversCaptureWillAndDidBecomeActive() async {
@@ -78,10 +79,11 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
         harness.observers.tearDown()
         _ = await harness.recorder.recorder.finish()
 
-        XCTAssertTrue(harness.recorder.sink.envelopes.contains { envelope in
-            envelope.kind == .workspaceActivation
-                && envelope.payload.workspaceActivation == .didActivateApplication
-        })
+        XCTAssertTrue(
+            harness.recorder.sink.envelopes.contains { envelope in
+                envelope.kind == .workspaceActivation
+                    && envelope.payload.workspaceActivation == .didActivateApplication
+            })
     }
 
     func testWindowObserversRetainTransientKeyMainOrderAndOcclusionNotifications() async {
@@ -92,14 +94,21 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
             NSWindow.didResignKeyNotification,
             NSWindow.didBecomeMainNotification,
             NSWindow.didResignMainNotification,
-            NSWindow.didOrderOnScreenNotification,
-            NSWindow.didOrderOffScreenNotification,
-            NSWindow.didChangeOcclusionStateNotification,
         ]
 
-        notifications.forEach {
-            harness.applicationCenter.post(name: $0, object: harness.panel)
+        for notification in notifications {
+            harness.applicationCenter.post(name: notification, object: harness.panel)
         }
+        harness.panel.orderFront(nil)
+        harness.applicationCenter.post(
+            name: NSWindow.didChangeOcclusionStateNotification,
+            object: harness.panel
+        )
+        harness.panel.orderOut(nil)
+        harness.applicationCenter.post(
+            name: NSWindow.didChangeOcclusionStateNotification,
+            object: harness.panel
+        )
         await settleNotificationTasks()
         harness.observers.tearDown()
         _ = await harness.recorder.recorder.finish()
@@ -114,9 +123,10 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
                 .didResignKey,
                 .didBecomeMain,
                 .didResignMain,
-                .didOrderOnScreen,
-                .didOrderOffScreen,
                 .didChangeOcclusionState,
+                .didOrderOnScreen,
+                .didChangeOcclusionState,
+                .didOrderOffScreen,
             ]
         )
     }
@@ -200,10 +210,11 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
         }
         XCTAssertEqual(activation?.payload.observationPhase, .postCorrelationQuit)
         XCTAssertNil(activation?.correlationID)
-        XCTAssertFalse(harness.recorder.sink.envelopes.contains { envelope in
-            envelope.payload.applicationLifecycle == .didBecomeActive
-                && envelope.payload.observationPhase == .correlatedAction
-        })
+        XCTAssertFalse(
+            harness.recorder.sink.envelopes.contains { envelope in
+                envelope.payload.applicationLifecycle == .didBecomeActive
+                    && envelope.payload.observationPhase == .correlatedAction
+            })
     }
 
     func testUncorrelatedActivationWithoutTerminationStillFailsFocusVerdict() async {

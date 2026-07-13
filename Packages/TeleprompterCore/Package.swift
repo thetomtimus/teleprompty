@@ -6,7 +6,7 @@ let package = Package(
     name: "TeleprompterCore",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "TeleprompterCore", targets: ["TeleprompterCore"]),
+        .library(name: "TeleprompterCore", targets: ["TeleprompterCore"])
     ],
     targets: [
         .target(name: "TeleprompterCore"),

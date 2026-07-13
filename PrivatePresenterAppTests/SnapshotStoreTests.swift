@@ -1,7 +1,8 @@
 import Foundation
 import TeleprompterCore
-@testable import PrivatePresenter
 import XCTest
+
+@testable import PrivatePresenter
 
 @MainActor
 final class SnapshotStoreTests: XCTestCase {
@@ -213,7 +214,7 @@ final class SnapshotStoreTests: XCTestCase {
 
         let result = await store.load()
 
-        guard case let .recoveredMalformed(quarantineURL) = result else {
+        guard case .recoveredMalformed(let quarantineURL) = result else {
             return XCTFail("Expected content-neutral malformed recovery")
         }
         XCTAssertEqual(
@@ -281,7 +282,7 @@ final class SnapshotStoreTests: XCTestCase {
         fileSystem.seed(existingEvidence, at: collision)
         let store = makeStore(fileSystem: fileSystem, clock: clock)
 
-        guard case let .recoveredMalformed(quarantineURL) = await store.load() else {
+        guard case .recoveredMalformed(let quarantineURL) = await store.load() else {
             return XCTFail("Expected malformed recovery")
         }
 
@@ -362,7 +363,7 @@ final class SnapshotStoreTests: XCTestCase {
         fileSystem.seed(future, at: fileSystem.destinationURL)
         _ = await store.load()
         fileSystem.seed(supportedData, at: fileSystem.destinationURL)
-        guard case let .loaded(restored) = await store.recoverAfterExternalIntervention() else {
+        guard case .loaded(let restored) = await store.recoverAfterExternalIntervention() else {
             return XCTFail("Expected supported recovery")
         }
         XCTAssertEqual(restored.snapshot.revision, 5)
@@ -402,8 +403,8 @@ final class SnapshotStoreTests: XCTestCase {
     }
 }
 
-private extension SnapshotStoreTests {
-    func makeStore(
+extension SnapshotStoreTests {
+    fileprivate func makeStore(
         fileSystem: RecordingSnapshotFileSystem,
         clock: any SnapshotClock = FixedSnapshotClock(Date(timeIntervalSince1970: 0)),
         sleeper: any SnapshotSleeper = InertSnapshotSleeper()
@@ -416,7 +417,7 @@ private extension SnapshotStoreTests {
         )
     }
 
-    func makeSnapshot(revision: UInt64, text: String = "generated fixture") -> PersistedSnapshot {
+    fileprivate func makeSnapshot(revision: UInt64, text: String = "generated fixture") -> PersistedSnapshot {
         PersistedSnapshot(
             revision: revision,
             document: ScriptDocument(
@@ -430,17 +431,17 @@ private extension SnapshotStoreTests {
         )
     }
 
-    func futureSchemaData(version: Int) -> Data {
+    fileprivate func futureSchemaData(version: Int) -> Data {
         Data("{\"schemaVersion\":\(version)}".utf8)
     }
 
-    func decodedRevision(_ data: Data?) throws -> UInt64? {
+    fileprivate func decodedRevision(_ data: Data?) throws -> UInt64? {
         guard let data else { return nil }
         return try PersistedSnapshot.canonicalDecoder()
             .decode(PersistedSnapshot.self, from: data).revision
     }
 
-    func assertStoreError(
+    fileprivate func assertStoreError(
         _ expected: SnapshotStoreError,
         operation: () async throws -> Void
     ) async {
@@ -454,7 +455,7 @@ private extension SnapshotStoreTests {
         }
     }
 
-    func waitForWaiters(_ sleeper: ControlledSnapshotSleeper, count: Int) async {
+    fileprivate func waitForWaiters(_ sleeper: ControlledSnapshotSleeper, count: Int) async {
         for _ in 0..<100 {
             if await sleeper.waiterCount() >= count { break }
             await Task.yield()
@@ -463,7 +464,7 @@ private extension SnapshotStoreTests {
         XCTAssertEqual(waiterCount, count)
     }
 
-    func waitForCommit(_ fileSystem: RecordingSnapshotFileSystem, count: Int) async {
+    fileprivate func waitForCommit(_ fileSystem: RecordingSnapshotFileSystem, count: Int) async {
         for _ in 0..<100 {
             if fileSystem.commitCount >= count { break }
             await Task.yield()
@@ -471,7 +472,7 @@ private extension SnapshotStoreTests {
         XCTAssertEqual(fileSystem.commitCount, count)
     }
 
-    func waitForDiagnostic(_ code: SnapshotDiagnostic.Code, store: SnapshotStore) async {
+    fileprivate func waitForDiagnostic(_ code: SnapshotDiagnostic.Code, store: SnapshotStore) async {
         for _ in 0..<100 {
             let diagnostics = await store.diagnostics()
             if diagnostics.contains(where: { $0.code == code }) { return }
@@ -480,7 +481,7 @@ private extension SnapshotStoreTests {
         XCTFail("Expected content-neutral diagnostic code \(code.rawValue)")
     }
 
-    func drainTasks() async {
+    fileprivate func drainTasks() async {
         for _ in 0..<20 { await Task.yield() }
     }
 }
@@ -502,7 +503,9 @@ private actor ControlledSnapshotSleeper: SnapshotSleeper {
     func resumeAll() {
         let pending = waiters
         waiters.removeAll()
-        pending.forEach { $0.resume() }
+        for waiter in pending {
+            waiter.resume()
+        }
     }
 }
 

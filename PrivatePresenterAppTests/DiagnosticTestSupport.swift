@@ -162,23 +162,26 @@ func makeDiagnosticRecorderHarness(
         "private-presenter-diagnostics-generated-\(UUID().uuidString)",
         isDirectory: true
     )
-    var capturedSink: RecordingDiagnosticSink!
+    let sessionID = UUID()
+    let sessionRoot = root.appendingPathComponent(
+        sessionID.uuidString.lowercased(),
+        isDirectory: true
+    )
+    let finalURL = sessionRoot.appendingPathComponent(DiagnosticEvidenceRecorder.filename)
+    let sink = RecordingDiagnosticSink(
+        pendingURL: finalURL.appendingPathExtension("pending"),
+        finalURL: finalURL,
+        failure: failure,
+        blocksFirstAppend: blocksFirstAppend
+    )
     let recorder = DiagnosticEvidenceRecorder(
         configuration: configuration,
+        sessionID: sessionID,
         rootURL: root,
         capacity: capacity,
         clock: clock,
-        sinkFactory: { pending, final in
-            let sink = RecordingDiagnosticSink(
-                pendingURL: pending,
-                finalURL: final,
-                failure: failure,
-                blocksFirstAppend: blocksFirstAppend
-            )
-            capturedSink = sink
-            return sink
-        }
+        sinkFactory: { _, _ in sink }
     )
-    return DiagnosticRecorderHarness(recorder: recorder, sink: capturedSink, rootURL: root)
+    return DiagnosticRecorderHarness(recorder: recorder, sink: sink, rootURL: root)
 }
 #endif

@@ -182,7 +182,8 @@ public struct DisplayTopologyEvaluator: Sendable {
             return false
         }
         if let lhsSerial = meaningfulSerial(lhs.serialNumber),
-           let rhsSerial = meaningfulSerial(rhs.serialNumber) {
+            let rhsSerial = meaningfulSerial(rhs.serialNumber)
+        {
             return lhsSerial == rhsSerial
         }
         return true

@@ -31,14 +31,14 @@ struct ControllerView: View {
                     }
                     Button("Hide", action: model.hideOverlay)
                 }
-#if DEBUG
+                #if DEBUG
                 Button("Capture Focus Snapshot") {
                     model.captureFocus(label: "manual capture")
                 }
                 Text(model.diagnosticSummary)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
-#endif
+                #endif
             }
             .padding(24)
             .frame(minWidth: 520, minHeight: 280)

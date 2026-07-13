@@ -10,9 +10,9 @@ struct OverlayConfigurationSnapshot: Equatable, Sendable {
     let joinsAllSpaces: Bool
     let isFullScreenAuxiliary: Bool
     let level: String
-#if DEBUG
+    #if DEBUG
     let ordering: String
-#endif
+    #endif
     let isLocked: Bool
     let ignoresMouseEvents: Bool
     let canBecomeKey: Bool
@@ -24,9 +24,9 @@ enum OverlayPanelOperation: Equatable {
     case orderOut
     case applyContainedFrame
     case orderFrontRegardless
-#if DEBUG
+    #if DEBUG
     case orderFront
-#endif
+    #endif
     case setLocked(Bool)
     case activateApplication
     case showWindow
@@ -43,23 +43,50 @@ final class OverlayPanelController: NSWindowController {
     private(set) var appliedFrames: [NSRect] = []
     private var interactionStartFrame: NSRect?
     private let operationRecorder: (OverlayPanelOperation) -> Void
-#if DEBUG
+    #if DEBUG
     let orderingMode: OverlayPanelOrderingMode
-#endif
+    #endif
 
-    init(
+    #if DEBUG
+    convenience init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
         proofLevel: OverlayPanelLevel = .statusBar,
-#if DEBUG
         orderingMode: OverlayPanelOrderingMode = .frontRegardless,
-#endif
         operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in }
+    ) {
+        self.init(
+            initialFrame: initialFrame,
+            proofLevel: proofLevel,
+            orderingModeObject: orderingMode,
+            operationRecorder: operationRecorder
+        )
+    }
+    #else
+    convenience init(
+        initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
+        proofLevel: OverlayPanelLevel = .statusBar,
+        operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in }
+    ) {
+        self.init(
+            initialFrame: initialFrame,
+            proofLevel: proofLevel,
+            orderingModeObject: nil,
+            operationRecorder: operationRecorder
+        )
+    }
+    #endif
+
+    private init(
+        initialFrame: NSRect,
+        proofLevel: OverlayPanelLevel,
+        orderingModeObject: Any?,
+        operationRecorder: @escaping (OverlayPanelOperation) -> Void
     ) {
         let panel = TeleprompterPanel(contentRect: initialFrame, proofLevel: proofLevel)
         teleprompterPanel = panel
-#if DEBUG
-        self.orderingMode = orderingMode
-#endif
+        #if DEBUG
+        orderingMode = orderingModeObject as? OverlayPanelOrderingMode ?? .frontRegardless
+        #endif
         self.operationRecorder = operationRecorder
         interactionController = ClampedPanelInteractionController { [weak panel] frame in
             operationRecorder(.applyContainedFrame)
@@ -103,7 +130,7 @@ final class OverlayPanelController: NSWindowController {
         teleprompterPanel.containmentFrame = screenFrame
         applyContainedFrame(proposedFrame)
         // Intentionally neither makeKeyAndOrderFront nor NSApp.activate.
-#if DEBUG
+        #if DEBUG
         switch orderingMode {
         case .front:
             operationRecorder(.orderFront)
@@ -112,10 +139,10 @@ final class OverlayPanelController: NSWindowController {
             operationRecorder(.orderFrontRegardless)
             teleprompterPanel.orderFrontRegardless()
         }
-#else
+        #else
         operationRecorder(.orderFrontRegardless)
         teleprompterPanel.orderFrontRegardless()
-#endif
+        #endif
     }
 
     func hide() {
@@ -179,6 +206,7 @@ final class OverlayPanelController: NSWindowController {
     var configurationSnapshot: OverlayConfigurationSnapshot {
         let mask = teleprompterPanel.styleMask
         let behavior = teleprompterPanel.collectionBehavior
+        #if DEBUG
         return OverlayConfigurationSnapshot(
             panelCount: 1,
             isBorderless: !mask.contains(.titled),
@@ -189,14 +217,30 @@ final class OverlayPanelController: NSWindowController {
             level: OverlayPanelLevel.allCases.first(where: {
                 $0.appKitLevel == teleprompterPanel.level
             })?.rawValue ?? "unbounded",
-#if DEBUG
             ordering: orderingMode.rawValue,
-#endif
             isLocked: teleprompterPanel.isOverlayLocked,
             ignoresMouseEvents: teleprompterPanel.ignoresMouseEvents,
             canBecomeKey: teleprompterPanel.canBecomeKey,
             canBecomeMain: teleprompterPanel.canBecomeMain,
             interiorIsFullyOpaque: OverlayRootView.interiorIsFullyOpaque
         )
+        #else
+        return OverlayConfigurationSnapshot(
+            panelCount: 1,
+            isBorderless: !mask.contains(.titled),
+            isNonactivating: mask.contains(.nonactivatingPanel),
+            isNativelyResizable: mask.contains(.resizable),
+            joinsAllSpaces: behavior.contains(.canJoinAllSpaces),
+            isFullScreenAuxiliary: behavior.contains(.fullScreenAuxiliary),
+            level: OverlayPanelLevel.allCases.first(where: {
+                $0.appKitLevel == teleprompterPanel.level
+            })?.rawValue ?? "unbounded",
+            isLocked: teleprompterPanel.isOverlayLocked,
+            ignoresMouseEvents: teleprompterPanel.ignoresMouseEvents,
+            canBecomeKey: teleprompterPanel.canBecomeKey,
+            canBecomeMain: teleprompterPanel.canBecomeMain,
+            interiorIsFullyOpaque: OverlayRootView.interiorIsFullyOpaque
+        )
+        #endif
     }
 }

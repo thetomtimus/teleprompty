@@ -1,5 +1,6 @@
 import AppKit
 import XCTest
+
 @testable import PrivatePresenter
 
 @MainActor
@@ -94,7 +95,7 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         XCTAssertTrue(locked.ignoresMouseEvents)
     }
 
-#if DEBUG
+    #if DEBUG
     func testOrderingModesAreExactlyFrontAndFrontRegardless() {
         XCTAssertEqual(
             Set(OverlayPanelOrderingMode.allCases.map(\.rawValue)),
@@ -239,14 +240,14 @@ final class OverlayPanelConfigurationTests: XCTestCase {
             XCTAssertFalse(source.contains(marker), "Forbidden Phase A marker: \(marker)")
         }
     }
-#endif
+    #endif
 
     private func makeController() -> OverlayPanelController {
         _ = NSApplication.shared
         return OverlayPanelController()
     }
 
-#if DEBUG
+    #if DEBUG
     private func candidate(
         level: OverlayPanelLevel = .statusBar,
         ordering: OverlayPanelOrderingMode,
@@ -279,5 +280,5 @@ final class OverlayPanelConfigurationTests: XCTestCase {
             return (url.lastPathComponent, contents)
         }
     }
-#endif
+    #endif
 }

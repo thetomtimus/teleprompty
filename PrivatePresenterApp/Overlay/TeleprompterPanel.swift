@@ -49,9 +49,11 @@ enum OverlayConfigurationSelector {
             if lhs.safetyVector != rhs.safetyVector {
                 return lhs.safetyVector.lexicographicallyPrecedes(rhs.safetyVector)
             }
-            let lhsDefault = lhs.level == sourceDefaultLevel
+            let lhsDefault =
+                lhs.level == sourceDefaultLevel
                 && lhs.ordering == sourceDefaultOrdering
-            let rhsDefault = rhs.level == sourceDefaultLevel
+            let rhsDefault =
+                rhs.level == sourceDefaultLevel
                 && rhs.ordering == sourceDefaultOrdering
             if lhsDefault != rhsDefault { return lhsDefault }
             if lhs.level != rhs.level { return lhs.level == .floating }

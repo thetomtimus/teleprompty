@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import TeleprompterCore
 
 final class SnapshotMigratorTests: XCTestCase {

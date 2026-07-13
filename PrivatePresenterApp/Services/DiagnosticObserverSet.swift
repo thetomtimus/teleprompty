@@ -149,10 +149,16 @@ final class DiagnosticObserverSet {
         guard isInstalled else { return }
         generation &+= 1
         isInstalled = false
-        scheduledFocusActions.values.flatMap { $0 }.forEach { $0.cancel() }
+        for action in scheduledFocusActions.values.flatMap({ $0 }) {
+            action.cancel()
+        }
         scheduledFocusActions.removeAll(keepingCapacity: false)
-        applicationTokens.forEach(applicationCenter.removeObserver)
-        workspaceTokens.forEach(workspaceCenter.removeObserver)
+        for token in applicationTokens {
+            applicationCenter.removeObserver(token)
+        }
+        for token in workspaceTokens {
+            workspaceCenter.removeObserver(token)
+        }
         applicationTokens.removeAll(keepingCapacity: false)
         workspaceTokens.removeAll(keepingCapacity: false)
     }
@@ -208,7 +214,12 @@ final class DiagnosticObserverSet {
     }
 
     func cancelFocusSamples(correlationID: UUID) {
-        scheduledFocusActions.removeValue(forKey: correlationID)?.forEach { $0.cancel() }
+        guard let actions = scheduledFocusActions.removeValue(forKey: correlationID) else {
+            return
+        }
+        for action in actions {
+            action.cancel()
+        }
     }
 
     var activeCorrelationCount: Int { scheduledFocusActions.count }
@@ -248,8 +259,6 @@ final class DiagnosticObserverSet {
             (NSWindow.didResignKeyNotification, .didResignKey),
             (NSWindow.didBecomeMainNotification, .didBecomeMain),
             (NSWindow.didResignMainNotification, .didResignMain),
-            (NSWindow.didOrderOnScreenNotification, .didOrderOnScreen),
-            (NSWindow.didOrderOffScreenNotification, .didOrderOffScreen),
             (NSWindow.didChangeOcclusionStateNotification, .didChangeOcclusionState),
         ]
         for (name, lifecycle) in observations {
@@ -275,6 +284,23 @@ final class DiagnosticObserverSet {
                             controllerState: owner == .controller ? window.diagnosticState : nil
                         )
                     )
+                    if lifecycle == .didChangeOcclusionState {
+                        self.recorder.record(
+                            kind: .windowLifecycle,
+                            correlationID: self.correlationProvider(),
+                            payload: DiagnosticEventPayload(
+                                windowLifecycle: window.isVisible
+                                    ? .didOrderOnScreen
+                                    : .didOrderOffScreen,
+                                windowOwner: owner,
+                                observationPhase: self.observationPhaseProvider(),
+                                panelState: owner == .panel ? window.diagnosticState : nil,
+                                controllerState: owner == .controller
+                                    ? window.diagnosticState
+                                    : nil
+                            )
+                        )
+                    }
                 }
             }
             applicationTokens.append(token)

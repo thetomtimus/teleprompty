@@ -1,5 +1,6 @@
 import AppKit
 import XCTest
+
 @testable import PrivatePresenter
 
 @MainActor
@@ -51,7 +52,7 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertFalse(controller.teleprompterPanel.ignoresMouseEvents)
     }
 
-#if DEBUG
+    #if DEBUG
     func testDiagnosticChordDispatchesDirectlyWithoutRaisingController() {
         let runtime = AppRuntime(proofLevel: .floating)
         let commandCount = runtime.model.commandDispatchCount
@@ -62,7 +63,7 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertEqual(runtime.model.commandDispatchCount, commandCount + 1)
         XCTAssertEqual(runtime.controllerWindowController.showCount, controllerShowCount)
     }
-#endif
+    #endif
 
     func testControllerCreatesExactlyOnePanel() {
         let controller = OverlayPanelController()
@@ -188,7 +189,7 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertTrue(selected.contains(controller.teleprompterPanel.frame))
     }
 
-#if DEBUG
+    #if DEBUG
     func testPhaseAControllerObserverRecordsExistingShowShieldedEntryAndExit() {
         var operations: [ControllerWindowOperation] = []
         let controller = makeControllerWindowController { operations.append($0) }
@@ -299,7 +300,7 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertEqual(runtime.controllerWindowController.showCount, showCount)
         XCTAssertFalse(runtime.controllerWindowController.window?.isVisible ?? false)
     }
-#endif
+    #endif
 
     private func display(id: UInt32, builtIn: Bool, x: CGFloat) -> RuntimeDisplay {
         RuntimeDisplay(
@@ -317,7 +318,7 @@ final class OverlayPanelControllerTests: XCTestCase {
         )
     }
 
-#if DEBUG
+    #if DEBUG
     private func makeControllerWindowController(
         operationRecorder: @escaping (ControllerWindowOperation) -> Void = { _ in }
     ) -> ControllerWindowController {
@@ -328,5 +329,5 @@ final class OverlayPanelControllerTests: XCTestCase {
             operationRecorder: operationRecorder
         )
     }
-#endif
+    #endif
 }

@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import TeleprompterCore
 
 final class CoreStateModelTests: XCTestCase {
@@ -93,13 +94,13 @@ final class CoreStateModelTests: XCTestCase {
                         serial: 1
                     ),
                     frame: .init(x: 0.1, y: 0.2, width: 0.3, height: 0.4)
-                ),
+                )
             ],
             shortcutBindings: [
                 ShortcutBinding(
                     action: .togglePlayback,
                     shortcut: .init(virtualKeyCode: 49, modifiers: [.option, .control])
-                ),
+                )
             ]
         )
 
@@ -299,7 +300,8 @@ final class CoreStateModelTests: XCTestCase {
 
     func testCoreProductionSourcesImportFoundationOnly() throws {
         let testsURL = URL(fileURLWithPath: #filePath)
-        let packageURL = testsURL
+        let packageURL =
+            testsURL
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()

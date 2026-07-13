@@ -13,27 +13,53 @@ enum ControllerWindowOperation: Equatable, Sendable {
 @MainActor
 final class ControllerWindowController: NSWindowController {
     private let model: AppModel
-#if DEBUG
+    #if DEBUG
     private let operationRecorder: (ControllerWindowOperation) -> Void
-#endif
+    #endif
     private(set) var showCount = 0
 
     var modelIdentity: ObjectIdentifier {
         ObjectIdentifier(model)
     }
 
-    init(
+    #if DEBUG
+    convenience init(
         model: AppModel,
         untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame(),
-#if DEBUG
         operationRecorder: @escaping (ControllerWindowOperation) -> Void = { _ in }
-#endif
+    ) {
+        self.init(
+            model: model,
+            untrustedInitialFrame: untrustedInitialFrame,
+            operationRecorderObject: operationRecorder
+        )
+    }
+    #else
+    convenience init(
+        model: AppModel,
+        untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame()
+    ) {
+        self.init(
+            model: model,
+            untrustedInitialFrame: untrustedInitialFrame,
+            operationRecorderObject: nil
+        )
+    }
+    #endif
+
+    private init(
+        model: AppModel,
+        untrustedInitialFrame: NSRect?,
+        operationRecorderObject: Any?
     ) {
         self.model = model
-#if DEBUG
-        self.operationRecorder = operationRecorder
-#endif
-        let initialFrame = untrustedInitialFrame
+        #if DEBUG
+        operationRecorder =
+            operationRecorderObject
+            as? (ControllerWindowOperation) -> Void ?? { _ in }
+        #endif
+        let initialFrame =
+            untrustedInitialFrame
             ?? NSRect(x: 0, y: 0, width: 620, height: 360)
         let window = NSWindow(
             contentRect: initialFrame,
@@ -56,9 +82,9 @@ final class ControllerWindowController: NSWindowController {
     /// positioned only on the current built-in candidate (or main screen fallback).
     func showShielded(on candidate: RuntimeDisplay?) {
         guard let window else { return }
-#if DEBUG
+        #if DEBUG
         operationRecorder(.showShieldedEntry)
-#endif
+        #endif
         showCount += 1
         let screenFrame = candidate?.visibleFrame ?? NSScreen.main?.visibleFrame
         if let screenFrame {
@@ -73,31 +99,33 @@ final class ControllerWindowController: NSWindowController {
                 maximumSize: screenFrame.size
             )
             window.setFrame(clamped, display: false)
-#if DEBUG
+            #if DEBUG
             operationRecorder(.frameChanged)
-#endif
+            #endif
         }
-#if DEBUG
+        #if DEBUG
         operationRecorder(.showWindow)
-#endif
+        #endif
         showWindow(nil)
-#if DEBUG
+        #if DEBUG
         operationRecorder(.showShieldedExit)
-#endif
+        #endif
     }
 
-#if DEBUG
+    #if DEBUG
     func observedDiagnosticCohort() -> DiagnosticControllerCohort? {
         guard let window else { return nil }
         return window.isVisible ? .visibleDesktopSpace : .orderedOut
     }
-#endif
+    #endif
 
     static func debugSeedFrame() -> NSRect? {
-#if DEBUG
-        guard let raw = ProcessInfo.processInfo.environment[
-            "PRIVATE_PRESENTER_STALE_CONTROLLER_FRAME"
-        ] else {
+        #if DEBUG
+        guard
+            let raw = ProcessInfo.processInfo.environment[
+                "PRIVATE_PRESENTER_STALE_CONTROLLER_FRAME"
+            ]
+        else {
             return nil
         }
         let values = raw.split(separator: ",").compactMap {
@@ -112,8 +140,8 @@ final class ControllerWindowController: NSWindowController {
             width: CGFloat(values[2]),
             height: CGFloat(values[3])
         )
-#else
+        #else
         return nil
-#endif
+        #endif
     }
 }

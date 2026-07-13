@@ -87,10 +87,12 @@ public struct PanelFramePolicy: Sendable {
         }
 
         let minimum = requestedMinimum ?? minimumSize
-        let maximum = requestedMaximum ?? DisplaySize(
-            width: screen.width,
-            height: screen.height
-        )
+        let maximum =
+            requestedMaximum
+            ?? DisplaySize(
+                width: screen.width,
+                height: screen.height
+            )
         let maximumWidth = min(positiveOr(maximum.width, fallback: screen.width), screen.width)
         let maximumHeight = min(positiveOr(maximum.height, fallback: screen.height), screen.height)
         let minimumWidth = min(max(0, finiteOrZero(minimum.width)), maximumWidth)

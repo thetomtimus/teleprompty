@@ -73,16 +73,20 @@ enum DiagnosticFocusVerdict: Equatable, Sendable {
         envelopes: [DiagnosticEventEnvelope],
         normalTerminationConfirmed: Bool
     ) -> DiagnosticFocusVerdict {
-        let lastClosedSequence = envelopes
+        let lastClosedSequence =
+            envelopes
             .filter { $0.kind == .correlationWindowClosed }
             .map(\.sequence)
             .max()
         for envelope in envelopes where envelope.kind == .applicationLifecycle {
-            guard envelope.payload.applicationLifecycle == .willBecomeActive
-                    || envelope.payload.applicationLifecycle == .didBecomeActive else {
+            guard
+                envelope.payload.applicationLifecycle == .willBecomeActive
+                    || envelope.payload.applicationLifecycle == .didBecomeActive
+            else {
                 continue
             }
-            let isPermittedQuit = envelope.payload.observationPhase == .postCorrelationQuit
+            let isPermittedQuit =
+                envelope.payload.observationPhase == .postCorrelationQuit
                 && normalTerminationConfirmed
                 && lastClosedSequence.map { $0 < envelope.sequence } == true
             if !isPermittedQuit { return .failUnexpectedActivation }
@@ -316,7 +320,8 @@ struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
 
         let level: OverlayPanelLevel
         if let value = environment["PRIVATE_PRESENTER_PROOF_LEVEL"],
-           let parsed = OverlayPanelLevel(rawValue: value) {
+            let parsed = OverlayPanelLevel(rawValue: value)
+        {
             level = parsed
         } else {
             level = defaultLevel
@@ -325,7 +330,8 @@ struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
 
         let ordering: OverlayPanelOrderingMode
         if let value = environment["PRIVATE_PRESENTER_ORDERING"],
-           let parsed = OverlayPanelOrderingMode(rawValue: value) {
+            let parsed = OverlayPanelOrderingMode(rawValue: value)
+        {
             ordering = parsed
         } else {
             ordering = defaultOrdering
@@ -334,7 +340,8 @@ struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
 
         let cohort: DiagnosticControllerCohort
         if let value = environment["PRIVATE_PRESENTER_CONTROLLER_COHORT"],
-           let parsed = DiagnosticControllerCohort(rawValue: value) {
+            let parsed = DiagnosticControllerCohort(rawValue: value)
+        {
             cohort = parsed
         } else {
             cohort = .visibleDesktopSpace
@@ -350,9 +357,10 @@ struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
             faults.append(.configRepetitionInvalid)
         }
 
-        let rawExecutableHash = environment[
-            "PRIVATE_PRESENTER_EVIDENCE_EXECUTABLE_SHA256"
-        ] ?? ""
+        let rawExecutableHash =
+            environment[
+                "PRIVATE_PRESENTER_EVIDENCE_EXECUTABLE_SHA256"
+            ] ?? ""
         let executableHash: String
         if isLowercaseHex(rawExecutableHash, count: 64) {
             executableHash = rawExecutableHash
@@ -370,9 +378,10 @@ struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
             faults.append(.configBuildLogPathInvalid)
         }
 
-        let rawBuildLogHash = environment[
-            "PRIVATE_PRESENTER_EVIDENCE_BUILD_LOG_SHA256"
-        ] ?? ""
+        let rawBuildLogHash =
+            environment[
+                "PRIVATE_PRESENTER_EVIDENCE_BUILD_LOG_SHA256"
+            ] ?? ""
         let buildLogHash: String
         if isLowercaseHex(rawBuildLogHash, count: 64) {
             buildLogHash = rawBuildLogHash
@@ -381,9 +390,10 @@ struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
             faults.append(.configBuildLogHashInvalid)
         }
 
-        let rawManifestPath = environment[
-            "PRIVATE_PRESENTER_EVIDENCE_BUILD_MANIFEST"
-        ] ?? ""
+        let rawManifestPath =
+            environment[
+                "PRIVATE_PRESENTER_EVIDENCE_BUILD_MANIFEST"
+            ] ?? ""
         let manifestPath: String
         if isResolvedAbsolutePath(rawManifestPath) {
             manifestPath = rawManifestPath
@@ -411,7 +421,7 @@ struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
     private static func isLowercaseHex(_ value: String, count: Int) -> Bool {
         value.utf8.count == count
             && value.utf8.allSatisfy { byte in
-                (48 ... 57).contains(byte) || (97 ... 102).contains(byte)
+                (48...57).contains(byte) || (97...102).contains(byte)
             }
     }
 
@@ -448,9 +458,10 @@ enum DiagnosticProvenanceValidator {
 
         let buildLogURL = URL(fileURLWithPath: configuration.buildLogPath)
         guard fileManager.isReadableFile(atPath: buildLogURL.path),
-              let actualBuildLogHash = sha256(of: buildLogURL),
-              let buildLogData = try? Data(contentsOf: buildLogURL),
-              let buildLogText = String(data: buildLogData, encoding: .utf8) else {
+            let actualBuildLogHash = sha256(of: buildLogURL),
+            let buildLogData = try? Data(contentsOf: buildLogURL),
+            let buildLogText = String(data: buildLogData, encoding: .utf8)
+        else {
             faults.append(.configBuildLogPathInvalid)
             return faults
         }
@@ -500,10 +511,12 @@ enum DiagnosticProvenanceValidator {
             omittingEmptySubsequences: false,
             whereSeparator: { $0.isNewline }
         ).map(String.init)
-        let buildCommits = buildLogLines
+        let buildCommits =
+            buildLogLines
             .filter { $0.hasPrefix("commit=") }
             .map { String($0.dropFirst("commit=".count)) }
-        let buildStatuses = buildLogLines
+        let buildStatuses =
+            buildLogLines
             .filter { $0.hasPrefix("status_porcelain=") }
             .map { String($0.dropFirst("status_porcelain=".count)) }
         if manifestMalformed
@@ -511,15 +524,18 @@ enum DiagnosticProvenanceValidator {
             || manifest["commit"] != configuration.implementationCommit
             || manifest["clean_head"] != "true"
             || buildCommits != [configuration.implementationCommit]
-            || buildStatuses != [""] {
+            || buildStatuses != [""]
+        {
             faults.append(.provenanceHeadMismatch)
         }
         if manifest["executable_path"] != executableURL.path
-            || manifest["executable_sha256"] != configuration.executableSHA256 {
+            || manifest["executable_sha256"] != configuration.executableSHA256
+        {
             faults.append(.provenanceExecutableHashMismatch)
         }
         if manifest["build_log_path"] != configuration.buildLogPath
-            || manifest["build_log_sha256"] != configuration.buildLogSHA256 {
+            || manifest["build_log_sha256"] != configuration.buildLogSHA256
+        {
             faults.append(.provenanceBuildLogHashMismatch)
         }
         return Array(Set(faults)).sorted { $0.rawValue < $1.rawValue }
@@ -703,14 +719,16 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
         } catch {
             let recorder = DiagnosticEvidenceRecorder(
                 configuration: resolution.configuration,
-                rootURL: URL(fileURLWithPath: "/dev/null/private-presenter-validation")
-            ) { _, _ in throw DiagnosticProductionError.pathUnresolved }
+                rootURL: URL(fileURLWithPath: "/dev/null/private-presenter-validation"),
+                sinkFactory: { _, _ in throw DiagnosticProductionError.pathUnresolved }
+            )
             recorder.invalidate(.evidencePathUnresolved)
             resolution.faults.forEach(recorder.invalidate)
             return recorder
         }
 
-        let root = applicationSupport
+        let root =
+            applicationSupport
             .appendingPathComponent(Self.directoryName, isDirectory: true)
             .appendingPathComponent(Self.validationDirectoryName, isDirectory: true)
         let recorder = DiagnosticEvidenceRecorder(
@@ -733,10 +751,7 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
         defer { OSAtomicDecrement32Barrier(&inFlightProducers) }
         let sourceTime = clock()
         let sequence = UInt64(bitPattern: OSAtomicIncrement64Barrier(&atomicSequence))
-        guard queueLock.try() else {
-            noteOverflow(sequence: sequence)
-            return false
-        }
+        queueLock.lock()
 
         guard acceptingEvents else {
             queueLock.unlock()
@@ -792,14 +807,13 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
     }
 
     func finish() async -> Bool {
-        queueLock.lock()
-        guard !finishStarted else {
-            queueLock.unlock()
-            return false
+        let shouldFinish = queueLock.withLock {
+            guard !finishStarted else { return false }
+            finishStarted = true
+            acceptingEvents = false
+            return true
         }
-        finishStarted = true
-        acceptingEvents = false
-        queueLock.unlock()
+        guard shouldFinish else { return false }
 
         return await withCheckedContinuation { continuation in
             writerQueue.async { [weak self] in
@@ -852,29 +866,6 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
         if code == .evidenceQueueOverflow {
             _ = OSAtomicCompareAndSwap32Barrier(0, 1, &overflowInvalidated)
         }
-        guard faultLock.try() else {
-            writerQueue.async { [weak self] in
-                self?.latchFaultBlocking(
-                    code,
-                    incrementDropCount: incrementDropCount,
-                    overflowSequence: overflowSequence
-                )
-            }
-            return
-        }
-        updateFaultState(
-            code,
-            incrementDropCount: incrementDropCount,
-            overflowSequence: overflowSequence
-        )
-        faultLock.unlock()
-    }
-
-    private func latchFaultBlocking(
-        _ code: DiagnosticFaultCode,
-        incrementDropCount: Bool,
-        overflowSequence: UInt64?
-    ) {
         faultLock.lock()
         updateFaultState(
             code,
@@ -943,11 +934,11 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
         guard
             !overflowFaultSerialized,
             OSAtomicAdd32Barrier(0, &overflowInvalidated) != 0,
-            upperBound.map { bound in
+            upperBound.map({ bound in
                 let sequence = OSAtomicAdd64Barrier(0, &atomicOverflowSequence)
                 guard sequence != 0 else { return false }
                 return UInt64(bitPattern: sequence) < bound
-            } ?? true
+            }) ?? true
         else {
             faultLock.unlock()
             return false
@@ -965,16 +956,17 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
                 bitPattern: OSAtomicIncrement64Barrier(&atomicSequence)
             )
         }
-        serialize(PendingEvent(
-            correlationID: nil,
-            sourceMonotonicNanoseconds: clock(),
-            sequence: resolvedSequence,
-            kind: .recorderFault,
-            payload: DiagnosticEventPayload(
-                faultCode: .evidenceQueueOverflow,
-                droppedEventCount: dropped
-            )
-        ))
+        serialize(
+            PendingEvent(
+                correlationID: nil,
+                sourceMonotonicNanoseconds: clock(),
+                sequence: resolvedSequence,
+                kind: .recorderFault,
+                payload: DiagnosticEventPayload(
+                    faultCode: .evidenceQueueOverflow,
+                    droppedEventCount: dropped
+                )
+            ))
         return true
     }
 
@@ -998,7 +990,7 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
             faultLock.lock()
             sinkFailure = true
             faultLock.unlock()
-            latchFaultBlocking(
+            latchFault(
                 .evidenceAppendFailed,
                 incrementDropCount: false,
                 overflowSequence: nil
@@ -1018,19 +1010,19 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
         do {
             try sink.synchronize()
         } catch {
-            latchFaultBlocking(.evidenceFlushFailed, incrementDropCount: false, overflowSequence: nil)
+            latchFault(.evidenceFlushFailed, incrementDropCount: false, overflowSequence: nil)
             return false
         }
         do {
             try sink.close()
         } catch {
-            latchFaultBlocking(.evidenceCloseFailed, incrementDropCount: false, overflowSequence: nil)
+            latchFault(.evidenceCloseFailed, incrementDropCount: false, overflowSequence: nil)
             return false
         }
         do {
             try sink.publish()
         } catch {
-            latchFaultBlocking(.evidenceFinalizeFailed, incrementDropCount: false, overflowSequence: nil)
+            latchFault(.evidenceFinalizeFailed, incrementDropCount: false, overflowSequence: nil)
             try? FileManager.default.removeItem(at: sink.finalURL)
             return false
         }
@@ -1043,13 +1035,14 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
     private func serializeTerminalEvents() {
         _ = serializeOverflowFaultIfNeeded()
         let endedSequence = reserveSequence()
-        serialize(PendingEvent(
-            correlationID: nil,
-            sourceMonotonicNanoseconds: clock(),
-            sequence: endedSequence,
-            kind: .sessionEnded,
-            payload: DiagnosticEventPayload()
-        ))
+        serialize(
+            PendingEvent(
+                correlationID: nil,
+                sourceMonotonicNanoseconds: clock(),
+                sequence: endedSequence,
+                kind: .sessionEnded,
+                payload: DiagnosticEventPayload()
+            ))
 
         faultLock.lock()
         let fault = firstFault
@@ -1057,21 +1050,23 @@ final class DiagnosticEvidenceRecorder: @unchecked Sendable {
         faultLock.unlock()
         let overflowed = OSAtomicAdd32Barrier(0, &overflowInvalidated) != 0
         let invalidation = fault ?? (overflowed ? .evidenceQueueOverflow : nil)
-        let serializedStatus: DiagnosticSerializedProofStatus = invalidation == nil && !appendFailed
+        let serializedStatus: DiagnosticSerializedProofStatus =
+            invalidation == nil && !appendFailed
             ? .valid
             : .invalid
         let completionSequence = reserveSequence()
-        serialize(PendingEvent(
-            correlationID: nil,
-            sourceMonotonicNanoseconds: clock(),
-            sequence: completionSequence,
-            kind: .sessionCompletion,
-            payload: DiagnosticEventPayload(
-                proofStatus: serializedStatus,
-                permanentInvalidation: invalidation,
-                implementationCommit: configuration.implementationCommit
-            )
-        ))
+        serialize(
+            PendingEvent(
+                correlationID: nil,
+                sourceMonotonicNanoseconds: clock(),
+                sequence: completionSequence,
+                kind: .sessionCompletion,
+                payload: DiagnosticEventPayload(
+                    proofStatus: serializedStatus,
+                    permanentInvalidation: invalidation,
+                    implementationCommit: configuration.implementationCommit
+                )
+            ))
     }
 
     private func reserveSequence() -> UInt64 {

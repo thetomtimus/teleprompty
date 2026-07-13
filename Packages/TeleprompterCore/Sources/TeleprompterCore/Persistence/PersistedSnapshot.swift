@@ -213,7 +213,7 @@ private struct CanonicalFingerprintIdentity: Equatable, Hashable {
             return true
         case (.some, nil):
             return false
-        case let (.some(lhs), .some(rhs)) where lhs != rhs:
+        case (.some(let lhs), .some(let rhs)) where lhs != rhs:
             return lhs < rhs
         default:
             return nil

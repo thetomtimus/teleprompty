@@ -17,13 +17,13 @@ enum SnapshotStoreError: Error, Equatable, Sendable {
 extension SnapshotStoreError: CustomStringConvertible {
     var description: String {
         switch self {
-        case let .staleRevision(found, minimum):
+        case .staleRevision(let found, let minimum):
             return "Snapshot revision \(found) is older than accepted revision \(minimum)."
-        case let .revisionConflict(revision):
+        case .revisionConflict(let revision):
             return "Snapshot revision \(revision) conflicts with the accepted payload."
-        case let .writesBlocked(reason):
+        case .writesBlocked(let reason):
             switch reason {
-            case let .unsupportedFutureSchema(found, supported):
+            case .unsupportedFutureSchema(let found, let supported):
                 return "Snapshot writes are blocked for schema \(found); supported schema is "
                     + "\(supported)."
             case .quarantineFailed:
@@ -140,7 +140,8 @@ actor SnapshotStore {
             )
         }
 
-        return applicationSupport
+        return
+            applicationSupport
             .appendingPathComponent(directoryName, isDirectory: true)
             .appendingPathComponent(snapshotFilename, isDirectory: false)
     }
@@ -212,7 +213,7 @@ actor SnapshotStore {
             return .loaded(RestoredState(snapshot: snapshot))
         } catch let error as SnapshotMigrationError {
             switch error {
-            case let .unsupportedFutureSchema(found, supported):
+            case .unsupportedFutureSchema(let found, let supported):
                 resetPendingState()
                 let reason = SnapshotWriteBlockReason.unsupportedFutureSchema(
                     found: found,

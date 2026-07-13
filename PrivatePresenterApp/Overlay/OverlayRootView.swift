@@ -14,10 +14,11 @@ struct OverlayRootView: View {
     init(
         onDragChanged: @escaping (CGSize) -> Void = { _ in },
         onDragEnded: @escaping () -> Void = {},
-        onResizeChanged: @escaping (
-            ClampedPanelInteractionController.ResizeEdge,
-            CGSize
-        ) -> Void = { _, _ in },
+        onResizeChanged:
+            @escaping (
+                ClampedPanelInteractionController.ResizeEdge,
+                CGSize
+            ) -> Void = { _, _ in },
         onResizeEnded: @escaping () -> Void = {}
     ) {
         self.onDragChanged = onDragChanged

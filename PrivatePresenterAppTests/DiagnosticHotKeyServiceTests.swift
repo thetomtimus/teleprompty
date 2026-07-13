@@ -93,17 +93,20 @@ final class DiagnosticHotKeyServiceTests: XCTestCase {
         let correlationID = try! XCTUnwrap(carbonEvent.correlationID)
         XCTAssertLessThan(
             try! XCTUnwrap(envelopes.firstIndex { $0.kind == .configurationBound }),
-            try! XCTUnwrap(envelopes.firstIndex {
-                $0.kind == .carbonReceived && $0.correlationID == correlationID
-            })
+            try! XCTUnwrap(
+                envelopes.firstIndex {
+                    $0.kind == .carbonReceived && $0.correlationID == correlationID
+                })
         )
         XCTAssertLessThan(
-            try! XCTUnwrap(envelopes.firstIndex {
-                $0.kind == .carbonReceived && $0.correlationID == correlationID
-            }),
-            try! XCTUnwrap(envelopes.firstIndex {
-                $0.kind == .mainDispatchBegan && $0.correlationID == correlationID
-            })
+            try! XCTUnwrap(
+                envelopes.firstIndex {
+                    $0.kind == .carbonReceived && $0.correlationID == correlationID
+                }),
+            try! XCTUnwrap(
+                envelopes.firstIndex {
+                    $0.kind == .mainDispatchBegan && $0.correlationID == correlationID
+                })
         )
     }
 
@@ -134,9 +137,10 @@ final class DiagnosticHotKeyServiceTests: XCTestCase {
             try! XCTUnwrap(lifecycle.firstIndex(of: .tearDownObservers))
         )
         XCTAssertLessThan(
-            try! XCTUnwrap(evidence.sink.envelopes.lastIndex {
-                $0.kind == .correlationWindowClosed
-            }),
+            try! XCTUnwrap(
+                evidence.sink.envelopes.lastIndex {
+                    $0.kind == .correlationWindowClosed
+                }),
             try! XCTUnwrap(evidence.sink.envelopes.lastIndex { $0.kind == .sessionCompletion })
         )
     }

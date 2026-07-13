@@ -5,7 +5,7 @@ import AppKit
 enum PrivatePresenterApplication {
     static func main() {
         let application = NSApplication.shared
-#if DEBUG
+        #if DEBUG
         let resolution = DiagnosticProofConfiguration.resolve()
         let evidenceRecorder = DiagnosticEvidenceRecorder.production(resolution: resolution)
         let runtime = AppRuntime(
@@ -16,9 +16,9 @@ enum PrivatePresenterApplication {
                 .configControllerCohortInvalid
             )
         )
-#else
+        #else
         let runtime = AppRuntime(proofLevel: .statusBar)
-#endif
+        #endif
         let delegate = AppDelegate(runtime: runtime)
         application.setActivationPolicy(.regular)
         application.delegate = delegate

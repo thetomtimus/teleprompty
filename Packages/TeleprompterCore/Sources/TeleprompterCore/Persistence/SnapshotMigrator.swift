@@ -9,9 +9,9 @@ public enum SnapshotMigrationError: Error, Equatable, Sendable {
 extension SnapshotMigrationError: CustomStringConvertible {
     public var description: String {
         switch self {
-        case let .unsupportedFutureSchema(found, supported):
+        case .unsupportedFutureSchema(let found, let supported):
             return "Snapshot schema \(found) exceeds supported schema \(supported)."
-        case let .unsupportedLegacySchema(found):
+        case .unsupportedLegacySchema(let found):
             return "Snapshot schema \(found) is unsupported."
         case .malformed:
             return "Snapshot data is malformed."
@@ -117,14 +117,16 @@ private struct V1Snapshot: Decodable {
         document = try container.decode(ScriptDocument.self, forKey: .document)
         readingAnchor = try container.decode(ReadingAnchor.self, forKey: .readingAnchor)
         preferences = try container.decode(TeleprompterPreferences.self, forKey: .preferences)
-        panelFrames = try container.decodeIfPresent(
-            [PersistedPanelFrame].self,
-            forKey: .panelFrames
-        ) ?? []
-        shortcutBindings = try container.decodeIfPresent(
-            [V1ShortcutBinding].self,
-            forKey: .shortcutBindings
-        ) ?? []
+        panelFrames =
+            try container.decodeIfPresent(
+                [PersistedPanelFrame].self,
+                forKey: .panelFrames
+            ) ?? []
+        shortcutBindings =
+            try container.decodeIfPresent(
+                [V1ShortcutBinding].self,
+                forKey: .shortcutBindings
+            ) ?? []
     }
 
     func domainSnapshot() throws -> PersistedSnapshot {

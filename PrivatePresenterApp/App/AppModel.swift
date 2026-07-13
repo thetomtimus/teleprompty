@@ -34,12 +34,12 @@ final class AppModel {
     private(set) var isTerminationQuiescing = false
     let proofConfigurationSnapshot: OverlayConfigurationSnapshot
 
-#if DEBUG
+    #if DEBUG
     private(set) var focusEvidence: [LabeledFocusSnapshot] = []
     private(set) var diagnosticHotKeyStatus = "Control-Option-H not registered"
     @ObservationIgnored private let diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder?
     @ObservationIgnored private(set) var diagnosticCorrelationID: UUID?
-#endif
+    #endif
 
     @ObservationIgnored private let overlayController: OverlayPanelController
     @ObservationIgnored private let privacyCoordinator: PrivacyCoordinator
@@ -63,16 +63,55 @@ final class AppModel {
         var phase: Phase
     }
 
-    init(
+    #if DEBUG
+    convenience init(
         overlayController: OverlayPanelController,
         privacyCoordinator: PrivacyCoordinator = PrivacyCoordinator(),
         document: ScriptDocument? = nil,
         now: @escaping @MainActor () -> Date = { Date() },
         restorationRequired: Bool = false,
-#if DEBUG
         diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder? = nil,
-#endif
         effectHandler: (@MainActor (AppEffect) -> Void)? = nil
+    ) {
+        self.init(
+            overlayController: overlayController,
+            privacyCoordinator: privacyCoordinator,
+            document: document,
+            now: now,
+            restorationRequired: restorationRequired,
+            diagnosticEvidenceRecorderObject: diagnosticEvidenceRecorder,
+            effectHandler: effectHandler
+        )
+    }
+    #else
+    convenience init(
+        overlayController: OverlayPanelController,
+        privacyCoordinator: PrivacyCoordinator = PrivacyCoordinator(),
+        document: ScriptDocument? = nil,
+        now: @escaping @MainActor () -> Date = { Date() },
+        restorationRequired: Bool = false,
+        effectHandler: (@MainActor (AppEffect) -> Void)? = nil
+    ) {
+        self.init(
+            overlayController: overlayController,
+            privacyCoordinator: privacyCoordinator,
+            document: document,
+            now: now,
+            restorationRequired: restorationRequired,
+            diagnosticEvidenceRecorderObject: nil,
+            effectHandler: effectHandler
+        )
+    }
+    #endif
+
+    private init(
+        overlayController: OverlayPanelController,
+        privacyCoordinator: PrivacyCoordinator,
+        document: ScriptDocument?,
+        now: @escaping @MainActor () -> Date,
+        restorationRequired: Bool,
+        diagnosticEvidenceRecorderObject: AnyObject?,
+        effectHandler: (@MainActor (AppEffect) -> Void)?
     ) {
         self.overlayController = overlayController
         self.privacyCoordinator = privacyCoordinator
@@ -86,12 +125,15 @@ final class AppModel {
         restorationCompleted = !restorationRequired
         isPersistenceLoadSafe = !restorationRequired
         proofConfigurationSnapshot = overlayController.configurationSnapshot
-#if DEBUG
-        self.diagnosticEvidenceRecorder = diagnosticEvidenceRecorder
-#endif
-        self.effectHandler = effectHandler ?? { effect in
-            Self.applyDefault(effect, overlayController: overlayController)
-        }
+        #if DEBUG
+        diagnosticEvidenceRecorder =
+            diagnosticEvidenceRecorderObject
+            as? DiagnosticEvidenceRecorder
+        #endif
+        self.effectHandler =
+            effectHandler ?? { effect in
+                Self.applyDefault(effect, overlayController: overlayController)
+            }
     }
 
     var isPaused: Bool {
@@ -123,15 +165,15 @@ final class AppModel {
         guard acceptsDuringTermination(command) else { return }
         commandDispatchCount += 1
         switch command {
-        case let .replaceScript(text):
+        case .replaceScript(let text):
             replaceScript(text)
         case .requestClear:
             requestClear()
-        case let .confirmClear(token):
+        case .confirmClear(let token):
             confirmClear(token)
         case .cancelClear:
             pendingClear = nil
-        case let .completePreClearFlush(token, persistedRevision, succeeded):
+        case .completePreClearFlush(let token, let persistedRevision, let succeeded):
             completePreClearFlush(
                 token: token,
                 persistedRevision: persistedRevision,
@@ -153,9 +195,9 @@ final class AppModel {
             showOverlayCommand()
         case .hideOverlay:
             hideOverlayCommand()
-        case let .setLocked(locked):
+        case .setLocked(let locked):
             setLockedCommand(locked)
-        case let .restore(snapshot):
+        case .restore(let snapshot):
             restore(snapshot)
         case .restoreFailed:
             restoreFailed()
@@ -164,15 +206,15 @@ final class AppModel {
         case .topologyWillChange:
             pendingShieldedMoveDisplayID = nil
             emit(applyPrivacyDirectives(privacyCoordinator.topologyWillChange()))
-        case let .displayInventoryLoaded(inventory):
+        case .displayInventoryLoaded(let inventory):
             refreshDisplayInventory(inventory)
         case .displayInventoryFailed:
             refreshDisplayInventoryFailed()
-        case let .selectDisplay(id):
+        case .selectDisplay(let id):
             selectDisplayCommand(id)
         case .confirmSelectedDisplay:
             confirmSelectedDisplayCommand()
-        case let .completeShieldedMove(screenID):
+        case .completeShieldedMove(let screenID):
             completeShieldedMove(screenID: screenID)
         case .keepScriptHidden:
             keepScriptHiddenCommand()
@@ -187,7 +229,7 @@ final class AppModel {
 
     func refreshDisplays(_ result: Result<[RuntimeDisplay], Error>) {
         switch result {
-        case let .success(displays):
+        case .success(let displays):
             send(.displayInventoryLoaded(RuntimeDisplayInventory(displays: displays)))
         case .failure:
             send(.displayInventoryFailed)
@@ -196,7 +238,7 @@ final class AppModel {
 
     func refreshDisplayInventory(_ result: Result<RuntimeDisplayInventory, Error>) {
         switch result {
-        case let .success(inventory):
+        case .success(let inventory):
             send(.displayInventoryLoaded(inventory))
         case .failure:
             send(.displayInventoryFailed)
@@ -225,28 +267,30 @@ final class AppModel {
 
     func hideOverlay() {
         send(.hideOverlay)
-#if DEBUG
+        #if DEBUG
         captureFocus(label: "after hide")
-#endif
+        #endif
     }
 
     func setLocked(_ locked: Bool) {
         send(.setLocked(locked))
-#if DEBUG
+        #if DEBUG
         captureFocus(label: locked ? "after lock" : "after unlock")
-#endif
+        #endif
     }
 
-#if DEBUG
+    #if DEBUG
     func setDiagnosticHotKeyStatus(_ status: Int32) {
-        diagnosticHotKeyStatus = status == 0
+        diagnosticHotKeyStatus =
+            status == 0
             ? "Control-Option-H registered"
             : "Control-Option-H registration failed (OSStatus \(status))"
     }
 
     func toggleOverlayFromDiagnosticHotKey(correlationID: UUID? = nil) {
         diagnosticCorrelationID = correlationID
-        let command: DiagnosticCommandName = overlaySession.visibility == .visible
+        let command: DiagnosticCommandName =
+            overlaySession.visibility == .visible
             ? .hideOverlay
             : .showOverlay
         diagnosticEvidenceRecorder?.record(
@@ -306,7 +350,7 @@ final class AppModel {
         return ([configurationLine, diagnosticHotKeyStatus] + focusLines)
             .joined(separator: "\n")
     }
-#endif
+    #endif
 
     // MARK: - Durable state reducer
 
@@ -342,10 +386,11 @@ final class AppModel {
         else { return }
         request.phase = .awaitingPreClearFlush
         pendingClear = request
-        effectHandler(.flushSnapshot(
-            token: token,
-            requiredRevision: request.snapshotRevision
-        ))
+        effectHandler(
+            .flushSnapshot(
+                token: token,
+                requiredRevision: request.snapshotRevision
+            ))
     }
 
     private func completePreClearFlush(
@@ -475,7 +520,8 @@ final class AppModel {
         )
         warning = warningMessage(for: evaluation.assessment)
         if let candidate = evaluation.candidate,
-           let runtimeDisplay = displays.first(where: { $0.id == candidate.sessionID }) {
+            let runtimeDisplay = displays.first(where: { $0.id == candidate.sessionID })
+        {
             selectedDisplayID = candidate.sessionID
             candidateFingerprint = candidate.fingerprint
             effects.append(.stagePanelHidden(runtimeDisplay))
@@ -621,16 +667,17 @@ final class AppModel {
             selection: selection
         )
         guard evaluation.canOpenOverlay,
-              evaluation.candidate?.sessionID == selectedDisplayID else { return }
+            evaluation.candidate?.sessionID == selectedDisplayID
+        else { return }
         pendingShowGeneration += 1
         overlaySession.visibility = .visible
-#if DEBUG
+        #if DEBUG
         captureFocus(label: "before show")
-#endif
+        #endif
         effectHandler(.showPanel(display))
-#if DEBUG
+        #if DEBUG
         captureFocus(label: "after show")
-#endif
+        #endif
     }
 
     private func hideOverlayCommand() {
@@ -649,13 +696,13 @@ final class AppModel {
     private func applyPrivacyDirectives(_ directives: [PrivacyDirective]) -> [AppEffect] {
         var externalEffects: [AppEffect] = []
         for directive in directives {
-#if DEBUG
+            #if DEBUG
             diagnosticEvidenceRecorder?.record(
                 kind: .directiveBefore,
                 correlationID: diagnosticCorrelationID,
                 payload: DiagnosticEventPayload(privacyDirective: directive.diagnosticName)
             )
-#endif
+            #endif
             switch directive {
             case .pauseScrolling:
                 overlaySession.playbackPhase = .paused
@@ -670,7 +717,7 @@ final class AppModel {
                 externalEffects.append(.queryTopology)
             case .evaluatePrivacy:
                 externalEffects.append(.evaluatePrivacy)
-            case let .moveWindowsWhileShielded(screenID):
+            case .moveWindowsWhileShielded(let screenID):
                 if let display = displays.first(where: { $0.id == screenID }) {
                     externalEffects.append(.stagePanelHidden(display))
                     externalEffects.append(.moveControllerWhileShielded(display))
@@ -683,20 +730,22 @@ final class AppModel {
             case .publishSafeState:
                 break
             }
-#if DEBUG
+            #if DEBUG
             diagnosticEvidenceRecorder?.record(
                 kind: .directiveAfter,
                 correlationID: diagnosticCorrelationID,
                 payload: DiagnosticEventPayload(privacyDirective: directive.diagnosticName)
             )
-#endif
+            #endif
         }
         return externalEffects
     }
 
     private func unconfirmedSelection() -> DisplaySelection? {
-        guard let fingerprint = candidateFingerprint
-            ?? preferences.selectedDisplayFingerprint else { return nil }
+        guard
+            let fingerprint = candidateFingerprint
+                ?? preferences.selectedDisplayFingerprint
+        else { return nil }
         return DisplaySelection(
             fingerprint: fingerprint,
             isConfirmed: false,
@@ -706,8 +755,10 @@ final class AppModel {
     }
 
     private func confirmedSelection() -> DisplaySelection? {
-        guard let fingerprint = candidateFingerprint
-            ?? preferences.selectedDisplayFingerprint else { return nil }
+        guard
+            let fingerprint = candidateFingerprint
+                ?? preferences.selectedDisplayFingerprint
+        else { return nil }
         return DisplaySelection(
             fingerprint: fingerprint,
             isConfirmed: true,
@@ -745,12 +796,12 @@ final class AppModel {
         guard isTerminationQuiescing else { return true }
         switch command {
         case .completePreClearFlush, .pause, .hideOverlay, .flushPersistence,
-             .topologyWillChange, .displayInventoryLoaded, .displayInventoryFailed,
-             .keepScriptHidden, .completeShieldedMove:
+            .topologyWillChange, .displayInventoryLoaded, .displayInventoryFailed,
+            .keepScriptHidden, .completeShieldedMove:
             return true
         case .replaceScript, .requestClear, .confirmClear, .cancelClear,
-             .start, .togglePlayback, .restart, .showOverlay, .setLocked,
-             .restore, .restoreFailed, .selectDisplay, .confirmSelectedDisplay:
+            .start, .togglePlayback, .restart, .showOverlay, .setLocked,
+            .restore, .restoreFailed, .selectDisplay, .confirmSelectedDisplay:
             return false
         }
     }
@@ -764,13 +815,13 @@ final class AppModel {
 
     private func emit(_ effects: [AppEffect]) {
         for effect in effects {
-#if DEBUG
+            #if DEBUG
             diagnosticEvidenceRecorder?.record(
                 kind: .effectEmitted,
                 correlationID: diagnosticCorrelationID,
                 payload: DiagnosticEventPayload(effect: effect.diagnosticName)
             )
-#endif
+            #endif
             effectHandler(effect)
         }
     }
@@ -780,23 +831,23 @@ final class AppModel {
         overlayController: OverlayPanelController
     ) {
         switch effect {
-        case let .stagePanelHidden(display):
+        case .stagePanelHidden(let display):
             overlayController.stageHidden(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame
             )
-        case let .showPanel(display):
+        case .showPanel(let display):
             overlayController.show(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame
             )
         case .hidePanel:
             overlayController.hide()
-        case let .setPanelLocked(locked):
+        case .setPanelLocked(let locked):
             overlayController.setLocked(locked)
         case .scheduleSnapshot, .flushSnapshot, .saveSnapshotImmediately,
-             .flushPersistence, .moveControllerWhileShielded, .resetViewport,
-             .reassessPrivacy, .queryTopology, .evaluatePrivacy:
+            .flushPersistence, .moveControllerWhileShielded, .resetViewport,
+            .reassessPrivacy, .queryTopology, .evaluatePrivacy:
             break
         }
     }
@@ -818,8 +869,8 @@ final class AppModel {
 }
 
 #if DEBUG
-private extension PrivacyDirective {
-    var diagnosticName: DiagnosticPrivacyDirectiveName {
+extension PrivacyDirective {
+    fileprivate var diagnosticName: DiagnosticPrivacyDirectiveName {
         switch self {
         case .pauseScrolling: .pauseScrolling
         case .hideOverlay: .hideOverlay
@@ -843,8 +894,8 @@ extension AppEffect {
         case .setPanelLocked: .setPanelLocked
         case .moveControllerWhileShielded: .moveControllerWhileShielded
         case .scheduleSnapshot, .flushSnapshot, .saveSnapshotImmediately,
-             .flushPersistence, .resetViewport, .reassessPrivacy,
-             .queryTopology, .evaluatePrivacy:
+            .flushPersistence, .resetViewport, .reassessPrivacy,
+            .queryTopology, .evaluatePrivacy:
             .other
         }
     }

@@ -67,13 +67,15 @@ struct RuntimeDisplayInventory: Equatable {
             )
             let confidence: DisplayFingerprint.Confidence
             if display.persistentUUID != nil,
-               display.vendorID != nil,
-               display.modelID != nil,
-               display.serialNumber != nil {
+                display.vendorID != nil,
+                display.modelID != nil,
+                display.serialNumber != nil
+            {
                 confidence = .strong
             } else if display.persistentUUID != nil,
-                      display.vendorID != nil,
-                      display.modelID != nil {
+                display.vendorID != nil,
+                display.modelID != nil
+            {
                 confidence = .medium
             } else {
                 confidence = .weak
@@ -120,8 +122,10 @@ final class SystemDisplayService {
 
     func currentDisplays() throws -> [RuntimeDisplay] {
         try NSScreen.screens.map { screen in
-            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-                    as? NSNumber else {
+            guard
+                let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                    as? NSNumber
+            else {
                 throw DisplayQueryError.missingScreenNumber(screen.localizedName)
             }
             let displayID = CGDirectDisplayID(number.uint32Value)

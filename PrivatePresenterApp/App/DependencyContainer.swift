@@ -13,23 +13,50 @@ final class AppEffectAdapter {
     private var terminalFlushStarted = false
     private var terminalFlushSucceeded = false
     private let terminationFlushOverride: (@Sendable () async -> Bool)?
-#if DEBUG
+    #if DEBUG
     private let diagnosticRecorder: DiagnosticEvidenceRecorder?
-#endif
+    #endif
 
-    init(
+    #if DEBUG
+    convenience init(
         snapshotStore: SnapshotStore,
         overlayController: OverlayPanelController,
-#if DEBUG
         diagnosticRecorder: DiagnosticEvidenceRecorder? = nil,
-#endif
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil
+    ) {
+        self.init(
+            snapshotStore: snapshotStore,
+            overlayController: overlayController,
+            diagnosticRecorderObject: diagnosticRecorder,
+            terminationFlushOverride: terminationFlushOverride
+        )
+    }
+    #else
+    convenience init(
+        snapshotStore: SnapshotStore,
+        overlayController: OverlayPanelController,
+        terminationFlushOverride: (@Sendable () async -> Bool)? = nil
+    ) {
+        self.init(
+            snapshotStore: snapshotStore,
+            overlayController: overlayController,
+            diagnosticRecorderObject: nil,
+            terminationFlushOverride: terminationFlushOverride
+        )
+    }
+    #endif
+
+    private init(
+        snapshotStore: SnapshotStore,
+        overlayController: OverlayPanelController,
+        diagnosticRecorderObject: AnyObject?,
+        terminationFlushOverride: (@Sendable () async -> Bool)?
     ) {
         self.snapshotStore = snapshotStore
         self.overlayController = overlayController
-#if DEBUG
-        self.diagnosticRecorder = diagnosticRecorder
-#endif
+        #if DEBUG
+        diagnosticRecorder = diagnosticRecorderObject as? DiagnosticEvidenceRecorder
+        #endif
         self.terminationFlushOverride = terminationFlushOverride
     }
 
@@ -39,20 +66,20 @@ final class AppEffectAdapter {
     }
 
     func handle(_ effect: AppEffect) {
-#if DEBUG
+        #if DEBUG
         let correlationID = model?.diagnosticCorrelationID
         diagnosticRecorder?.record(
             kind: .effectApplyBefore,
             correlationID: correlationID,
             payload: DiagnosticEventPayload(effect: effect.diagnosticName)
         )
-#endif
+        #endif
         switch effect {
-        case let .scheduleSnapshot(snapshot):
+        case .scheduleSnapshot(let snapshot):
             enqueuePersistence { store in
                 try await store.scheduleSave(snapshot)
             }
-        case let .flushSnapshot(token, requiredRevision):
+        case .flushSnapshot(let token, let requiredRevision):
             enqueuePersistence { [weak self] store in
                 do {
                     try await store.flush()
@@ -71,7 +98,7 @@ final class AppEffectAdapter {
                     )
                 }
             }
-        case let .saveSnapshotImmediately(snapshot):
+        case .saveSnapshotImmediately(let snapshot):
             enqueuePersistence(allowDuringTermination: true) { store in
                 try await store.scheduleSave(snapshot)
                 try await store.flush()
@@ -80,36 +107,37 @@ final class AppEffectAdapter {
             enqueuePersistence { store in
                 try await store.flush()
             }
-        case let .stagePanelHidden(display):
-#if DEBUG
+        case .stagePanelHidden(let display):
+            #if DEBUG
             recordPanelOperation(.stageHidden, correlationID: correlationID)
-#endif
+            #endif
             overlayController.stageHidden(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame
             )
-        case let .showPanel(display):
-#if DEBUG
-            let operation: DiagnosticPanelOperationName = overlayController.orderingMode == .front
+        case .showPanel(let display):
+            #if DEBUG
+            let operation: DiagnosticPanelOperationName =
+                overlayController.orderingMode == .front
                 ? .orderFront
                 : .orderFrontRegardless
             recordPanelOperation(operation, correlationID: correlationID)
-#endif
+            #endif
             overlayController.show(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame
             )
         case .hidePanel:
-#if DEBUG
+            #if DEBUG
             recordPanelOperation(.orderOut, correlationID: correlationID)
-#endif
+            #endif
             overlayController.hide()
-        case let .setPanelLocked(locked):
-#if DEBUG
+        case .setPanelLocked(let locked):
+            #if DEBUG
             recordPanelOperation(.setLocked, correlationID: correlationID)
-#endif
+            #endif
             overlayController.setLocked(locked)
-        case let .moveControllerWhileShielded(display):
+        case .moveControllerWhileShielded(let display):
             controllerWindowController?.showShielded(on: display)
             let model = model
             Task { @MainActor in
@@ -119,13 +147,13 @@ final class AppEffectAdapter {
         case .resetViewport, .reassessPrivacy, .queryTopology, .evaluatePrivacy:
             break
         }
-#if DEBUG
+        #if DEBUG
         diagnosticRecorder?.record(
             kind: .effectApplyAfter,
             correlationID: correlationID,
             payload: DiagnosticEventPayload(effect: effect.diagnosticName)
         )
-#endif
+        #endif
     }
 
     func flushForTermination() async -> Bool {
@@ -161,7 +189,8 @@ final class AppEffectAdapter {
                 do {
                     try await snapshotStore.flush()
                     let status = await snapshotStore.status()
-                    didFlush = status.persistedRevision == expectedRevision
+                    didFlush =
+                        status.persistedRevision == expectedRevision
                         || (expectedRevision == 0 && status.persistedRevision == nil)
                 } catch {
                     didFlush = false
@@ -201,14 +230,15 @@ final class AppEffectAdapter {
         persistedRevision: UInt64,
         succeeded: Bool
     ) {
-        model?.send(.completePreClearFlush(
-            token: token,
-            persistedRevision: persistedRevision,
-            succeeded: succeeded
-        ))
+        model?.send(
+            .completePreClearFlush(
+                token: token,
+                persistedRevision: persistedRevision,
+                succeeded: succeeded
+            ))
     }
 
-#if DEBUG
+    #if DEBUG
     private func recordPanelOperation(
         _ operation: DiagnosticPanelOperationName,
         correlationID: UUID?
@@ -222,7 +252,7 @@ final class AppEffectAdapter {
             )
         )
     }
-#endif
+    #endif
 }
 
 @MainActor
@@ -231,20 +261,56 @@ final class DependencyContainer {
     let overlayController: OverlayPanelController
     let displayService: SystemDisplayService
     let effectAdapter: AppEffectAdapter
-#if DEBUG
+    #if DEBUG
     let diagnosticRecorder: DiagnosticEvidenceRecorder?
-#endif
+    #endif
     private(set) var appModelConstructionCount = 0
 
-    init(
+    #if DEBUG
+    convenience init(
         proofLevel: OverlayPanelLevel,
-#if DEBUG
         orderingMode: OverlayPanelOrderingMode = .frontRegardless,
         diagnosticRecorder: DiagnosticEvidenceRecorder? = nil,
-#endif
         snapshotStore: SnapshotStore? = nil,
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil
     ) {
+        self.init(
+            proofLevel: proofLevel,
+            orderingModeObject: orderingMode,
+            diagnosticRecorderObject: diagnosticRecorder,
+            snapshotStore: snapshotStore,
+            terminationFlushOverride: terminationFlushOverride
+        )
+    }
+    #else
+    convenience init(
+        proofLevel: OverlayPanelLevel,
+        snapshotStore: SnapshotStore? = nil,
+        terminationFlushOverride: (@Sendable () async -> Bool)? = nil
+    ) {
+        self.init(
+            proofLevel: proofLevel,
+            orderingModeObject: nil,
+            diagnosticRecorderObject: nil,
+            snapshotStore: snapshotStore,
+            terminationFlushOverride: terminationFlushOverride
+        )
+    }
+    #endif
+
+    private init(
+        proofLevel: OverlayPanelLevel,
+        orderingModeObject: Any?,
+        diagnosticRecorderObject: AnyObject?,
+        snapshotStore: SnapshotStore?,
+        terminationFlushOverride: (@Sendable () async -> Bool)?
+    ) {
+        #if DEBUG
+        let orderingMode =
+            orderingModeObject as? OverlayPanelOrderingMode
+            ?? .frontRegardless
+        let diagnosticRecorder = diagnosticRecorderObject as? DiagnosticEvidenceRecorder
+        #endif
         let resolvedStore: SnapshotStore
         if let snapshotStore {
             resolvedStore = snapshotStore
@@ -259,38 +325,52 @@ final class DependencyContainer {
         }
 
         self.snapshotStore = resolvedStore
-#if DEBUG
+        #if DEBUG
         self.diagnosticRecorder = diagnosticRecorder
         overlayController = OverlayPanelController(
             proofLevel: proofLevel,
             orderingMode: orderingMode
         )
-#else
+        #else
         overlayController = OverlayPanelController(proofLevel: proofLevel)
-#endif
+        #endif
         displayService = SystemDisplayService()
+        #if DEBUG
         effectAdapter = AppEffectAdapter(
             snapshotStore: resolvedStore,
             overlayController: overlayController,
-#if DEBUG
             diagnosticRecorder: diagnosticRecorder,
-#endif
             terminationFlushOverride: terminationFlushOverride
         )
+        #else
+        effectAdapter = AppEffectAdapter(
+            snapshotStore: resolvedStore,
+            overlayController: overlayController,
+            terminationFlushOverride: terminationFlushOverride
+        )
+        #endif
     }
 
     func makeAppModel(restorationRequired: Bool = true) -> AppModel {
         appModelConstructionCount += 1
         let adapter = effectAdapter
+        #if DEBUG
         return AppModel(
             overlayController: overlayController,
             restorationRequired: restorationRequired,
-#if DEBUG
             diagnosticEvidenceRecorder: diagnosticRecorder,
-#endif
             effectHandler: { [weak adapter] effect in
                 adapter?.handle(effect)
             }
         )
+        #else
+        return AppModel(
+            overlayController: overlayController,
+            restorationRequired: restorationRequired,
+            effectHandler: { [weak adapter] effect in
+                adapter?.handle(effect)
+            }
+        )
+        #endif
     }
 }

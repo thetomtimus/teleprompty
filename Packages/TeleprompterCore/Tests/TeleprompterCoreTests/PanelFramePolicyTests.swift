@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import TeleprompterCore
 
 final class PanelFramePolicyTests: XCTestCase {
