@@ -5,6 +5,7 @@ script_root=$(cd "$(dirname "$0")" && pwd)
 verifier="$script_root/verify-m0-proof-provenance.sh"
 runner="$script_root/run-m0-phase-a-diagnosis.sh"
 fixture_root=$(mktemp -d "${TMPDIR:-/tmp}/private-presenter-provenance.XXXXXX")
+fixture_root=$(cd "$fixture_root" && pwd -P)
 trap 'rm -rf "$fixture_root"' EXIT
 
 repository="$fixture_root/repository"
@@ -31,6 +32,14 @@ import hashlib
 import sys
 print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
 PY
+}
+different_hex() {
+  local value=$1
+  if [[ ${value:0:1} == 0 ]]; then
+    printf '1%s\n' "${value:1}"
+  else
+    printf '0%s\n' "${value:1}"
+  fi
 }
 head=$(git -C "$repository" rev-parse HEAD)
 printf 'commit=%s\nstatus_porcelain=\ngenerated proof build log\n' "$head" > "$build_log"
@@ -161,21 +170,24 @@ verify_evidence >/dev/null
 
 # testProvenanceVerifierRejectsExecutableHashMismatch
 cp "$manifest" "$manifest.saved"
+wrong_executable_hash=$(different_hex "$executable_hash")
 replace_first "$manifest" "executable_sha256=${executable_hash}" \
-  "executable_sha256=0${executable_hash:1}"
+  "executable_sha256=${wrong_executable_hash}"
 expect_rejection "$verifier" --repository "$repository" "$manifest"
 mv "$manifest.saved" "$manifest"
 
 # testProvenanceVerifierRejectsBuildLogHashMismatch
 cp "$manifest" "$manifest.saved"
+wrong_build_log_hash=$(different_hex "$build_log_hash")
 replace_first "$manifest" "build_log_sha256=${build_log_hash}" \
-  "build_log_sha256=0${build_log_hash:1}"
+  "build_log_sha256=${wrong_build_log_hash}"
 expect_rejection "$verifier" --repository "$repository" "$manifest"
 mv "$manifest.saved" "$manifest"
 
 # testProvenanceVerifierRejectsCommitMismatch
 cp "$manifest" "$manifest.saved"
-replace_first "$manifest" "commit=${head}" "commit=0${head:1}"
+wrong_head=$(different_hex "$head")
+replace_first "$manifest" "commit=${head}" "commit=${wrong_head}"
 expect_rejection "$verifier" --repository "$repository" "$manifest"
 mv "$manifest.saved" "$manifest"
 
@@ -191,7 +203,7 @@ git -C "$repository" checkout -q -- tracked.txt
 
 # testProvenanceVerifierRejectsWrongBuildLogCommit
 cp "$build_log" "$build_log.saved"
-replace_first "$build_log" "commit=${head}" "commit=0${head:1}"
+replace_first "$build_log" "commit=${head}" "commit=${wrong_head}"
 build_log_hash=$(hash_file "$build_log")
 write_manifest
 expect_rejection "$verifier" --repository "$repository" "$manifest"
