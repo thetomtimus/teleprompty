@@ -14,6 +14,7 @@ struct ControllerView: View {
                     get: { model.selectedDisplayID },
                     set: { model.selectDisplay($0) }
                 ),
+                topologyStatus: model.topologyStatus,
                 warning: model.warning,
                 onConfirm: model.confirmSelectedDisplay,
                 onKeepHidden: model.keepScriptHidden
@@ -36,7 +37,14 @@ struct ControllerView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Private Presenter")
                     .font(.title.bold())
-                Text("Private display confirmed: \(model.selectedDisplayName)")
+                Text(
+                    ControllerPresentation.selectedDisplayStatus(
+                        name: model.selectedDisplayName,
+                        isConfirmedInCurrentSession: model.isSelectionConfirmed
+                    )
+                )
+                    .foregroundStyle(.secondary)
+                Text(ControllerPresentation.topologyLabel(for: model.topologyStatus))
                     .foregroundStyle(.secondary)
 
                 TextField(

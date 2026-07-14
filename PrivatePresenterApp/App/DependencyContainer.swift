@@ -70,6 +70,17 @@ final class AppEffectAdapter {
         overlayController.readerTextSystem.onResyncRequested = { [weak model] revision in
             model?.send(.readerResyncRequested(appliedRevision: revision))
         }
+        overlayController.onAppliedFrame = { [weak model] record in
+            guard let displayID = record.displayID else { return }
+            Task { @MainActor [weak model] in
+                await Task.yield()
+                model?.send(
+                    .panelFrameChanged(
+                        displayID: displayID,
+                        frame: record.appliedFrame
+                    ))
+            }
+        }
         overlayController.readerTextSystem.replaceAuthoritatively(
             text: model.document.text,
             revision: model.document.revision,
@@ -145,16 +156,18 @@ final class AppEffectAdapter {
             enqueuePersistence { store in
                 try await store.flush()
             }
-        case .stagePanelHidden(let display):
+        case .stagePanelHidden(let display, let proposedFrame):
             #if DEBUG
             recordPanelOperation(.stageHidden, correlationID: correlationID)
             #endif
             overlayController.stageHidden(
-                proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
+                proposedFrame: proposedFrame
+                    ?? overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame,
-                fullFrame: display.frame
+                fullFrame: display.frame,
+                displayID: display.id
             )
-        case .showPanel(let display):
+        case .showPanel(let display, let proposedFrame):
             #if DEBUG
             let operation: DiagnosticPanelOperationName =
                 overlayController.orderingMode == .front
@@ -163,9 +176,11 @@ final class AppEffectAdapter {
             recordPanelOperation(operation, correlationID: correlationID)
             #endif
             overlayController.show(
-                proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
+                proposedFrame: proposedFrame
+                    ?? overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame,
-                fullFrame: display.frame
+                fullFrame: display.frame,
+                displayID: display.id
             )
         case .hidePanel:
             #if DEBUG

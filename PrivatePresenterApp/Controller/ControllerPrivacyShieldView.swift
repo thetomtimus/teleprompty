@@ -3,6 +3,7 @@ import SwiftUI
 struct ControllerPrivacyShieldView: View {
     let displays: [RuntimeDisplay]
     @Binding var selectedDisplayID: UInt32?
+    let topologyStatus: ControllerTopologyStatus
     let warning: String?
     let onConfirm: () -> Void
     let onKeepHidden: () -> Void
@@ -16,10 +17,20 @@ struct ControllerPrivacyShieldView: View {
             )
             .fixedSize(horizontal: false, vertical: true)
 
+            Text(ControllerPresentation.topologyLabel(for: topologyStatus))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(
+                    "Display safety: \(ControllerPresentation.topologyLabel(for: topologyStatus))"
+                )
+
             if let warning {
-                Text(visibleWarning(warning))
+                Text(warning)
                     .font(.headline)
-                    .accessibilityLabel(visibleWarning(warning))
+                    .accessibilityLabel(warning)
+                if warning == AppModel.mirroringWarning {
+                    Text(ControllerPresentation.mirroringRecoveryGuidance)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Picker("Private display", selection: $selectedDisplayID) {
@@ -37,11 +48,6 @@ struct ControllerPrivacyShieldView: View {
         }
         .padding(24)
         .frame(minWidth: 520, minHeight: 280)
-    }
-
-    private func visibleWarning(_ warning: String) -> String {
-        guard warning == AppModel.mirroringWarning else { return warning }
-        return warning + " Your script is hidden until display privacy is confirmed again."
     }
 
     private var selectedName: String {

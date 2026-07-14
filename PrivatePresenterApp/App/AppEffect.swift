@@ -15,8 +15,8 @@ enum AppEffect: Equatable {
     case saveSnapshotImmediately(PersistedSnapshot)
     case flushPersistence
 
-    case stagePanelHidden(RuntimeDisplay)
-    case showPanel(RuntimeDisplay)
+    case stagePanelHidden(RuntimeDisplay, proposedFrame: CGRect?)
+    case showPanel(RuntimeDisplay, proposedFrame: CGRect?)
     case hidePanel
     case setPanelLocked(Bool)
     case moveControllerWhileShielded(RuntimeDisplay)

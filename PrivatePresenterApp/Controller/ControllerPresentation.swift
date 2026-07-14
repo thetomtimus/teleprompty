@@ -1,5 +1,14 @@
 import Foundation
 
+enum ControllerTopologyStatus: String, CaseIterable, Equatable, Sendable {
+    case extended
+    case mirrored
+    case single
+    case missing
+    case ambiguous
+    case queryFailure
+}
+
 enum ControllerControl: Hashable, Sendable {
     case title
     case editor
@@ -19,11 +28,14 @@ enum ControllerControl: Hashable, Sendable {
 }
 
 struct ControllerPresentation: Equatable, Sendable {
+    static let mirroringWarning =
+        "Display mirroring is on. Students may see the teleprompter. Use Extended Display mode."
+    static let mirroringRecoveryGuidance =
+        "The script remains hidden. Turn off mirroring, then select and confirm the private display again."
     static let emptyScriptInstruction =
         "Paste or type a script to prepare the teleprompter. Smooth scrolling becomes available in M3."
     static let m3Explanation = "Smooth scrolling is available in M3."
     static let m4Explanation = "Focus Mode and product shortcuts are available in M4."
-
     let scriptText: String
     let isPanelVisible: Bool
     let isClearConfirmationRequired: Bool
@@ -64,6 +76,33 @@ struct ControllerPresentation: Equatable, Sendable {
             isPanelVisible ? .hideOverlay : .showOverlay
         default:
             nil
+        }
+    }
+
+    static func selectedDisplayStatus(
+        name: String?,
+        isConfirmedInCurrentSession: Bool
+    ) -> String {
+        guard isConfirmedInCurrentSession, let name else {
+            return "No private display confirmed for this session"
+        }
+        return "Private display confirmed: \(name)"
+    }
+
+    static func topologyLabel(for status: ControllerTopologyStatus) -> String {
+        switch status {
+        case .extended:
+            "Extended display mode is available"
+        case .mirrored:
+            "Display mirroring is unsafe"
+        case .single:
+            "Only one display is online"
+        case .missing:
+            "The selected private display is missing"
+        case .ambiguous:
+            "Display identity is ambiguous — select and confirm the private display"
+        case .queryFailure:
+            "Display safety could not be verified"
         }
     }
 }

@@ -155,8 +155,20 @@ final class AppModel {
     }
 
     var selectedDisplayName: String {
-        displays.first(where: { $0.id == selectedDisplayID })?.localizedName
+        guard isSelectionConfirmed,
+            overlaySession.recoveryConfirmationState == .confirmed
+        else { return "No display selected" }
+        return displays.first(where: { $0.id == selectedDisplayID })?.localizedName
             ?? "No display selected"
+    }
+
+    var topologyStatus: ControllerTopologyStatus {
+        guard latestTopology?.querySucceeded == true else { return .queryFailure }
+        if warning == Self.mirroringWarning { return .mirrored }
+        if warning == Self.ambiguityWarning { return .ambiguous }
+        if warning?.contains("missing") == true { return .missing }
+        if latestTopology?.displays.filter(\.isOnline).count == 1 { return .single }
+        return .extended
     }
 
     var configurationSnapshot: OverlayConfigurationSnapshot {
@@ -199,6 +211,8 @@ final class AppModel {
             setTextAlignment(alignment)
         case .setActiveBandEnabled(let enabled):
             setActiveBandEnabled(enabled)
+        case .panelFrameChanged(let displayID, let frame):
+            panelFrameChanged(displayID: displayID, frame: frame)
         case .requestClear:
             requestClear()
         case .confirmClear(let token):
@@ -487,6 +501,42 @@ final class AppModel {
         effectHandler(.scheduleSnapshot(persistedSnapshot))
     }
 
+    private func panelFrameChanged(displayID: UInt32, frame: CGRect) {
+        guard isSelectionConfirmed,
+            overlaySession.recoveryConfirmationState == .confirmed,
+            overlaySession.currentSessionDisplayID == displayID,
+            selectedDisplayID == displayID,
+            let latestTopology,
+            let display = displays.first(where: { $0.id == displayID }),
+            let descriptor = latestTopology.displays.first(where: { $0.sessionID == displayID }),
+            topologyEvaluator.isPersistenceEligible(
+                descriptor.fingerprint,
+                in: latestTopology.displays
+            ),
+            let key = descriptor.fingerprint.persistentIdentityKey
+        else { return }
+
+        let normalizedFrame = PanelFramePolicy().normalize(
+            DisplayRect(frame),
+            in: DisplayRect(display.visibleFrame)
+        )
+        let entry = PersistedPanelFrame(
+            displayFingerprint: descriptor.fingerprint.normalized,
+            frame: normalizedFrame
+        )
+        if panelFrames.first(where: {
+            $0.displayFingerprint.persistentIdentityKey == key
+        }) == entry {
+            return
+        }
+        panelFrames.removeAll {
+            $0.displayFingerprint.persistentIdentityKey == key
+        }
+        panelFrames.append(entry)
+        snapshotRevision += 1
+        effectHandler(.scheduleSnapshot(snapshot()))
+    }
+
     private static func normalizedTitle(_ title: String) -> String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "Lecture Teleprompter" }
@@ -676,7 +726,7 @@ final class AppModel {
         {
             selectedDisplayID = candidate.sessionID
             candidateFingerprint = candidate.fingerprint
-            effects.append(.stagePanelHidden(runtimeDisplay))
+            effects.append(.stagePanelHidden(runtimeDisplay, proposedFrame: nil))
             effects.append(.moveControllerWhileShielded(runtimeDisplay))
         } else {
             selectedDisplayID = nil
@@ -726,7 +776,7 @@ final class AppModel {
             )
             warning = warningMessage(for: evaluation.assessment)
             if display.isOnline {
-                effects.append(.stagePanelHidden(display))
+                effects.append(.stagePanelHidden(display, proposedFrame: nil))
             }
         }
         emit(effects)
@@ -832,7 +882,11 @@ final class AppModel {
         #if DEBUG
         captureFocus(label: "before show")
         #endif
-        effectHandler(.showPanel(display))
+        effectHandler(
+            .showPanel(
+                display,
+                proposedFrame: restoredFrame(for: display)
+            ))
         #if DEBUG
         captureFocus(label: "after show")
         #endif
@@ -849,6 +903,28 @@ final class AppModel {
         preferences.isLocked = locked
         snapshotRevision += 1
         emit([.setPanelLocked(locked), .scheduleSnapshot(snapshot())])
+    }
+
+    private func restoredFrame(for display: RuntimeDisplay) -> CGRect? {
+        guard let latestTopology,
+            let descriptor = latestTopology.displays.first(where: {
+                $0.sessionID == display.id
+            }),
+            topologyEvaluator.isPersistenceEligible(
+                descriptor.fingerprint,
+                in: latestTopology.displays
+            )
+        else { return nil }
+        let matches = panelFrames.filter {
+            $0.displayFingerprint.relationship(to: descriptor.fingerprint) == .match
+        }
+        guard matches.count == 1, let normalized = matches.first?.frame else { return nil }
+        return CGRect(
+            PanelFramePolicy().restore(
+                normalized,
+                in: DisplayRect(display.visibleFrame)
+            )
+        )
     }
 
     private func applyPrivacyDirectives(_ directives: [PrivacyDirective]) -> [AppEffect] {
@@ -877,7 +953,11 @@ final class AppModel {
                 externalEffects.append(.evaluatePrivacy)
             case .moveWindowsWhileShielded(let screenID):
                 if let display = displays.first(where: { $0.id == screenID }) {
-                    externalEffects.append(.stagePanelHidden(display))
+                    externalEffects.append(
+                        .stagePanelHidden(
+                            display,
+                            proposedFrame: restoredFrame(for: display)
+                        ))
                     externalEffects.append(.moveControllerWhileShielded(display))
                 }
             case .requestConfirmation:
@@ -958,7 +1038,7 @@ final class AppModel {
             .keepScriptHidden, .completeShieldedMove, .readerResyncRequested:
             return true
         case .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
-            .setTextAlignment, .setActiveBandEnabled, .requestClear,
+            .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,
             .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .showOverlay, .setLocked,
             .restore, .restoreFailed, .selectDisplay, .confirmSelectedDisplay:
@@ -991,17 +1071,21 @@ final class AppModel {
         overlayController: OverlayPanelController
     ) {
         switch effect {
-        case .stagePanelHidden(let display):
+        case .stagePanelHidden(let display, let proposedFrame):
             overlayController.stageHidden(
-                proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
+                proposedFrame: proposedFrame
+                    ?? overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame,
-                fullFrame: display.frame
+                fullFrame: display.frame,
+                displayID: display.id
             )
-        case .showPanel(let display):
+        case .showPanel(let display, let proposedFrame):
             overlayController.show(
-                proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
+                proposedFrame: proposedFrame
+                    ?? overlayController.defaultFrame(on: display.visibleFrame),
                 on: display.visibleFrame,
-                fullFrame: display.frame
+                fullFrame: display.frame,
+                displayID: display.id
             )
         case .hidePanel:
             overlayController.hide()

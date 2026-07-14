@@ -18,6 +18,7 @@ enum AppCommand {
     case setFontSize(Double)
     case setTextAlignment(TeleprompterTextAlignment)
     case setActiveBandEnabled(Bool)
+    case panelFrameChanged(displayID: UInt32, frame: CGRect)
     case requestClear
     case confirmClear(token: ClearToken)
     case cancelClear
