@@ -297,9 +297,9 @@ if observed != declared:
 required_kinds = [
     "carbonReceived",
     "mainDispatchBegan",
-    "focusImmediate",
     "commandBefore",
     "commandAfter",
+    "focusImmediate",
     "focusNextMainRunLoop",
     "focusDelayed100Milliseconds",
     "focusDelayed500Milliseconds",

@@ -109,9 +109,9 @@ for index, command in enumerate(("showOverlay", "hideOverlay", "showOverlay"), 1
     correlation_id = f"generated-h-{index}"
     add("carbonReceived", correlation_id=correlation_id)
     add("mainDispatchBegan", correlation_id=correlation_id)
-    add("focusImmediate", correlation_id=correlation_id)
     add("commandBefore", {"command": command}, correlation_id)
     add("commandAfter", {"command": command}, correlation_id)
+    add("focusImmediate", correlation_id=correlation_id)
     add("focusNextMainRunLoop", correlation_id=correlation_id)
     add("focusDelayed100Milliseconds", correlation_id=correlation_id)
     add("focusDelayed500Milliseconds", correlation_id=correlation_id)
