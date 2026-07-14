@@ -3,6 +3,8 @@ import TeleprompterCore
 
 /// Immutable work emitted only after `AppModel` commits authoritative state.
 enum AppEffect: Equatable {
+    case applyReaderEdit(ScriptTextEdit)
+    case replaceReader(text: String, revision: UInt64, reason: ReaderFullReplacementReason)
     case scheduleSnapshot(PersistedSnapshot)
     case flushSnapshot(token: ClearToken, requiredRevision: UInt64)
     case saveSnapshotImmediately(PersistedSnapshot)

@@ -12,6 +12,8 @@ struct ClearToken: Equatable, Hashable, Sendable {
 
 enum AppCommand {
     case replaceScript(text: String)
+    case applyScriptEdit(ScriptTextEdit)
+    case readerResyncRequested(appliedRevision: UInt64)
     case requestClear
     case confirmClear(token: ClearToken)
     case cancelClear

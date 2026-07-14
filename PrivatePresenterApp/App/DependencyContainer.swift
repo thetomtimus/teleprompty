@@ -12,6 +12,10 @@ final class AppEffectAdapter {
     private var isTerminationDraining = false
     private var terminalFlushStarted = false
     private var terminalFlushSucceeded = false
+    #if DEBUG
+    private var handleDepth = 0
+    private(set) var maximumHandleDepth = 0
+    #endif
     private let terminationFlushOverride: (@Sendable () async -> Bool)?
     #if DEBUG
     private let diagnosticRecorder: DiagnosticEvidenceRecorder?
@@ -63,9 +67,17 @@ final class AppEffectAdapter {
     func connect(model: AppModel, controller: ControllerWindowController) {
         self.model = model
         controllerWindowController = controller
+        overlayController.readerTextSystem.onResyncRequested = { [weak model] revision in
+            model?.send(.readerResyncRequested(appliedRevision: revision))
+        }
     }
 
     func handle(_ effect: AppEffect) {
+        #if DEBUG
+        handleDepth += 1
+        maximumHandleDepth = max(maximumHandleDepth, handleDepth)
+        defer { handleDepth -= 1 }
+        #endif
         #if DEBUG
         let correlationID = model?.diagnosticCorrelationID
         diagnosticRecorder?.record(
@@ -75,6 +87,14 @@ final class AppEffectAdapter {
         )
         #endif
         switch effect {
+        case .applyReaderEdit(let edit):
+            overlayController.readerTextSystem.apply(edit)
+        case .replaceReader(let text, let revision, let reason):
+            overlayController.readerTextSystem.replaceAuthoritatively(
+                text: text,
+                revision: revision,
+                reason: reason
+            )
         case .scheduleSnapshot(let snapshot):
             enqueuePersistence { store in
                 try await store.scheduleSave(snapshot)

@@ -50,6 +50,8 @@ final class AppModel {
     @ObservationIgnored private var candidateFingerprint: DisplayFingerprint?
     @ObservationIgnored private var pendingClear: PendingClear?
     @ObservationIgnored private var pendingShieldedMoveDisplayID: UInt32?
+    @ObservationIgnored private var pendingCommands: [AppCommand] = []
+    @ObservationIgnored private var isDrainingCommands = false
 
     private struct PendingClear {
         enum Phase: Equatable {
@@ -163,10 +165,32 @@ final class AppModel {
 
     func send(_ command: AppCommand) {
         guard acceptsDuringTermination(command) else { return }
-        commandDispatchCount += 1
+        pendingCommands.append(command)
+        guard !isDrainingCommands else { return }
+
+        isDrainingCommands = true
+        defer { isDrainingCommands = false }
+        while !pendingCommands.isEmpty {
+            let next = pendingCommands.removeFirst()
+            guard acceptsDuringTermination(next) else { continue }
+            commandDispatchCount += 1
+            reduce(next)
+        }
+    }
+
+    private func reduce(_ command: AppCommand) {
         switch command {
         case .replaceScript(let text):
             replaceScript(text)
+        case .applyScriptEdit(let edit):
+            applyScriptEdit(edit)
+        case .readerResyncRequested:
+            effectHandler(
+                .replaceReader(
+                    text: document.text,
+                    revision: document.revision,
+                    reason: .resync
+                ))
         case .requestClear:
             requestClear()
         case .confirmClear(let token):
@@ -381,14 +405,30 @@ final class AppModel {
 
     private func replaceScript(_ text: String) {
         guard text != document.text else { return }
+        guard let edit = try? ScriptTextEdit.replacing(
+            in: document.text,
+            range: UTF16TextRange(location: 0, length: document.text.utf16.count),
+            with: text,
+            baseRevision: document.revision
+        ) else { return }
+        applyScriptEdit(edit)
+    }
+
+    private func applyScriptEdit(_ edit: ScriptTextEdit) {
+        guard let updatedText = try? edit.applying(
+            to: document.text,
+            revision: document.revision
+        ) else { return }
         localError = nil
         invalidatePendingClearForDurableChange()
-        document.text = text
-        document.revision += 1
+        document.text = updatedText
+        document.revision = edit.revision
         document.updatedAt = now()
-        overlaySession.readingAnchor = overlaySession.readingAnchor.clamped(to: text)
+        overlaySession.readingAnchor = overlaySession.readingAnchor.clamped(to: updatedText)
         snapshotRevision += 1
-        effectHandler(.scheduleSnapshot(snapshot()))
+        let persistedSnapshot = snapshot()
+        effectHandler(.applyReaderEdit(edit))
+        effectHandler(.scheduleSnapshot(persistedSnapshot))
     }
 
     private func requestClear() {
@@ -446,7 +486,14 @@ final class AppModel {
         overlaySession.readingAnchor = ReadingAnchor()
         overlaySession.pixelOffset = 0
         overlaySession.playbackPhase = .paused
-        effectHandler(.saveSnapshotImmediately(snapshot()))
+        let persistedSnapshot = snapshot()
+        effectHandler(
+            .replaceReader(
+                text: document.text,
+                revision: document.revision,
+                reason: .clear
+            ))
+        effectHandler(.saveSnapshotImmediately(persistedSnapshot))
     }
 
     private func startPlayback() {
@@ -495,6 +542,11 @@ final class AppModel {
         emit([
             .reassessPrivacy,
             .setPanelLocked(preferences.isLocked),
+            .replaceReader(
+                text: document.text,
+                revision: document.revision,
+                reason: .restore
+            ),
         ])
     }
 
@@ -828,9 +880,9 @@ final class AppModel {
         switch command {
         case .completePreClearFlush, .pause, .hideOverlay, .flushPersistence,
             .topologyWillChange, .displayInventoryLoaded, .displayInventoryFailed,
-            .keepScriptHidden, .completeShieldedMove:
+            .keepScriptHidden, .completeShieldedMove, .readerResyncRequested:
             return true
-        case .replaceScript, .requestClear, .confirmClear, .cancelClear,
+        case .replaceScript, .applyScriptEdit, .requestClear, .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .showOverlay, .setLocked,
             .restore, .restoreFailed, .selectDisplay, .confirmSelectedDisplay:
             return false
@@ -878,7 +930,8 @@ final class AppModel {
             overlayController.hide()
         case .setPanelLocked(let locked):
             overlayController.setLocked(locked)
-        case .scheduleSnapshot, .flushSnapshot, .saveSnapshotImmediately,
+        case .applyReaderEdit, .replaceReader, .scheduleSnapshot,
+            .flushSnapshot, .saveSnapshotImmediately,
             .flushPersistence, .moveControllerWhileShielded, .resetViewport,
             .reassessPrivacy, .queryTopology, .evaluatePrivacy:
             break
@@ -921,6 +974,7 @@ extension PrivacyDirective {
 extension AppEffect {
     var diagnosticName: DiagnosticEffectName {
         switch self {
+        case .applyReaderEdit, .replaceReader: .other
         case .stagePanelHidden: .stagePanelHidden
         case .showPanel: .showPanel
         case .hidePanel: .hidePanel

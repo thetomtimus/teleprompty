@@ -46,6 +46,7 @@ struct OverlayAppliedFrameRecord: Equatable, Sendable {
 final class OverlayPanelController: NSWindowController {
     let teleprompterPanel: TeleprompterPanel
     let interactionController: ClampedPanelInteractionController
+    let readerTextSystem: ReaderTextSystem
     private(set) var selectedFullScreenFrame: NSRect?
     private(set) var selectedVisibleScreenFrame: NSRect?
     private(set) var selectedScreenFrame: NSRect?
@@ -99,6 +100,7 @@ final class OverlayPanelController: NSWindowController {
     ) {
         let panel = TeleprompterPanel(contentRect: initialFrame, proofLevel: proofLevel)
         teleprompterPanel = panel
+        readerTextSystem = ReaderTextSystem(text: "", revision: 0)
         #if DEBUG
         orderingMode = orderingModeObject as? OverlayPanelOrderingMode ?? .frontRegardless
         #endif
