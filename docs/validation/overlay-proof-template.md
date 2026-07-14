@@ -49,7 +49,7 @@
 - Screen selected in Private Presenter:
 - Candidate levels: `.floating`, `.statusBar` only
 - Candidate ordering modes: `front`, `frontRegardless` only
-- Phase B source defaults: `.floating` / `frontRegardless`
+- Phase B source defaults: `.statusBar` / `frontRegardless`
 - Phase A controller cohorts: `visibleDesktopSpace`, `orderedOut`
 - Phase A repetitions: `1`, `2`, `3`
 - Diagnostic show/hide chord: `Control-Option-H` (DEBUG only)

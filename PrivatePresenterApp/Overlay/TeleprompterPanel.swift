@@ -40,7 +40,7 @@ struct OverlayConfigurationCandidate: Equatable, Sendable {
 enum OverlayConfigurationSelector {
     static func select(
         from candidates: [OverlayConfigurationCandidate],
-        sourceDefaultLevel: OverlayPanelLevel = .floating,
+        sourceDefaultLevel: OverlayPanelLevel = .statusBar,
         sourceDefaultOrdering: OverlayPanelOrderingMode = .frontRegardless
     ) -> OverlayConfigurationCandidate? {
         let passing = candidates.filter(\.completePass)
@@ -73,7 +73,7 @@ class TeleprompterPanel: NSPanel {
     private(set) var isOverlayLocked = false
     var containmentFrame: NSRect?
 
-    init(contentRect: NSRect, proofLevel: OverlayPanelLevel = .floating) {
+    init(contentRect: NSRect, proofLevel: OverlayPanelLevel = .statusBar) {
         super.init(
             contentRect: contentRect,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -94,9 +94,10 @@ class TeleprompterPanel: NSPanel {
         titlebarAppearsTransparent = true
     }
 
-    override var canBecomeKey: Bool {
-        !isOverlayLocked && NSApp.isActive
-    }
+    /// Custom drag/resize gestures never require key-window status. Keeping the
+    /// panel permanently non-key prevents an unlocked pointer gesture from
+    /// activating Private Presenter over the presentation application.
+    override var canBecomeKey: Bool { false }
 
     override var canBecomeMain: Bool { false }
 

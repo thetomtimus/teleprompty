@@ -62,6 +62,7 @@ REQUIRED_PATHS = (
     "PrivatePresenterUITests/PrivatePresenterUITestShell.swift",
     "docs/validation/source-artifact-checksums.sha256",
     "docs/validation/overlay-proof-template.md",
+    "docs/validation/m0-phase-b-physical-selection-2026-07-14.md",
 )
 
 PROJECT_MARKERS = (
@@ -183,8 +184,8 @@ PHASE_A_NAMED_TESTS = (
     "testOrderedOutCohortQuitDoesNotPresentOrOrderController",
     "testOrderingModesAreExactlyFrontAndFrontRegardless",
     "testBothOrderingModesAvoidKeyMainAndExplicitActivation",
-    "testDefaultProofLevelUsesLowestPassingFloatingEvidence",
-    "testDefaultOrderingRemainsFrontRegardlessUntilPhysicalEvidence",
+    "testDefaultProofLevelUsesLowestPhysicallyPassingStatusBarEvidence",
+    "testDefaultOrderingRetainsFrontRegardlessAfterPhysicalEvidence",
     "testOrderingSelectionChoosesOnlyPassingMode",
     "testOrderingSelectionRetainsCurrentSourceDefaultWhenBothModesAreEquivalent",
     "testOrderingSelectionUsesSafetyVectorBeforeDefaultTieBreak",
@@ -227,7 +228,7 @@ PHASE_B_NAMED_TESTS = (
     "testNonDrawableOnlineMirrorStillUsesExactWarningAndCannotBeBypassed",
     "testTopologyPlacementNeverPresentsNormalController",
     "testHLockTopologyDragAndResizeNeverOrderControllerOnScreen",
-    "testDefaultProofLevelUsesLowestPassingFloatingEvidence",
+    "testDefaultProofLevelUsesLowestPhysicallyPassingStatusBarEvidence",
     "testLevelSelectionRetainsFloatingBeforeComparingStatusBarSafety",
 )
 
@@ -263,7 +264,7 @@ NAMED_TESTS = (
     "testPanelJoinsAllSpacesAsFullScreenAuxiliary",
     "testPanelUsesBoundedLevel",
     "testLockedPanelIgnoresMouseAndCannotBecomeKeyOrMain",
-    "testUnlockedPanelRestoresInteraction",
+    "testUnlockedPanelRestoresInteractionWithoutAcceptingKey",
     "testShowDoesNotActivateApplication",
     "testReadingSurfaceInteriorIsOpaque",
     "testControllerCreatesExactlyOnePanel",

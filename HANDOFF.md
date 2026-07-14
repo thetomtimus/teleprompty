@@ -1,9 +1,11 @@
 # Private Presenter — Milestone 0 Phase B Mac Handoff
 
-Milestone 0 Phase A is complete. Its 24/24 valid diagnostic matrix and retained
-causal decision established `.floating + frontRegardless` as the lowest bounded
-default candidate without adding a focus workaround, Carbon target change, or
-activation-policy change.
+Milestone 0 Phase A is complete. Its 24/24 valid diagnostic matrix proposed
+`.floating + frontRegardless` as the lowest bounded candidate without adding a
+focus workaround, Carbon target change, or activation-policy change. The first
+Phase B physical screenshot then eliminated `.floating`: it ordered internally
+but remained visually behind Keynote Presenter Display. `.statusBar +
+frontRegardless` is therefore the lowest physically visible bounded candidate.
 
 Phase B implements only the stabilization surfaces authorized by that result:
 
@@ -17,7 +19,7 @@ Phase B implements only the stabilization surfaces authorized by that result:
 - the rounded reading interior has rendered opacity coverage;
 - mirroring, disconnect, reconnect, pending-show, and stale-frame recovery fail
   closed without automatically revealing or resuming content; and
-- the retained bounded default is `.floating + frontRegardless`.
+- the retained bounded default is `.statusBar + frontRegardless`.
 
 This handoff still stops before every M2 editor, reader, and scrolling surface.
 M2 is unlocked only by the complete Mac automation, exact-binary focused smoke,
@@ -31,7 +33,8 @@ plan and proof template.
   `docs/validation/m0-phase-a-causal-decision-2026-07-14.md`
 - Result: 24/24 valid cells, no reproduced focus theft, no controller
   presentation during H, no Carbon or activation-policy correction selected
-- Candidate retained for Phase B: `.floating + frontRegardless`
+- Phase A candidate: `.floating + frontRegardless`
+- Phase B physical candidate: `.statusBar + frontRegardless`
 
 Do not overwrite the Phase A evidence or the historical 14,486-byte prefix of
 `docs/validation/overlay-proof-result.md`.
@@ -94,7 +97,7 @@ Do not rebuild between focused smoke and the physical gate.
 
 ## Focused Phase B smoke
 
-Use the source-default `.floating + frontRegardless` configuration. Enter a
+Use the source-default `.statusBar + frontRegardless` configuration. Enter a
 fresh Keynote full-screen presentation in extended-display mode, then exercise:
 
 1. H show, H hide, H show;

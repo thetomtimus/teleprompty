@@ -17,7 +17,7 @@ enum PrivatePresenterApplication {
             )
         )
         #else
-        let runtime = AppRuntime(proofLevel: .floating)
+        let runtime = AppRuntime(proofLevel: .statusBar)
         #endif
         let delegate = AppDelegate(runtime: runtime)
         application.setActivationPolicy(.regular)

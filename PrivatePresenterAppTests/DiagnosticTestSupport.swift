@@ -3,7 +3,7 @@ import Foundation
 @testable import PrivatePresenter
 
 func makeDiagnosticConfiguration(
-    level: OverlayPanelLevel = .floating,
+    level: OverlayPanelLevel = .statusBar,
     ordering: OverlayPanelOrderingMode = .frontRegardless,
     cohort: DiagnosticControllerCohort = .orderedOut,
     repetition: String = "1"

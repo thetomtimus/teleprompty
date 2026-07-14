@@ -60,7 +60,7 @@ final class OverlayPanelController: NSWindowController {
     #if DEBUG
     convenience init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
-        proofLevel: OverlayPanelLevel = .floating,
+        proofLevel: OverlayPanelLevel = .statusBar,
         orderingMode: OverlayPanelOrderingMode = .frontRegardless,
         operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in },
         appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void = { _ in }
@@ -76,7 +76,7 @@ final class OverlayPanelController: NSWindowController {
     #else
     convenience init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
-        proofLevel: OverlayPanelLevel = .floating,
+        proofLevel: OverlayPanelLevel = .statusBar,
         operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in },
         appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void = { _ in }
     ) {

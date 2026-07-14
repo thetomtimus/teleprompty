@@ -310,7 +310,7 @@ struct DiagnosticEventEnvelope: Codable, Equatable, Sendable {
 }
 
 struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
-    static let defaultLevel = OverlayPanelLevel.floating
+    static let defaultLevel = OverlayPanelLevel.statusBar
     static let defaultOrdering = OverlayPanelOrderingMode.frontRegardless
 
     let implementationCommit: String

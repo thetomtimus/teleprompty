@@ -95,12 +95,12 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         XCTAssertFalse(panel.canBecomeMain)
     }
 
-    func testUnlockedPanelRestoresInteraction() {
+    func testUnlockedPanelRestoresInteractionWithoutAcceptingKey() {
         let panel = makeController().teleprompterPanel
         panel.setLocked(true)
         panel.setLocked(false)
         XCTAssertFalse(panel.ignoresMouseEvents)
-        XCTAssertEqual(panel.canBecomeKey, NSApp.isActive)
+        XCTAssertFalse(panel.canBecomeKey)
         XCTAssertFalse(panel.canBecomeMain)
     }
 
@@ -191,12 +191,12 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         }
     }
 
-    func testDefaultProofLevelUsesLowestPassingFloatingEvidence() {
-        XCTAssertEqual(DiagnosticProofConfiguration.defaultLevel, .floating)
-        XCTAssertEqual(OverlayPanelController().configurationSnapshot.level, "floating")
+    func testDefaultProofLevelUsesLowestPhysicallyPassingStatusBarEvidence() {
+        XCTAssertEqual(DiagnosticProofConfiguration.defaultLevel, .statusBar)
+        XCTAssertEqual(OverlayPanelController().configurationSnapshot.level, "statusBar")
     }
 
-    func testDefaultOrderingRemainsFrontRegardlessUntilPhysicalEvidence() {
+    func testDefaultOrderingRetainsFrontRegardlessAfterPhysicalEvidence() {
         XCTAssertEqual(DiagnosticProofConfiguration.defaultOrdering, .frontRegardless)
         XCTAssertEqual(OverlayPanelController().orderingMode, .frontRegardless)
     }

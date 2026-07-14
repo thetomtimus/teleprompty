@@ -97,7 +97,7 @@ final class AppRuntime {
 
     #if DEBUG
     convenience init(
-        proofLevel: OverlayPanelLevel = .floating,
+        proofLevel: OverlayPanelLevel = .statusBar,
         diagnosticConfiguration: DiagnosticProofConfiguration? = nil,
         diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder? = nil,
         enforcesDiagnosticControllerCohort: Bool = true,
@@ -115,7 +115,7 @@ final class AppRuntime {
     }
     #else
     convenience init(
-        proofLevel: OverlayPanelLevel = .floating,
+        proofLevel: OverlayPanelLevel = .statusBar,
         dependencies: DependencyContainer? = nil,
         startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
     ) {
