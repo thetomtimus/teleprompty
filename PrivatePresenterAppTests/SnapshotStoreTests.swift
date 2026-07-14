@@ -106,6 +106,26 @@ final class SnapshotStoreTests: XCTestCase {
         XCTAssertEqual(parentSyncFileSystem.parentSynchronizationFailureCount, 1)
     }
 
+    func testRapidEditsDebounceToLatestSnapshot() async throws {
+        let fileSystem = RecordingSnapshotFileSystem()
+        let sleeper = ControlledSnapshotSleeper()
+        let store = makeStore(fileSystem: fileSystem, sleeper: sleeper)
+
+        try await store.scheduleSave(makeSnapshot(revision: 1, text: "Generated one"))
+        try await store.scheduleSave(makeSnapshot(revision: 2, text: "Generated two"))
+        try await store.scheduleSave(makeSnapshot(revision: 3, text: "Generated latest"))
+        await waitForWaiters(sleeper, count: 3)
+        await sleeper.resumeAll()
+        await waitForCommit(fileSystem, count: 1)
+
+        XCTAssertEqual(fileSystem.committedRevisions, [3])
+        let restored = try PersistedSnapshot.canonicalDecoder().decode(
+            PersistedSnapshot.self,
+            from: try XCTUnwrap(fileSystem.destinationData)
+        )
+        XCTAssertEqual(restored.document.text, "Generated latest")
+    }
+
     func testDebounceCoalescesRapidEdits() async throws {
         let fileSystem = RecordingSnapshotFileSystem()
         let sleeper = ControlledSnapshotSleeper()

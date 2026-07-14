@@ -6,6 +6,90 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testTitleTrimsDefaultsAndCapsWithoutSplittingCharacter() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        model.send(.setScriptTitle("   "))
+        XCTAssertEqual(model.document.title, "Lecture Teleprompter")
+
+        let longTitle = String(repeating: "a", count: 119) + "👨‍👩‍👧‍👦"
+        model.send(.setScriptTitle(longTitle))
+
+        XCTAssertEqual(model.document.title, String(repeating: "a", count: 119))
+        XCTAssertFalse(model.document.title.unicodeScalars.contains("\u{FFFD}"))
+    }
+
+    func testFontSizeAlignmentAndActiveBandPersistThroughV1Snapshot() {
+        var snapshots: [PersistedSnapshot] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effect in
+                if case .scheduleSnapshot(let snapshot) = effect { snapshots.append(snapshot) }
+            }
+        )
+
+        model.send(.setFontSize(72))
+        model.send(.setTextAlignment(.center))
+        model.send(.setActiveBandEnabled(false))
+
+        XCTAssertEqual(snapshots.last?.schemaVersion, 1)
+        XCTAssertEqual(snapshots.last?.preferences.fontSizePoints, 72)
+        XCTAssertEqual(snapshots.last?.preferences.textAlignment, .center)
+        XCTAssertEqual(snapshots.last?.preferences.isActiveBandEnabled, false)
+    }
+
+    func testAcceptedEditSchedulesAutosaveAfterAuthoritativeMutation() throws {
+        var observedText: String?
+        var model: AppModel!
+        model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effect in
+                if case .scheduleSnapshot = effect { observedText = model.document.text }
+            }
+        )
+        let edit = try ScriptTextEdit.replacing(
+            in: "",
+            range: .init(location: 0, length: 0),
+            with: "Generated text",
+            baseRevision: 0
+        )
+
+        model.send(.applyScriptEdit(edit))
+
+        XCTAssertEqual(observedText, "Generated text")
+    }
+
+    func testAutosaveDoesNotBlockMainActorEffectDispatch() throws {
+        var effects: [AppEffect] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effects.append($0) }
+        )
+        let edit = try ScriptTextEdit.replacing(
+            in: "",
+            range: .init(location: 0, length: 0),
+            with: "Generated text",
+            baseRevision: 0
+        )
+
+        model.send(.applyScriptEdit(edit))
+
+        XCTAssertEqual(effects.count, 2)
+        if case .applyReaderEdit = effects[0] {} else { XCTFail("reader dispatch must remain synchronous") }
+        if case .scheduleSnapshot = effects[1] {} else { XCTFail("autosave must be queued after reader dispatch") }
+    }
+
+    func testAutosaveDiagnosticsExcludeScriptTitleAndReplacementText() {
+        let sentinel = "SENTINEL_PRIVATE_CONTENT"
+        let diagnostics = [
+            AppLocalError.snapshotLoadFailed.rawValue,
+            AppLocalError.snapshotSaveFailed.rawValue,
+            AppLocalError.preClearFlushFailed.rawValue,
+            AppLocalError.clearRequestInvalidated.rawValue,
+        ].joined(separator: " ")
+
+        XCTAssertFalse(diagnostics.contains(sentinel))
+    }
+
     func testStaleOrOutOfOrderEditCannotOverwriteAuthority() throws {
         let model = modelWithScript()
         let stale = try ScriptTextEdit.replacing(

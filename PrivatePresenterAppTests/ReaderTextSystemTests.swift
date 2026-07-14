@@ -219,6 +219,20 @@ final class ReaderTextSystemTests: XCTestCase {
         XCTAssertGreaterThan(reader.textView.textContainer?.containerSize.height ?? 0, 10_000)
     }
 
+    func testStaticReaderClipRejectsViewportMovement() {
+        let clipView = StaticReaderClipView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 360)
+        )
+        clipView.documentView = NSView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 2_000)
+        )
+        let initialOrigin = clipView.bounds.origin
+
+        clipView.scroll(to: NSPoint(x: 0, y: 200))
+
+        XCTAssertEqual(clipView.bounds.origin, initialOrigin)
+    }
+
     func testActiveBandToggleDoesNotMutateReaderText() {
         let reader = ReaderTextSystem(text: "immutable", revision: 0)
         reader.setActiveBandEnabled(false)
