@@ -305,3 +305,29 @@
 ## Stop rule outcome
 
 Milestone 0 remains blocked. Do not begin Milestone 1 from this result.
+
+---
+
+## Owner-approved transition record — 2026-07-14
+
+The immutable historical result above remains unchanged. On 2026-07-14, the
+project owner explicitly approved moving into M2 based on the current exact
+proof-build run and the observed extended-display behavior. This is an owner
+waiver of the remaining formal matrix breadth, not a claim that every
+historical M0 row was rerun.
+
+- Transition decision: `M2 APPROVED BY OWNER`
+- Source/proof commit: `06d7d5ff77305bed7bbab8656553a52c8fb5141f`
+- Proof executable SHA-256: `7b01662ab57a4b38cc1472b3e38a9bc813141b83e8d8480d1d6f5d02f253d07a`
+- Build-log SHA-256: `719f6d9b3868a918094d7c4e72f2c224d8ff7dd3770fa7b97b748131a2a9c655`
+- Accepted diagnostic evidence: `/Users/thomas/Library/Application Support/Private Presenter/Validation/709f59a3-c23f-4ab3-a51f-012d69e1e177/overlay-diagnostics.txt`
+- Verified behavior: Keynote slideshow remained frontmost; the overlay appeared
+  only on the built-in presenter display; the external audience display stayed
+  clean; H/L, Space/arrows, drag, all eight resize zones, mirroring shielding,
+  and disconnect/reconnect fresh-confirmation behavior were exercised.
+- Deferred evidence: ordered-out cohort, three cold repetitions per cohort,
+  and any remaining human-only remote/photo evidence may be completed during
+  M2 hardening if needed.
+
+M2 work may begin from this transition record. Future release/readiness claims
+must not describe the deferred items as completed until they are actually run.
