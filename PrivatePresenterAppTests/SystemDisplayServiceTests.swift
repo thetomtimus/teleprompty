@@ -6,6 +6,80 @@ import XCTest
 
 @MainActor
 final class SystemDisplayServiceTests: XCTestCase {
+    func testMapsNSScreenNumberToSessionID() throws {
+        XCTAssertEqual(
+            try SystemDisplayService.sessionID(fromScreenNumber: NSNumber(value: UInt32(42))),
+            42
+        )
+    }
+
+    func testMissingOrWrongTypedNSScreenNumberFailsClosed() {
+        XCTAssertThrowsError(try SystemDisplayService.sessionID(fromScreenNumber: nil))
+        XCTAssertThrowsError(try SystemDisplayService.sessionID(fromScreenNumber: "42"))
+    }
+
+    func testZeroSessionIDFailsClosed() {
+        XCTAssertThrowsError(
+            try SystemDisplayService.sessionID(fromScreenNumber: NSNumber(value: UInt32(0)))
+        ) { error in
+            XCTAssertEqual(error as? DisplayQueryError, .invalidScreenNumber)
+        }
+    }
+
+    func testBuildsFingerprintFromUUIDAndHardware() {
+        let fingerprint = SystemDisplayService.fingerprint(
+            localizedName: "Generated Display",
+            facts: DisplayHardwareFacts(
+                isBuiltIn: false,
+                mirrorSourceID: nil,
+                isInMirrorSet: false,
+                persistentUUID: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+                vendorID: 0,
+                modelID: 2,
+                serialNumber: 0
+            )
+        )
+
+        XCTAssertEqual(fingerprint.uuid, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        XCTAssertNil(fingerprint.vendorID)
+        XCTAssertEqual(fingerprint.modelID, 2)
+        XCTAssertNil(fingerprint.serialNumber)
+        XCTAssertNotNil(fingerprint.persistentIdentityKey)
+    }
+
+    func testDuplicateDrawableSessionIDsFailClosed() {
+        XCTAssertThrowsError(
+            try inventory(
+                drawable: [display(id: 1), display(id: 1)],
+                online: [1],
+                facts: [1: facts(id: 1)]
+            )
+        ) { error in
+            XCTAssertEqual(error as? DisplayQueryError, .duplicateDrawableSessionID(1))
+        }
+    }
+
+    func testDuplicateOnlineSessionIDsFailClosed() {
+        XCTAssertThrowsError(
+            try inventory(
+                drawable: [display(id: 1)],
+                online: [1, 1],
+                facts: [1: facts(id: 1)]
+            )
+        )
+    }
+
+    func testQueryFailureIsUnsafe() {
+        struct QueryFailure: Error {}
+        let service = SystemDisplayService(
+            drawableDisplayQuery: { [self.display(id: 1)] },
+            onlineDisplayQuery: { throw QueryFailure() },
+            hardwareFactsQuery: { self.facts(id: $0) }
+        )
+
+        XCTAssertThrowsError(try service.currentInventory())
+    }
+
     func testRuntimeInventoryRequiresDrawableDestinationsAndTopology() throws {
         let drawable = display(id: 1)
         let topology = DisplayTopologySnapshot(

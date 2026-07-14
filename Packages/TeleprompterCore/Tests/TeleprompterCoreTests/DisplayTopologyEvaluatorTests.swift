@@ -3,6 +3,228 @@ import XCTest
 @testable import TeleprompterCore
 
 final class DisplayTopologyEvaluatorTests: XCTestCase {
+    func testQueryFailureIsUnsafe() {
+        let result = evaluate(displays: [], querySucceeded: false)
+
+        XCTAssertEqual(result.assessment, .systemQueryFailed)
+        XCTAssertTrue(result.recovery.mustPause)
+        XCTAssertTrue(result.recovery.mustHide)
+        XCTAssertFalse(result.canOpenOverlay)
+    }
+
+    func testDuplicateZeroSerialDisplaysAreAmbiguous() {
+        let ambiguous = DisplayFingerprint(
+            uuid: nil,
+            vendorID: 10,
+            modelID: 20,
+            serialNumber: 0,
+            isBuiltIn: false,
+            lastLocalizedName: "Generated Display",
+            confidence: .weak
+        )
+        let first = display(id: 10, name: "Generated Display A", fingerprint: ambiguous)
+        let second = display(id: 11, name: "Generated Display B", fingerprint: ambiguous)
+
+        let result = evaluate(
+            displays: [first, second],
+            selection: .init(fingerprint: ambiguous, isConfirmed: true)
+        )
+
+        XCTAssertEqual(result.assessment, .ambiguousIdentity)
+        XCTAssertTrue(result.recovery.requiresExplicitConfirmation)
+        XCTAssertFalse(result.canOpenOverlay)
+        XCTAssertNil(ambiguous.persistentIdentityKey)
+    }
+
+    func testZeroVendorModelAndSerialAreNotStrongIdentity() {
+        let fingerprint = DisplayFingerprint(
+            uuid: nil,
+            vendorID: 0,
+            modelID: 0,
+            serialNumber: 0,
+            isBuiltIn: false,
+            lastLocalizedName: "Generated Display",
+            confidence: .strong
+        )
+
+        XCTAssertNil(fingerprint.normalized.vendorID)
+        XCTAssertNil(fingerprint.normalized.modelID)
+        XCTAssertNil(fingerprint.normalized.serialNumber)
+        XCTAssertNil(fingerprint.persistentIdentityKey)
+    }
+
+    func testLocalizedNameDoesNotOverrideHardwareConflict() {
+        let selected = DisplayFingerprint(
+            uuid: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "Same Name",
+            confidence: .strong
+        )
+        let current = DisplayFingerprint(
+            uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            vendorID: 1,
+            modelID: 999,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "Same Name",
+            confidence: .strong
+        )
+
+        XCTAssertEqual(current.relationship(to: selected), .conflict)
+    }
+
+    func testCompleteHardwareFallbackRequiresMeaningfulSerial() {
+        let selected = DisplayFingerprint(
+            uuid: nil,
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "Old Name",
+            confidence: .medium
+        )
+        let renamed = DisplayFingerprint(
+            uuid: nil,
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "New Name",
+            confidence: .medium
+        )
+        var incomplete = renamed
+        incomplete.serialNumber = 0
+
+        XCTAssertEqual(renamed.relationship(to: selected), .match)
+        XCTAssertEqual(incomplete.relationship(to: selected), .ambiguous)
+    }
+
+    func testCompleteHardwareFallbackMatchesWhenOnlyOneSideHasUUID() {
+        let selected = DisplayFingerprint(
+            uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "Old Name",
+            confidence: .strong
+        )
+        var current = selected
+        current.uuid = nil
+        current.lastLocalizedName = "New Name"
+
+        XCTAssertEqual(current.relationship(to: selected), .match)
+        XCTAssertEqual(selected.relationship(to: current), .match)
+
+        current.modelID = 999
+        XCTAssertEqual(current.relationship(to: selected), .noMatch)
+        XCTAssertEqual(selected.relationship(to: current), .noMatch)
+    }
+
+    func testExplicitCurrentSessionChoiceDoesNotMakeDuplicateIdentityPersistable() {
+        let duplicate = fingerprint(
+            uuid: "duplicate",
+            name: "Generated Display",
+            confidence: .strong
+        )
+        let first = display(id: 50, name: "Generated Display A", fingerprint: duplicate)
+        let second = display(id: 51, name: "Generated Display B", fingerprint: duplicate)
+
+        let result = evaluate(
+            displays: [first, second],
+            selection: .init(
+                fingerprint: duplicate,
+                isConfirmed: true,
+                isConfirmedInCurrentSession: true,
+                currentSessionID: second.sessionID
+            )
+        )
+
+        XCTAssertEqual(result.assessment, .safeCandidate)
+        XCTAssertEqual(result.candidate?.sessionID, second.sessionID)
+        XCTAssertFalse(
+            DisplayTopologyEvaluator().isPersistenceEligible(
+                duplicate,
+                in: [first, second]
+            )
+        )
+    }
+
+    func testMixedUUIDAndHardwareDuplicateIsNotPersistenceEligible() {
+        let withUUID = DisplayFingerprint(
+            uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "Generated Display A",
+            confidence: .strong
+        )
+        var hardwareOnly = withUUID
+        hardwareOnly.uuid = nil
+        hardwareOnly.lastLocalizedName = "Generated Display B"
+        let displays = [
+            display(id: 60, name: "Generated Display A", fingerprint: withUUID),
+            display(id: 61, name: "Generated Display B", fingerprint: hardwareOnly),
+        ]
+        let evaluator = DisplayTopologyEvaluator()
+
+        XCTAssertFalse(evaluator.isPersistenceEligible(withUUID, in: displays))
+        XCTAssertFalse(evaluator.isPersistenceEligible(hardwareOnly, in: displays))
+    }
+
+    func testAmbiguousFingerprintCannotRestoreAcrossSessionWithoutConfirmation() {
+        let ambiguous = DisplayFingerprint(
+            uuid: nil,
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 0,
+            isBuiltIn: false,
+            lastLocalizedName: "Generated Display",
+            confidence: .weak
+        )
+        let current = display(id: 80, name: "Generated Display", fingerprint: ambiguous)
+
+        let result = evaluate(
+            displays: [current],
+            selection: .init(
+                fingerprint: ambiguous,
+                isConfirmed: true,
+                isConfirmedInCurrentSession: false
+            )
+        )
+
+        XCTAssertEqual(result.assessment, .ambiguousIdentity)
+        XCTAssertTrue(result.recovery.requiresExplicitConfirmation)
+        XCTAssertFalse(result.canOpenOverlay)
+    }
+
+    func testDistinctUUIDsRemainDistinctDespiteMatchingHardware() {
+        let first = DisplayFingerprint(
+            uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "Generated Display",
+            confidence: .strong
+        )
+        var second = first
+        second.uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+        XCTAssertEqual(first.relationship(to: second), .noMatch)
+        let displays = [
+            display(id: 70, name: "Generated Display A", fingerprint: first),
+            display(id: 71, name: "Generated Display B", fingerprint: second),
+        ]
+        let evaluator = DisplayTopologyEvaluator()
+        XCTAssertTrue(evaluator.isPersistenceEligible(first, in: displays))
+        XCTAssertTrue(evaluator.isPersistenceEligible(second, in: displays))
+    }
+
     func testMirroredSelectionBlocksOpening() {
         let privateDisplay = display(
             id: 1,
@@ -200,7 +422,7 @@ final class DisplayTopologyEvaluatorTests: XCTestCase {
         XCTAssertFalse(result.canOpenOverlay)
     }
 
-    func testConflictingUUIDWithMatchingHardwareIsAmbiguous() {
+    func testDistinctUUIDWithMatchingHardwareDoesNotMatch() {
         let selectedFingerprint = fingerprint(
             uuid: "previous-uuid",
             name: "Private Display"
@@ -224,7 +446,7 @@ final class DisplayTopologyEvaluatorTests: XCTestCase {
             )
         )
 
-        XCTAssertEqual(result.assessment, .ambiguousIdentity)
+        XCTAssertEqual(result.assessment, .selectedDisplayMissing)
         XCTAssertTrue(result.recovery.mustHide)
         XCTAssertTrue(result.recovery.requiresExplicitConfirmation)
         XCTAssertFalse(result.canOpenOverlay)

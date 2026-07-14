@@ -138,6 +138,59 @@ final class CoreStateModelTests: XCTestCase {
         XCTAssertFalse(keys.contains("recoveryConfirmationState"))
     }
 
+    func testRawDisplayIDIsNotEncoded() throws {
+        let data = try makeSnapshot().canonicalData()
+        let encoded = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertFalse(encoded.contains("sessionID"))
+        XCTAssertFalse(encoded.contains("currentSessionID"))
+        XCTAssertFalse(encoded.contains("rawDisplayID"))
+    }
+
+    func testExplicitCurrentSessionChoiceDoesNotEnterEncodedSnapshot() throws {
+        let selected = DisplaySelection(
+            fingerprint: fingerprint(uuid: "selected", serial: 9),
+            isConfirmed: true,
+            isConfirmedInCurrentSession: true,
+            currentSessionID: 4_294_967_000
+        )
+        XCTAssertEqual(selected.currentSessionID, 4_294_967_000)
+
+        let keys = try recursiveKeys(in: makeSnapshot().canonicalData())
+        XCTAssertFalse(keys.contains("sessionID"))
+        XCTAssertFalse(keys.contains("currentSessionID"))
+        XCTAssertFalse(keys.contains("isConfirmedInCurrentSession"))
+    }
+
+    func testCanonicalFrameIdentityIgnoresDisplayNameMetadata() throws {
+        let first = DisplayFingerprint(
+            uuid: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: false,
+            lastLocalizedName: "Old Name",
+            confidence: .strong
+        )
+        var renamed = first
+        renamed.lastLocalizedName = "New Name"
+        let frame = NormalizedPanelFrame(x: 0.1, y: 0.2, width: 0.3, height: 0.4)
+
+        let snapshot = makeSnapshot(
+            panelFrames: [
+                .init(displayFingerprint: first, frame: frame),
+                .init(displayFingerprint: renamed, frame: frame),
+            ]
+        )
+
+        XCTAssertThrowsError(try snapshot.canonicalData()) { error in
+            XCTAssertEqual(
+                error as? PersistedSnapshotValidationError,
+                .duplicateDisplayFingerprint
+            )
+        }
+    }
+
     func testCanonicalEncodingIsByteEqualForPermutedInput() throws {
         let firstFingerprint = fingerprint(uuid: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB", serial: 2)
         let secondFingerprint = fingerprint(uuid: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", serial: 1)
