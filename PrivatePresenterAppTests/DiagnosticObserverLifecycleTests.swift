@@ -194,10 +194,18 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
     func testPostCorrelationQuitActivationIsTaggedAndExcludedFromFocusVerdict() async {
         let harness = makeObserverHarness(
             correlationID: nil,
-            observationPhaseProvider: { .postCorrelationQuit }
+            postCorrelationQuitEligibilityProvider: { true }
         )
         harness.observers.install(panel: harness.panel, controller: harness.controller)
 
+        harness.applicationCenter.post(
+            name: NSApplication.willBecomeActiveNotification,
+            object: NSApp
+        )
+        harness.applicationCenter.post(
+            name: NSWindow.didBecomeKeyNotification,
+            object: harness.controller
+        )
         harness.applicationCenter.post(
             name: NSApplication.didBecomeActiveNotification,
             object: NSApp
@@ -210,6 +218,12 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
         }
         XCTAssertEqual(activation?.payload.observationPhase, .postCorrelationQuit)
         XCTAssertNil(activation?.correlationID)
+        XCTAssertEqual(
+            harness.recorder.sink.envelopes.first {
+                $0.payload.windowLifecycle == .didBecomeKey
+            }?.payload.observationPhase,
+            .postCorrelationQuit
+        )
         XCTAssertFalse(
             harness.recorder.sink.envelopes.contains { envelope in
                 envelope.payload.applicationLifecycle == .didBecomeActive
@@ -244,6 +258,9 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
         correlationID: UUID? = UUID(),
         observationPhaseProvider: @escaping @MainActor () -> DiagnosticObservationPhase = {
             .correlatedAction
+        },
+        postCorrelationQuitEligibilityProvider: @escaping @MainActor () -> Bool = {
+            false
         }
     ) -> ObserverHarness {
         _ = NSApplication.shared
@@ -265,6 +282,7 @@ final class DiagnosticObserverLifecycleTests: XCTestCase {
             workspaceCenter: workspaceCenter,
             correlationProvider: { correlationID },
             observationPhaseProvider: observationPhaseProvider,
+            postCorrelationQuitEligibilityProvider: postCorrelationQuitEligibilityProvider,
             focusScheduler: focusScheduler
         )
         return ObserverHarness(

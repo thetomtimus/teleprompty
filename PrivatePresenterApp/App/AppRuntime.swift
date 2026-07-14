@@ -85,8 +85,7 @@ final class AppRuntime {
     private var activeDiagnosticCorrelations: [UUID] = []
     private var currentDiagnosticCorrelationID: UUID?
     private var firstShowCohortValidated = false
-    private var hasClosedDiagnosticCorrelation = false
-    private var isNormalTerminationFinalizing = false
+    private var closedDiagnosticCorrelationCount = 0
     #endif
 
     #if DEBUG
@@ -214,7 +213,6 @@ final class AppRuntime {
         let didFlush = await dependencies.effectAdapter.flushForTermination()
         guard didFlush else { return false }
         #if DEBUG
-        isNormalTerminationFinalizing = true
         diagnosticHotKeyService.unregister()
         startupSeams.recordDiagnosticLifecycle(.unregisterHotKey)
         startupSeams.recordDiagnosticLifecycle(.drainCorrelations)
@@ -340,13 +338,10 @@ final class AppRuntime {
         return DiagnosticObserverSet(
             recorder: diagnosticEvidenceRecorder,
             correlationProvider: { [weak self] in self?.currentDiagnosticCorrelationID },
-            observationPhaseProvider: { [weak self] in
-                guard let self else { return .correlatedAction }
-                return self.isNormalTerminationFinalizing
-                    && self.hasClosedDiagnosticCorrelation
+            postCorrelationQuitEligibilityProvider: { [weak self] in
+                guard let self else { return false }
+                return self.closedDiagnosticCorrelationCount == 3
                     && self.activeDiagnosticCorrelations.isEmpty
-                    ? .postCorrelationQuit
-                    : .correlatedAction
             }
         )
     }
@@ -375,7 +370,7 @@ final class AppRuntime {
                 guard let self else { return }
                 self.activeDiagnosticCorrelations.removeAll { $0 == correlationID }
                 self.currentDiagnosticCorrelationID = self.activeDiagnosticCorrelations.last
-                self.hasClosedDiagnosticCorrelation = true
+                self.closedDiagnosticCorrelationCount += 1
             }
         )
     }

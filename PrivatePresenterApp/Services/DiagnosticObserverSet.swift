@@ -64,17 +64,20 @@ private final class DiagnosticDispatchAction: DiagnosticScheduledAction {
 final class DiagnosticObserverSet {
     typealias CorrelationProvider = @MainActor () -> UUID?
     typealias ObservationPhaseProvider = @MainActor () -> DiagnosticObservationPhase
+    typealias PostCorrelationQuitEligibilityProvider = @MainActor () -> Bool
 
     private let recorder: DiagnosticEvidenceRecorder
     private let applicationCenter: NotificationCenter
     private let workspaceCenter: NotificationCenter
     private let correlationProvider: CorrelationProvider
     private let observationPhaseProvider: ObservationPhaseProvider
+    private let postCorrelationQuitEligibilityProvider: PostCorrelationQuitEligibilityProvider
     private let focusScheduler: any DiagnosticFocusScheduler
     private var applicationTokens: [NSObjectProtocol] = []
     private var workspaceTokens: [NSObjectProtocol] = []
     private var generation: UInt64 = 0
     private var scheduledFocusActions: [UUID: [any DiagnosticScheduledAction]] = [:]
+    private var isPostCorrelationQuitActivation = false
     private(set) var isInstalled = false
 
     init(
@@ -83,6 +86,9 @@ final class DiagnosticObserverSet {
         workspaceCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
         correlationProvider: @escaping CorrelationProvider = { nil },
         observationPhaseProvider: @escaping ObservationPhaseProvider = { .correlatedAction },
+        postCorrelationQuitEligibilityProvider: @escaping PostCorrelationQuitEligibilityProvider = {
+            false
+        },
         focusScheduler: any DiagnosticFocusScheduler = SystemDiagnosticFocusScheduler()
     ) {
         self.recorder = recorder
@@ -90,6 +96,7 @@ final class DiagnosticObserverSet {
         self.workspaceCenter = workspaceCenter
         self.correlationProvider = correlationProvider
         self.observationPhaseProvider = observationPhaseProvider
+        self.postCorrelationQuitEligibilityProvider = postCorrelationQuitEligibilityProvider
         self.focusScheduler = focusScheduler
     }
 
@@ -98,6 +105,7 @@ final class DiagnosticObserverSet {
         generation &+= 1
         let installedGeneration = generation
         isInstalled = true
+        isPostCorrelationQuitActivation = false
 
         observeApplication(
             NSApplication.willBecomeActiveNotification,
@@ -132,7 +140,7 @@ final class DiagnosticObserverSet {
                     correlationID: self.correlationProvider(),
                     payload: DiagnosticEventPayload(
                         workspaceActivation: .didActivateApplication,
-                        observationPhase: self.observationPhaseProvider()
+                        observationPhase: self.currentObservationPhase()
                     )
                 )
             }
@@ -241,7 +249,7 @@ final class DiagnosticObserverSet {
                     correlationID: self.correlationProvider(),
                     payload: DiagnosticEventPayload(
                         applicationLifecycle: lifecycle,
-                        observationPhase: self.observationPhaseProvider()
+                        observationPhase: self.currentObservationPhase(for: lifecycle)
                     )
                 )
             }
@@ -279,7 +287,7 @@ final class DiagnosticObserverSet {
                         payload: DiagnosticEventPayload(
                             windowLifecycle: lifecycle,
                             windowOwner: owner,
-                            observationPhase: self.observationPhaseProvider(),
+                            observationPhase: self.currentObservationPhase(),
                             panelState: owner == .panel ? window.diagnosticState : nil,
                             controllerState: owner == .controller ? window.diagnosticState : nil
                         )
@@ -293,7 +301,7 @@ final class DiagnosticObserverSet {
                                     ? .didOrderOnScreen
                                     : .didOrderOffScreen,
                                 windowOwner: owner,
-                                observationPhase: self.observationPhaseProvider(),
+                                observationPhase: self.currentObservationPhase(),
                                 panelState: owner == .panel ? window.diagnosticState : nil,
                                 controllerState: owner == .controller
                                     ? window.diagnosticState
@@ -309,6 +317,19 @@ final class DiagnosticObserverSet {
 
     private func accepts(generation: UInt64) -> Bool {
         isInstalled && self.generation == generation
+    }
+
+    private func currentObservationPhase(
+        for lifecycle: DiagnosticApplicationLifecycle? = nil
+    ) -> DiagnosticObservationPhase {
+        if lifecycle == .willBecomeActive,
+            postCorrelationQuitEligibilityProvider()
+        {
+            isPostCorrelationQuitActivation = true
+        }
+        return isPostCorrelationQuitActivation
+            ? .postCorrelationQuit
+            : observationPhaseProvider()
     }
 }
 
