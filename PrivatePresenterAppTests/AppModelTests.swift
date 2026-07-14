@@ -6,6 +6,45 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testStaleOrOutOfOrderEditCannotOverwriteAuthority() throws {
+        let model = modelWithScript()
+        let stale = try ScriptTextEdit.replacing(
+            in: "",
+            range: UTF16TextRange(location: 0, length: 0),
+            with: "stale",
+            baseRevision: 0
+        )
+
+        model.send(.applyScriptEdit(stale))
+
+        XCTAssertEqual(model.document.text, "Lecture")
+        XCTAssertEqual(model.document.revision, 1)
+    }
+
+    func testAcceptedEditMutatesStateBeforeReaderAndSnapshotEffects() throws {
+        var model: AppModel!
+        var observed: [(AppEffect, String, UInt64)] = []
+        model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effect in
+                observed.append((effect, model.document.text, model.document.revision))
+            }
+        )
+        let edit = try ScriptTextEdit.replacing(
+            in: "",
+            range: UTF16TextRange(location: 0, length: 0),
+            with: "A",
+            baseRevision: 0
+        )
+
+        model.send(.applyScriptEdit(edit))
+
+        XCTAssertEqual(observed.count, 2)
+        if case .applyReaderEdit = observed[0].0 {} else { XCTFail("reader edit must be first") }
+        if case .scheduleSnapshot = observed[1].0 {} else { XCTFail("snapshot must follow reader") }
+        XCTAssertTrue(observed.allSatisfy { $0.1 == "A" && $0.2 == 1 })
+    }
+
     func testCommandsChangeStateBeforeEffects() {
         var model: AppModel!
         var stateObservedByEffect = false
