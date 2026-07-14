@@ -73,26 +73,24 @@ struct RuntimeDisplayInventory: Equatable {
 
     init(displays: [RuntimeDisplay]) {
         self.displays = displays
-        topology = Self.topology(
-            displays: displays,
-            factsByID: Dictionary(
-                uniqueKeysWithValues: displays.map {
-                    (
-                        $0.id,
-                        DisplayHardwareFacts(
-                            isBuiltIn: $0.isBuiltIn,
-                            mirrorSourceID: $0.mirrorSourceID,
-                            isInMirrorSet: $0.isInMirrorSet,
-                            persistentUUID: $0.persistentUUID,
-                            vendorID: $0.vendorID,
-                            modelID: $0.modelID,
-                            serialNumber: $0.serialNumber
-                        )
-                    )
-                }
-            ),
-            onlineIDs: displays.map(\.id)
-        )
+        let ids = displays.map(\.id)
+        guard !ids.contains(0), Set(ids).count == ids.count else {
+            topology = DisplayTopologySnapshot(displays: [], querySucceeded: false)
+            return
+        }
+        var factsByID: [UInt32: DisplayHardwareFacts] = [:]
+        for display in displays {
+            factsByID[display.id] = DisplayHardwareFacts(
+                isBuiltIn: display.isBuiltIn,
+                mirrorSourceID: display.mirrorSourceID,
+                isInMirrorSet: display.isInMirrorSet,
+                persistentUUID: display.persistentUUID,
+                vendorID: display.vendorID,
+                modelID: display.modelID,
+                serialNumber: display.serialNumber
+            )
+        }
+        topology = Self.topology(displays: displays, factsByID: factsByID, onlineIDs: ids)
     }
 
     init(
@@ -122,7 +120,7 @@ struct RuntimeDisplayInventory: Equatable {
     ) -> DisplayTopologySnapshot {
         let drawableByID = Dictionary(uniqueKeysWithValues: displays.map { ($0.id, $0) })
         let descriptors = onlineIDs.map { id in
-            let facts = factsByID[id]!
+            guard let facts = factsByID[id] else { return nil }
             let drawable = drawableByID[id]
             let mirroredIDs = Set(
                 onlineIDs.filter { factsByID[$0]?.mirrorSourceID == id }
@@ -130,14 +128,9 @@ struct RuntimeDisplayInventory: Equatable {
             let name = drawable?.localizedName ?? "Online Display \(id)"
             return DisplayDescriptor(
                 sessionID: id,
-                fingerprint: DisplayFingerprint(
-                    uuid: facts.persistentUUID,
-                    vendorID: facts.vendorID,
-                    modelID: facts.modelID,
-                    serialNumber: facts.serialNumber,
-                    isBuiltIn: facts.isBuiltIn,
-                    lastLocalizedName: name,
-                    confidence: confidence(for: facts)
+                fingerprint: SystemDisplayService.fingerprint(
+                    localizedName: name,
+                    facts: facts
                 ),
                 localizedName: name,
                 isBuiltIn: facts.isBuiltIn,
@@ -151,20 +144,22 @@ struct RuntimeDisplayInventory: Equatable {
                 isInHardwareMirrorSet: facts.isInMirrorSet
             )
         }
-        return DisplayTopologySnapshot(displays: descriptors, querySucceeded: true)
+        return DisplayTopologySnapshot(displays: descriptors.compactMap { $0 }, querySucceeded: true)
     }
 
-    private static func confidence(
+    fileprivate static func confidence(
         for facts: DisplayHardwareFacts
     ) -> DisplayFingerprint.Confidence {
-        if facts.persistentUUID != nil,
-            facts.vendorID != nil,
-            facts.modelID != nil,
-            facts.serialNumber != nil
+        let uuid = facts.persistentUUID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasUUID = !(uuid?.isEmpty ?? true)
+        let hasVendor = facts.vendorID.map { $0 != 0 } ?? false
+        let hasModel = facts.modelID.map { $0 != 0 } ?? false
+        let hasSerial = facts.serialNumber.map { $0 != 0 } ?? false
+        if hasUUID, hasVendor, hasModel, hasSerial
         {
             return .strong
         }
-        if facts.persistentUUID != nil, facts.vendorID != nil, facts.modelID != nil {
+        if hasUUID, hasVendor, hasModel {
             return .medium
         }
         return .weak
@@ -172,7 +167,9 @@ struct RuntimeDisplayInventory: Equatable {
 }
 
 enum DisplayQueryError: Error, Equatable {
-    case missingScreenNumber(String)
+    case missingScreenNumber
+    case invalidScreenNumber
+    case duplicateDrawableSessionID(UInt32)
     case onlineDisplayQueryFailed
     case onlineDisplayCountRace(expected: UInt32, actual: UInt32)
     case missingHardwareFacts(UInt32)
@@ -237,6 +234,14 @@ final class SystemDisplayService {
         onlineIDs: [UInt32],
         factsByID: [UInt32: DisplayHardwareFacts]
     ) throws -> RuntimeDisplayInventory {
+        let drawableIDs = drawableDisplays.map(\.id)
+        guard !drawableIDs.contains(0), !onlineIDs.contains(0) else {
+            throw DisplayQueryError.invalidScreenNumber
+        }
+        var seenDrawableIDs: Set<UInt32> = []
+        for id in drawableIDs where !seenDrawableIDs.insert(id).inserted {
+            throw DisplayQueryError.duplicateDrawableSessionID(id)
+        }
         let uniqueOnlineIDs = Array(Set(onlineIDs)).sorted()
         guard uniqueOnlineIDs.count == onlineIDs.count else {
             throw DisplayQueryError.onlineDisplayCountRace(
@@ -247,8 +252,7 @@ final class SystemDisplayService {
         for id in uniqueOnlineIDs where factsByID[id] == nil {
             throw DisplayQueryError.missingHardwareFacts(id)
         }
-        let drawableIDs = Set(drawableDisplays.map(\.id))
-        guard drawableIDs.isSubset(of: Set(uniqueOnlineIDs)) else {
+        guard Set(drawableIDs).isSubset(of: Set(uniqueOnlineIDs)) else {
             throw DisplayQueryError.missingCandidateDrawableMapping
         }
         let topology = RuntimeDisplayInventory.topology(
@@ -297,13 +301,8 @@ final class SystemDisplayService {
 
     private static func queryDrawableDisplays() throws -> [RuntimeDisplay] {
         try NSScreen.screens.map { screen in
-            guard
-                let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-                    as? NSNumber
-            else {
-                throw DisplayQueryError.missingScreenNumber(screen.localizedName)
-            }
-            let displayID = CGDirectDisplayID(number.uint32Value)
+            let rawNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+            let displayID = CGDirectDisplayID(try sessionID(fromScreenNumber: rawNumber))
             let facts = hardwareFacts(for: UInt32(displayID))
             return RuntimeDisplay(
                 id: UInt32(displayID),
@@ -359,6 +358,37 @@ final class SystemDisplayService {
             modelID: meaningful(CGDisplayModelNumber(displayID)),
             serialNumber: meaningful(CGDisplaySerialNumber(displayID))
         )
+    }
+
+    static func sessionID(fromScreenNumber value: Any?) throws -> UInt32 {
+        guard let number = value as? NSNumber else {
+            throw DisplayQueryError.missingScreenNumber
+        }
+        guard CFGetTypeID(number) != CFBooleanGetTypeID() else {
+            throw DisplayQueryError.invalidScreenNumber
+        }
+        let numericValue = number.doubleValue
+        guard numericValue.isFinite,
+            numericValue.rounded(.towardZero) == numericValue,
+            numericValue >= 1,
+            numericValue <= Double(UInt32.max)
+        else { throw DisplayQueryError.invalidScreenNumber }
+        return UInt32(numericValue)
+    }
+
+    static func fingerprint(
+        localizedName: String,
+        facts: DisplayHardwareFacts
+    ) -> DisplayFingerprint {
+        DisplayFingerprint(
+            uuid: facts.persistentUUID,
+            vendorID: facts.vendorID,
+            modelID: facts.modelID,
+            serialNumber: facts.serialNumber,
+            isBuiltIn: facts.isBuiltIn,
+            lastLocalizedName: localizedName,
+            confidence: RuntimeDisplayInventory.confidence(for: facts)
+        ).normalized
     }
 
     private static func meaningful(_ value: UInt32) -> UInt32? {

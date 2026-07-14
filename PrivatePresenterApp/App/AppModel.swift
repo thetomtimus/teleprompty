@@ -642,9 +642,15 @@ final class AppModel {
         warning = warningMessage(for: evaluation.assessment)
         pendingShieldedMoveDisplayID = selectedDisplayID
 
-        if preferences.selectedDisplayFingerprint != candidateFingerprint {
+        let persistableFingerprint = candidateFingerprint.flatMap { fingerprint in
+            topologyEvaluator.isPersistenceEligible(
+                fingerprint,
+                in: latestTopology.displays
+            ) ? fingerprint.normalized : nil
+        }
+        if preferences.selectedDisplayFingerprint != persistableFingerprint {
             invalidatePendingClearForDurableChange()
-            preferences.selectedDisplayFingerprint = candidateFingerprint
+            preferences.selectedDisplayFingerprint = persistableFingerprint
             snapshotRevision += 1
             effects.append(.scheduleSnapshot(snapshot()))
         }

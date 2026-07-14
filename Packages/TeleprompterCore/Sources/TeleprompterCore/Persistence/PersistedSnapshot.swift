@@ -175,6 +175,7 @@ private struct V1KeyboardShortcut: Codable {
 }
 
 private struct CanonicalFingerprintIdentity: Equatable, Hashable {
+    let persistentKey: DisplayFingerprint.PersistentIdentityKey?
     let uuid: String?
     let vendorID: UInt32?
     let modelID: UInt32?
@@ -184,13 +185,44 @@ private struct CanonicalFingerprintIdentity: Equatable, Hashable {
     let confidence: String
 
     init(_ fingerprint: DisplayFingerprint) {
-        uuid = fingerprint.uuid?.lowercased()
-        vendorID = fingerprint.vendorID
-        modelID = fingerprint.modelID
-        serialNumber = fingerprint.serialNumber
-        isBuiltIn = fingerprint.isBuiltIn
+        let normalized = fingerprint.normalized
+        persistentKey = normalized.persistentIdentityKey
+        uuid = normalized.uuid
+        vendorID = normalized.vendorID
+        modelID = normalized.modelID
+        serialNumber = normalized.serialNumber
+        isBuiltIn = normalized.isBuiltIn
         lastLocalizedName = fingerprint.lastLocalizedName
         confidence = fingerprint.confidence.rawValue
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        if let lhsKey = lhs.persistentKey, let rhsKey = rhs.persistentKey {
+            return lhsKey == rhsKey
+        }
+        return lhs.uuid == rhs.uuid
+            && lhs.vendorID == rhs.vendorID
+            && lhs.modelID == rhs.modelID
+            && lhs.serialNumber == rhs.serialNumber
+            && lhs.isBuiltIn == rhs.isBuiltIn
+            && lhs.lastLocalizedName == rhs.lastLocalizedName
+            && lhs.confidence == rhs.confidence
+    }
+
+    func hash(into hasher: inout Hasher) {
+        if let persistentKey {
+            hasher.combine(0)
+            hasher.combine(persistentKey)
+        } else {
+            hasher.combine(1)
+            hasher.combine(uuid)
+            hasher.combine(vendorID)
+            hasher.combine(modelID)
+            hasher.combine(serialNumber)
+            hasher.combine(isBuiltIn)
+            hasher.combine(lastLocalizedName)
+            hasher.combine(confidence)
+        }
     }
 
     func precedes(_ other: CanonicalFingerprintIdentity) -> Bool {
