@@ -30,9 +30,9 @@ fi
 
 hot_key_source='PrivatePresenterApp/Services/DiagnosticHotKeyService.swift'
 grep -q 'GetApplicationEventTarget()' "$hot_key_source"
-if grep -qE 'kVK_ANSI_L|Control-Option-L' "$hot_key_source"; then
-  echo "error: Phase B lock chord is not permitted in Phase A." >&2
-  exit 1
-fi
+grep -q 'kVK_ANSI_H' "$hot_key_source"
+grep -q 'kVK_ANSI_L' "$hot_key_source"
+grep -q 'Control-Option-H' "$hot_key_source"
+grep -q 'Control-Option-L' "$hot_key_source"
 
-echo "No prohibited product network, web runtime, telemetry, automation, focus workaround, event-tap, global-monitor, or Phase B hot-key surface found."
+echo "No prohibited product network, web runtime, telemetry, automation, focus workaround, event-tap, global-monitor, or unbounded window-level surface found."

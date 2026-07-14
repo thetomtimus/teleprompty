@@ -57,6 +57,7 @@ FIXED_FAILURE_CODES = {
     "CONFIG_CONTROLLER_COHORT_INVALID",
     "CONFIG_REPETITION_INVALID",
     "CONTROLLER_COHORT_MISMATCH",
+    "HOT_KEY_REGISTRATION_FAILED",
     "CONFIG_EXECUTABLE_HASH_INVALID",
     "CONFIG_BUILD_LOG_PATH_INVALID",
     "CONFIG_BUILD_LOG_HASH_INVALID",
@@ -291,9 +292,9 @@ observed = first_value(
 if observed != declared:
     fail("declared and observed controller cohorts do not match.")
 
-# Section 10.2 is exactly three H correlations: cold show, hide, then show.
-# Unrelated lifecycle/operation records may interleave, but none may replace,
-# duplicate, or reorder a required event inside a correlation.
+# Phase A has exactly three H correlations. Phase B adds exactly two L
+# correlations. Unrelated lifecycle/operation records may interleave, but none
+# may replace, duplicate, or reorder a required event inside a correlation.
 required_kinds = [
     "carbonReceived",
     "mainDispatchBegan",
@@ -307,15 +308,16 @@ required_kinds = [
 ]
 carbon_records = [line for line in lines if first_value(line, "kind") == "carbonReceived"]
 carbon_correlations = [first_value(line, "correlationID") for line in carbon_records]
-if len(carbon_correlations) != 3 or any(
+if len(carbon_correlations) not in (3, 5) or any(
     not isinstance(value, str) or not value for value in carbon_correlations
 ):
-    fail("evidence must contain exactly three correlated H receipts.")
-if len(set(carbon_correlations)) != 3:
-    fail("each H receipt must have a unique correlationID.")
+    fail("evidence must contain three Phase A H receipts or three H plus two L receipts.")
+if len(set(carbon_correlations)) != len(carbon_correlations):
+    fail("each H/L receipt must have a unique correlationID.")
 
-expected_commands = ["showOverlay", "hideOverlay", "showOverlay"]
-for correlation_id, expected_command in zip(carbon_correlations, expected_commands):
+visibility_commands: list[str] = []
+lock_commands: list[str] = []
+for correlation_id in carbon_correlations:
     correlated = [
         line for line in lines if first_value(line, "correlationID") == correlation_id
     ]
@@ -323,20 +325,53 @@ for correlation_id, expected_command in zip(carbon_correlations, expected_comman
     for kind in required_kinds:
         matches = [line for line in correlated if first_value(line, "kind") == kind]
         if len(matches) != 1:
-            fail(f"H correlation is incomplete or duplicates required event {kind}.")
+            fail(f"H/L correlation is incomplete or duplicates required event {kind}.")
         positions.append(first_value(matches[0], "sequence"))
     if positions != sorted(positions) or len(set(positions)) != len(positions):
-        fail("H correlation required events are out of sequence.")
+        fail("H/L correlation required events are out of sequence.")
+    carbon_record = next(
+        line for line in correlated if first_value(line, "kind") == "carbonReceived"
+    )
+    hot_key_action = first_value(carbon_record, "hotKeyAction")
+    command_values: list[str] = []
     for kind in ("commandBefore", "commandAfter"):
         command_record = next(
             line for line in correlated if first_value(line, "kind") == kind
         )
-        if first_value(command_record, "command") != expected_command:
-            fail("H correlation command does not match cold show/hide/show sequence.")
+        command = first_value(command_record, "command")
+        if not isinstance(command, str):
+            fail("H/L correlation command is missing.")
+        command_values.append(command)
+    if len(set(command_values)) != 1:
+        fail("H/L commandBefore and commandAfter do not match.")
+    if hot_key_action == "visibility":
+        visibility_commands.append(command_values[0])
+    elif hot_key_action == "lock":
+        lock_commands.append(command_values[0])
+    else:
+        fail("H/L receipt is missing its typed action.")
+
+if visibility_commands != ["showOverlay", "hideOverlay", "showOverlay"]:
+    fail("H correlations do not match cold show/hide/show sequence.")
+if len(carbon_correlations) == 3 and lock_commands:
+    fail("Phase A evidence unexpectedly contains L correlations.")
+if len(carbon_correlations) == 5 and lock_commands != ["toggleLock", "toggleLock"]:
+    fail("Phase B evidence must contain exactly two toggleLock correlations.")
 
 required_records = [line for line in lines if first_value(line, "kind") in required_kinds]
 if any(first_value(line, "correlationID") not in set(carbon_correlations) for line in required_records):
-    fail("required H event is uncorrelated or belongs to an undeclared correlation.")
+    fail("required H/L event is uncorrelated or belongs to an undeclared correlation.")
+
+if len(carbon_correlations) == 5:
+    frame_records = [
+        line
+        for line in lines
+        if first_value(line, "kind") == "panelOperation"
+        and first_value(line, "panelOperation") == "applyContainedFrame"
+        and first_value(line, "appliedFrame") is not None
+    ]
+    if len(frame_records) < 9:
+        fail("Phase B evidence does not export enough applied frames for header and eight zones.")
 
 all_strings = set(recursive_strings(lines))
 if all_strings.intersection(FIXED_FAILURE_CODES):

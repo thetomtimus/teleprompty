@@ -23,4 +23,4 @@ if git ls-files 'PrivatePresenter.xcodeproj/*' | grep -q .; then
   exit 1
 fi
 
-echo "macOS automated verification passed. The clean proof build and 24-cell Phase A Keynote/display diagnosis are still separate and mandatory."
+echo "macOS automated verification passed. The exact-binary Phase B Keynote/display smoke and complete physical gate are still separate and mandatory."

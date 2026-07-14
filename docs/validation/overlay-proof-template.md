@@ -30,7 +30,7 @@
 - Terminal `sessionCompletion`: `YES` / `NO`
 - Pending evidence sibling absent: `YES` / `NO`
 - Proof validity: `valid` / `invalid(<fixed code>)`
-- DEBUG stale-controller-frame seed (later Phase B step 14):
+- DEBUG stale-controller-frame seed (step 14):
 
 ## Required environment record
 
@@ -49,10 +49,11 @@
 - Screen selected in Private Presenter:
 - Candidate levels: `.floating`, `.statusBar` only
 - Candidate ordering modes: `front`, `frontRegardless` only
-- Phase A source defaults: `.statusBar` / `frontRegardless`
+- Phase B source defaults: `.floating` / `frontRegardless`
 - Phase A controller cohorts: `visibleDesktopSpace`, `orderedOut`
 - Phase A repetitions: `1`, `2`, `3`
-- Diagnostic show/hide chord: `Control-Option-H` (DEBUG only; Phase A has no L)
+- Diagnostic show/hide chord: `Control-Option-H` (DEBUG only)
+- Diagnostic unlock/lock chord: `Control-Option-L` (DEBUG only)
 
 ## Preconditions
 
@@ -60,10 +61,10 @@
 - [ ] A current Keynote is installed.
 - [ ] A real second display or projector is connected in **extended** mode.
 - [ ] The generated project was bootstrapped with XcodeGen `2.45.4`.
-- [ ] The Debug app and all Phase A named tests completed successfully on this Mac.
+- [ ] The Debug app and all Phase A and Phase B named tests completed successfully on this Mac.
 - [ ] `Scripts/verify-m0-proof-provenance.sh` accepted the manifest immediately
       before this launch; the clean HEAD, executable, and build-log hashes match.
-- [ ] The same copied proof executable will be used for every Phase A cell.
+- [ ] The same copied Phase B proof executable will be used for focused smoke and the physical gate.
 - [ ] No prior Private Presenter process or `.pending` evidence file remains.
 - [ ] The controller starts shielded and the intended private screen has been
       selected and explicitly confirmed.
@@ -71,12 +72,12 @@
       screenshots, logs, filenames, or status/menu text.
 - [ ] The evidence capture can show both physical displays at the same time.
 
-## Mandatory Phase A causal diagnosis — stop before Phase B
+## Retained Phase A causal diagnosis
 
-Phase A is diagnosis only. It preserves Control-Option-H and observes the current
-combined controller `showShielded`/`showWindow` lifecycle. It does **not** add L,
-split controller placement/presentation, change topology or activation policy,
-change the Carbon target, or change drag/resize/opacity behavior.
+The completed Phase A diagnosis remains immutable evidence for selecting the
+bounded Phase B implementation. Do not rerun or relabel it as final proof. The
+retained causal decision is in
+`docs/validation/m0-phase-a-causal-decision-2026-07-14.md`.
 
 Build the proof app from a clean HEAD using the recipe in the stabilization plan,
 then run the exact matrix from an interactive terminal:
@@ -148,10 +149,11 @@ note containing:
 Any invalid or incomplete cell, or a cause outside the permitted public paths,
 keeps M0 and M2 blocked. Do not select a fix or default from timing alone.
 
-## Later complete 15-step physical gate (Phase B only after causal selection)
+## Current complete 15-step Phase B physical gate
 
-The following complete gate is retained for the later evidence-selected Phase B
-slice. It is not authorized or executable as part of this Phase A handoff.
+The Phase A causal selection is complete. Run the following gate with the exact
+clean Phase B source-default commit and the same copied proof binary used for
+focused smoke. A rebuild or source/default change invalidates downstream proof.
 
 
 For every step, record `PASS`, `FAIL`, or `BLOCKED`, observations, and local
@@ -237,7 +239,7 @@ Hide/show with the diagnostic chord while Keynote stays active.
 
 - Result:
 - H registration OSStatus and direct typed visibility command evidence:
-- L registration OSStatus and direct typed lock command evidence (Phase B only):
+- L registration OSStatus and direct typed lock command evidence:
 - Keynote PID/bundle ID before/immediate/next-loop/+100 ms/+500 ms:
 - App policy/active before/immediate/next-loop/+100 ms/+500 ms:
 - Panel visible/key/main/locked before/immediate/next-loop/+100 ms/+500 ms:
@@ -381,9 +383,8 @@ screenshots/photos/video. The historical 14,486-byte prefix must remain exact.
 
 ## Stop rule
 
-During Phase A, stop after the valid 24-cell causal note. Do not implement any
-Phase B behavior or begin M2. If the cause is not isolated to a permitted public
-branch, keep M0/M2 blocked. During the later complete matrix, if both bounded
-levels/orderings fail, do not try `.screenSaver`, raw/private levels, focus
-return, or a focus-stealing window; append a truthful BLOCKED result and reassess
-feasibility.
+Do not begin M2 until every current Phase B row passes on the exact clean source-
+default commit and the append-only current-decision ledger records that PASS. If
+both bounded levels/orderings fail, do not try `.screenSaver`, raw/private
+levels, focus return, or a focus-stealing window. Append a truthful BLOCKED
+result and reassess feasibility.

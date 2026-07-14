@@ -107,7 +107,7 @@ add("configurationBound", {
 add("controllerCohortObserved", {"observedControllerCohort": observed_cohort})
 for index, command in enumerate(("showOverlay", "hideOverlay", "showOverlay"), 1):
     correlation_id = f"generated-h-{index}"
-    add("carbonReceived", correlation_id=correlation_id)
+    add("carbonReceived", {"hotKeyAction": "visibility"}, correlation_id)
     add("mainDispatchBegan", correlation_id=correlation_id)
     add("commandBefore", {"command": command}, correlation_id)
     add("commandAfter", {"command": command}, correlation_id)

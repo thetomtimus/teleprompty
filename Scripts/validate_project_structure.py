@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the committed Milestone 0 Phase A source without third-party modules."""
+"""Validate the committed Milestone 0 stabilization source without third-party modules."""
 
 from __future__ import annotations
 
@@ -50,6 +50,7 @@ REQUIRED_PATHS = (
     "PrivatePresenterApp/Services/DiagnosticHotKeyService.swift",
     "PrivatePresenterApp/Services/DiagnosticEvidenceRecorder.swift",
     "PrivatePresenterApp/Services/DiagnosticObserverSet.swift",
+    "PrivatePresenterApp/Services/SystemDisplayService.swift",
     "PrivatePresenterAppTests/OverlayPanelConfigurationTests.swift",
     "PrivatePresenterAppTests/OverlayPanelControllerTests.swift",
     "PrivatePresenterAppTests/AppModelTests.swift",
@@ -57,6 +58,7 @@ REQUIRED_PATHS = (
     "PrivatePresenterAppTests/DiagnosticEvidenceRecorderTests.swift",
     "PrivatePresenterAppTests/DiagnosticHotKeyServiceTests.swift",
     "PrivatePresenterAppTests/DiagnosticObserverLifecycleTests.swift",
+    "PrivatePresenterAppTests/SystemDisplayServiceTests.swift",
     "PrivatePresenterUITests/PrivatePresenterUITestShell.swift",
     "docs/validation/source-artifact-checksums.sha256",
     "docs/validation/overlay-proof-template.md",
@@ -84,6 +86,9 @@ APP_SOURCE_MARKERS = (
     "refreshDisplayInventory",
     "RegisterEventHotKey",
     "Control-Option-H",
+    "Control-Option-L",
+    "CGGetOnlineDisplayList",
+    "isDrawableDestination",
     "constrainFrameRect",
     "case top, bottom, left, right",
     "case topLeft, topRight, bottomLeft, bottomRight",
@@ -97,6 +102,12 @@ APP_SOURCE_MARKERS = (
     "configurationBound",
     "sessionCompletion",
     "EVIDENCE_QUEUE_OVERFLOW",
+    "HOT_KEY_REGISTRATION_FAILED",
+    "applyContainedFrame",
+    "selectedFullFrame",
+    "selectedVisibleFrame",
+    "containmentFrame",
+    "appliedFrame",
     "OverlayPanelOrderingMode",
     "NSApplication.willBecomeActiveNotification",
     "NSWorkspace.didActivateApplicationNotification",
@@ -154,8 +165,8 @@ PHASE_A_NAMED_TESTS = (
     "testWindowObserversRetainTransientKeyMainOrderAndOcclusionNotifications",
     "testFocusSnapshotsUseImmediateNextRunLoop100msAnd500msSchedule",
     "testDelayedSamplesAreCancelledAfterSessionTeardown",
-    "testPhaseAControllerObserverRecordsExistingShowShieldedEntryAndExit",
-    "testPhaseAControllerObserverRecordsFrameShowWindowAndShowCount",
+    "testControllerPlacementRecordsEntryAndExitWithoutPresentation",
+    "testStartupPresentationRecordsFrameShowWindowAndPresentationCount",
     "testPhaseAControllerObserverRecordsVisibilityOrderKeyMainAndOcclusion",
     "testPhaseAInstrumentationDoesNotChangeControllerFrameVisibilityOrShowCount",
     "testColdShowTraceSupportsControllerVisibleAndOrderedOutStates",
@@ -172,7 +183,7 @@ PHASE_A_NAMED_TESTS = (
     "testOrderedOutCohortQuitDoesNotPresentOrOrderController",
     "testOrderingModesAreExactlyFrontAndFrontRegardless",
     "testBothOrderingModesAvoidKeyMainAndExplicitActivation",
-    "testDefaultProofLevelRemainsStatusBarUntilPhysicalMatrix",
+    "testDefaultProofLevelUsesLowestPassingFloatingEvidence",
     "testDefaultOrderingRemainsFrontRegardlessUntilPhysicalEvidence",
     "testOrderingSelectionChoosesOnlyPassingMode",
     "testOrderingSelectionRetainsCurrentSourceDefaultWhenBothModesAreEquivalent",
@@ -182,6 +193,42 @@ PHASE_A_NAMED_TESTS = (
     "testConfigurationSnapshotExportsCommitOrderingAndLevel",
     "testActivationPolicyIsSetOnlyAtBootstrap",
     "testForbiddenWindowLevelsAndFocusWorkaroundsAreAbsent",
+)
+
+PHASE_B_NAMED_TESTS = (
+    "testControlOptionLDispatchesDistinctLockAction",
+    "testCarbonIdentifiersDecodeToDistinctActions",
+    "testRegistrationFailureCleansUpBothHotKeys",
+    "testSuccessfulTerminationUnregistersBothDiagnosticChords",
+    "testBothRegistrationFailuresInvalidatePhysicalPrecondition",
+    "testBothHotKeyActionsPropagateCorrelationID",
+    "testEvidenceExportsSelectedAndAppliedFramesSeparately",
+    "testPrivacyDirectiveEffectAndApplicationOrderShareCorrelation",
+    "testRuntimeInventoryRequiresDrawableDestinationsAndTopology",
+    "testCGOnlyTopologyMemberHasNoVisibleFrameScaleOrDestinationEligibility",
+    "testOnlineMirroredSinkMissingFromDrawableScreensStillBlocks",
+    "testOnlineDisplayQueryFailureFailsClosed",
+    "testOnlineDisplayCountRaceFailsClosed",
+    "testVerifiedMirroringRequiresHardwareMirrorFacts",
+    "testCGOnlyDisplayCannotBecomeSelectedDestination",
+    "testPanelConstrainFrameIsASecondContainmentDefense",
+    "testWiredDragAndResizeUpdatesRemainContained",
+    "testEveryAppliedFrameIsRecordedExactlyOnce",
+    "testRecordedFrameIncludesSeparateSelectedFullVisibleAndContainmentFrames",
+    "testLockRestoresClickThroughWithoutChangingFrame",
+    "testSecondContainmentDefenseRejectsCrossDisplayFrame",
+    "testDragAndResizeNeverPresentNormalController",
+    "testPlacementPreservesVisibleControllerState",
+    "testPlacementPreservesOrderedOutControllerState",
+    "testMirroringWhileVisibleHidesAndShieldsBeforeRecovery",
+    "testSelectedPrivateDisplayDisconnectHidesBeforeRecovery",
+    "testControllerRemainsShieldedAfterReconnectUntilConfirmation",
+    "testPendingShowCannotSurviveTopologyChange",
+    "testNonDrawableOnlineMirrorStillUsesExactWarningAndCannotBeBypassed",
+    "testTopologyPlacementNeverPresentsNormalController",
+    "testHLockTopologyDragAndResizeNeverOrderControllerOnScreen",
+    "testDefaultProofLevelUsesLowestPassingFloatingEvidence",
+    "testLevelSelectionRetainsFloatingBeforeComparingStatusBarSafety",
 )
 
 PROVENANCE_FIXTURE_TESTS = (
@@ -394,7 +441,7 @@ def validate_historical_result_prefix() -> None:
         fail("overlay result no longer begins with the immutable historical prefix")
 
 
-def validate_phase_a_prohibited_surfaces() -> None:
+def validate_m0_prohibited_surfaces() -> None:
     violations: list[str] = []
     prohibited = (
         r"\bNSApp\.activate\s*\(",
@@ -420,8 +467,9 @@ def validate_phase_a_prohibited_surfaces() -> None:
     hot_key_source = read("PrivatePresenterApp/Services/DiagnosticHotKeyService.swift")
     if "GetApplicationEventTarget()" not in hot_key_source:
         violations.append("DiagnosticHotKeyService.swift:application-target-missing")
-    if "kVK_ANSI_L" in hot_key_source or "Control-Option-L" in hot_key_source:
-        violations.append("DiagnosticHotKeyService.swift:phase-b-lock-chord")
+    for marker in ("kVK_ANSI_H", "kVK_ANSI_L", "Control-Option-H", "Control-Option-L"):
+        if marker not in hot_key_source:
+            violations.append(f"DiagnosticHotKeyService.swift:missing-{marker}")
     panel_source = read("PrivatePresenterApp/Overlay/TeleprompterPanel.swift")
     level_cases = re.findall(r"^\s*case\s+(\w+)\s*$", panel_source, re.MULTILINE)
     allowed_level_cases = {"floating", "statusBar", "front", "frontRegardless"}
@@ -429,7 +477,7 @@ def validate_phase_a_prohibited_surfaces() -> None:
     if unexpected_level_cases:
         violations.append("TeleprompterPanel.swift:unexpected-bounded-enum-case")
     if violations:
-        fail("prohibited Phase A behavior marker in product source: " + ", ".join(violations))
+        fail("prohibited M0 behavior marker in product source: " + ", ".join(violations))
 
 
 def main() -> None:
@@ -469,6 +517,11 @@ def main() -> None:
     ]
     if missing_phase_a_tests:
         fail("missing required Phase A named tests: " + ", ".join(missing_phase_a_tests))
+    missing_phase_b_tests = [
+        name for name in PHASE_B_NAMED_TESTS if name not in phase_a_inventory
+    ]
+    if missing_phase_b_tests:
+        fail("missing required Phase B named tests: " + ", ".join(missing_phase_b_tests))
     core_imports = [
         line.strip()
         for path in (ROOT / "Packages/TeleprompterCore/Sources").rglob("*.swift")
@@ -486,9 +539,9 @@ def main() -> None:
         fail("M0 proof harness is missing markers: " + ", ".join(missing_app_markers))
     validate_data_safety()
     validate_historical_result_prefix()
-    validate_phase_a_prohibited_surfaces()
+    validate_m0_prohibited_surfaces()
     validate_xcode_listing()
-    print("Project structure validation passed (Milestone 0 Phase A source).")
+    print("Project structure validation passed (Milestone 0 Phase B source).")
 
 
 if __name__ == "__main__":
