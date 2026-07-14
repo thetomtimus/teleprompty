@@ -182,6 +182,9 @@ if not HEX64.fullmatch(manifest["build_log_sha256"]):
 executable = resolved_existing_file(
     manifest["executable_path"], "proof executable", executable=True
 )
+debug_dylib = executable.with_name(executable.name + ".debug.dylib")
+if debug_dylib.exists():
+    fail("proof executable uses unbound Xcode debug-dylib indirection.")
 build_log = resolved_existing_file(manifest["build_log_path"], "proof build log")
 if sha256(executable) != manifest["executable_sha256"]:
     fail("proof executable SHA-256 mismatch.")

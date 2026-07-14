@@ -168,6 +168,11 @@ write_manifest
 write_evidence
 verify_evidence >/dev/null
 
+# testProvenanceVerifierRejectsDebugDylibIndirection
+printf 'unbound code artifact\n' > "$executable.debug.dylib"
+expect_rejection "$verifier" --repository "$repository" "$manifest"
+rm "$executable.debug.dylib"
+
 # testProvenanceVerifierRejectsExecutableHashMismatch
 cp "$manifest" "$manifest.saved"
 wrong_executable_hash=$(different_hex "$executable_hash")

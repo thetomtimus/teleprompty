@@ -13,6 +13,11 @@
 - Keynote: full-screen Presenter Display on the built-in display and audience
   slideshow on the external display
 
+The accepted manifest format at this exploratory commit hashed Xcode's stable
+Debug launcher while the actual code lived in a sibling debug dylib. The visual
+observations remain configuration-selection evidence, but this run is not final
+M0 proof. The downstream gate restarts after disabling that indirection.
+
 ## Candidate observations
 
 ### `.floating + frontRegardless`

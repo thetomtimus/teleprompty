@@ -239,6 +239,7 @@ PROVENANCE_FIXTURE_TESTS = (
     "testProvenanceVerifierRejectsCommitMismatch",
     "testProvenanceVerifierRejectsMissingBuildLog",
     "testProvenanceVerifierRejectsDirtyTree",
+    "testProvenanceVerifierRejectsDebugDylibIndirection",
     "testSameExecutableHashIsRequiredAcrossSmokeAndPhysicalEvidence",
     "testProvenanceVerifierRejectsWrongBuildLogCommit",
     "testProvenanceVerifierRejectsMissingOrDuplicateBuildLogCleanStatus",
@@ -487,6 +488,8 @@ def main() -> None:
         fail("missing required paths: " + ", ".join(missing))
     if read(".xcodegen-version").strip() != "2.45.4":
         fail(".xcodegen-version must contain exactly 2.45.4")
+    if "ENABLE_DEBUG_DYLIB = NO" not in read("Config/Debug.xcconfig"):
+        fail("Debug proof builds must disable unbound debug-dylib indirection")
     project = read("project.yml")
     absent_markers = [marker for marker in PROJECT_MARKERS if marker not in project]
     if absent_markers:

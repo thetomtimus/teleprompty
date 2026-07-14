@@ -93,6 +93,10 @@ tree, then build and copy one proof app exactly as described in section 10.1 of
 - executable and build-log SHA-256 values; and
 - successful `Scripts/verify-m0-proof-provenance.sh` output.
 
+`Config/Debug.xcconfig` disables Xcode's debug-dylib launcher indirection, and
+the verifier rejects a sibling `Private Presenter.debug.dylib`. The executable
+SHA-256 therefore binds the actual proof code rather than a stable launcher.
+
 Do not rebuild between focused smoke and the physical gate.
 
 ## Focused Phase B smoke

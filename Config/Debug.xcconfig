@@ -3,3 +3,6 @@
 SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
 GCC_PREPROCESSOR_DEFINITIONS = DEBUG=1 $(inherited)
 SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+// Keep proof code in the hashed executable. Xcode's debug-dylib launcher would
+// otherwise leave the manifest bound only to a stable stub.
+ENABLE_DEBUG_DYLIB = NO
