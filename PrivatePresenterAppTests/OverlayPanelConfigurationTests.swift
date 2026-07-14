@@ -6,6 +6,25 @@ import XCTest
 
 @MainActor
 final class OverlayPanelConfigurationTests: XCTestCase {
+    func testM2PreservesStatusBarFrontRegardlessAndPermanentNonKeyNonMain() {
+        let controller = OverlayPanelController()
+        let snapshot = controller.configurationSnapshot
+
+        XCTAssertEqual(snapshot.level, "statusBar")
+        #if DEBUG
+        XCTAssertEqual(snapshot.ordering, "frontRegardless")
+        #endif
+        XCTAssertFalse(snapshot.canBecomeKey)
+        XCTAssertFalse(snapshot.canBecomeMain)
+    }
+
+    func testM2PreservesOpaqueRoundedReaderSurface() {
+        let snapshot = OverlayPanelController().configurationSnapshot
+
+        XCTAssertTrue(snapshot.interiorIsFullyOpaque)
+        XCTAssertGreaterThan(OverlayRootView.cornerRadius, 0)
+    }
+
     func testPanelIsBorderlessNonactivatingAndNotNativelyResizable() {
         let controller = makeController()
         let mask = controller.teleprompterPanel.styleMask

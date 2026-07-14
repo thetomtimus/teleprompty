@@ -3,6 +3,32 @@ import XCTest
 @testable import TeleprompterCore
 
 final class PanelFramePolicyTests: XCTestCase {
+    func testPerDisplayFramesRemainSeparate() {
+        let policy = PanelFramePolicy()
+        let firstScreen = DisplayRect(x: 0, y: 0, width: 1_000, height: 800)
+        let secondScreen = DisplayRect(x: 1_000, y: 0, width: 2_000, height: 1_200)
+        let first = policy.normalize(
+            DisplayRect(x: 100, y: 120, width: 500, height: 300),
+            in: firstScreen
+        )
+        let second = policy.normalize(
+            DisplayRect(x: 1_500, y: 300, width: 900, height: 500),
+            in: secondScreen
+        )
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertTrue(firstScreen.contains(policy.restore(first, in: firstScreen)))
+        XCTAssertTrue(secondScreen.contains(policy.restore(second, in: secondScreen)))
+    }
+
+    func testRestoredNormalizedFrameReclampsToCurrentContainment() {
+        let policy = PanelFramePolicy()
+        let current = DisplayRect(x: -1_280, y: 0, width: 1_280, height: 720)
+        let unsafe = NormalizedPanelFrame(x: 0.95, y: 0.95, width: 0.9, height: 0.9)
+
+        XCTAssertTrue(current.contains(policy.restore(unsafe, in: current)))
+    }
+
     private let policy = PanelFramePolicy(safeTopInset: 24)
 
     func testDefaultFrameIsTopCenteredSeventyByThirtyFivePercent() {

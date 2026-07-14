@@ -6,6 +6,248 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testShieldPrecedesWarningAndReposition() {
+        var observedSafeState = false
+        var model: AppModel!
+        model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effect in
+                if case .hidePanel = effect {
+                    observedSafeState = model.isPaused
+                        && model.overlaySession.visibility == .hidden
+                        && model.isShielded
+                }
+            }
+        )
+        model.send(.replaceScript(text: "Generated script"))
+        model.send(.start)
+
+        model.topologyWillChange()
+
+        XCTAssertTrue(observedSafeState)
+        XCTAssertTrue(model.isShielded)
+    }
+
+    func testRecoveryNeverResumesAutomatically() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        model.send(.replaceScript(text: "Generated script"))
+        model.send(.start)
+        model.topologyWillChange()
+        model.refreshDisplays(.success([display(id: 1, builtIn: true, x: 0)]))
+
+        XCTAssertTrue(model.isPaused)
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertFalse(model.isSelectionConfirmed)
+    }
+
+    func testAmbiguousWeakDisplayFrameIsNotAutoRestoredOrPersisted() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        let first = duplicateDisplay(id: 10, x: 0)
+        let second = duplicateDisplay(id: 11, x: 1_440)
+        model.refreshDisplays(.success([first, second]))
+        model.selectDisplay(second.id)
+        model.confirmSelectedDisplay()
+        model.send(
+            .panelFrameChanged(
+                displayID: second.id,
+                frame: NSRect(x: 1_500, y: 100, width: 700, height: 350)
+            ))
+
+        XCTAssertTrue(model.panelFrames.isEmpty)
+        XCTAssertNil(model.preferences.selectedDisplayFingerprint)
+    }
+
+    func testFrameCallbackPersistsOnlyCurrentConfirmedDisplayFingerprint() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([privateDisplay, audience]))
+        model.send(
+            .panelFrameChanged(
+                displayID: privateDisplay.id,
+                frame: NSRect(x: 100, y: 100, width: 700, height: 350)
+            ))
+        XCTAssertTrue(model.panelFrames.isEmpty)
+
+        model.confirmSelectedDisplay()
+        model.send(
+            .panelFrameChanged(
+                displayID: audience.id,
+                frame: NSRect(x: 1_500, y: 100, width: 700, height: 350)
+            ))
+        XCTAssertTrue(model.panelFrames.isEmpty)
+
+        model.send(
+            .panelFrameChanged(
+                displayID: privateDisplay.id,
+                frame: NSRect(x: 100, y: 100, width: 700, height: 350)
+            ))
+        XCTAssertEqual(model.panelFrames.count, 1)
+        XCTAssertEqual(
+            model.panelFrames.first?.displayFingerprint.persistentIdentityKey,
+            model.preferences.selectedDisplayFingerprint?.persistentIdentityKey
+        )
+    }
+
+    func testSameUUIDHardwareConflictNeverRestoresPersistedFrame() {
+        let savedFingerprint = DisplayFingerprint(
+            uuid: "shared-uuid",
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: true,
+            lastLocalizedName: "Saved Private Display",
+            confidence: .strong
+        )
+        let savedFrame = PersistedPanelFrame(
+            displayFingerprint: savedFingerprint,
+            frame: NormalizedPanelFrame(x: 0.1, y: 0.1, width: 0.5, height: 0.4)
+        )
+        let persisted = PersistedSnapshot(
+            revision: 8,
+            document: ScriptDocument(text: "Generated script", revision: 4),
+            readingAnchor: ReadingAnchor(),
+            preferences: TeleprompterPreferences(),
+            panelFrames: [savedFrame]
+        )
+        let current = RuntimeDisplay(
+            id: 1,
+            localizedName: "Current Private Display",
+            isBuiltIn: true,
+            isMain: true,
+            isOnline: true,
+            frame: NSRect(x: 0, y: 0, width: 1_440, height: 900),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1_440, height: 860),
+            scale: 2,
+            persistentUUID: "shared-uuid",
+            mirrorSourceID: nil,
+            isInMirrorSet: false,
+            vendorID: 1,
+            modelID: 999,
+            serialNumber: 3
+        )
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        var proposedFrames: [CGRect?] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effect in
+                if case .stagePanelHidden(_, let proposedFrame) = effect {
+                    proposedFrames.append(proposedFrame)
+                }
+            }
+        )
+        model.send(.restore(persisted))
+        model.refreshDisplays(.success([current, audience]))
+        model.selectDisplay(current.id)
+        proposedFrames.removeAll()
+
+        model.confirmSelectedDisplay()
+
+        XCTAssertEqual(proposedFrames.count, 1)
+        XCTAssertNil(proposedFrames[0])
+    }
+
+    func testOneSidedUUIDHardwareMatchRestoresPersistedFrame() {
+        let savedFingerprint = DisplayFingerprint(
+            uuid: "saved-uuid",
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3,
+            isBuiltIn: true,
+            lastLocalizedName: "Saved Private Display",
+            confidence: .strong
+        )
+        let current = RuntimeDisplay(
+            id: 1,
+            localizedName: "Current Private Display",
+            isBuiltIn: true,
+            isMain: true,
+            isOnline: true,
+            frame: NSRect(x: 0, y: 0, width: 1_440, height: 900),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1_440, height: 860),
+            scale: 2,
+            persistentUUID: nil,
+            mirrorSourceID: nil,
+            isInMirrorSet: false,
+            vendorID: 1,
+            modelID: 2,
+            serialNumber: 3
+        )
+        let savedFrame = PersistedPanelFrame(
+            displayFingerprint: savedFingerprint,
+            frame: NormalizedPanelFrame(x: 0.1, y: 0.1, width: 0.5, height: 0.4)
+        )
+        let persisted = PersistedSnapshot(
+            revision: 8,
+            document: ScriptDocument(text: "Generated script", revision: 4),
+            readingAnchor: ReadingAnchor(),
+            preferences: TeleprompterPreferences(),
+            panelFrames: [savedFrame]
+        )
+        var proposedFrames: [CGRect?] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            effectHandler: { effect in
+                if case .stagePanelHidden(_, let proposedFrame) = effect {
+                    proposedFrames.append(proposedFrame)
+                }
+            }
+        )
+        model.send(.restore(persisted))
+        model.refreshDisplays(.success([current, display(id: 2, builtIn: false, x: 1_440)]))
+        model.selectDisplay(current.id)
+        proposedFrames.removeAll()
+
+        model.confirmSelectedDisplay()
+
+        XCTAssertEqual(proposedFrames.count, 1)
+        XCTAssertNotNil(proposedFrames[0])
+    }
+
+    func testDisplayLossPausesHidesShieldsBeforeFallbackPlacement() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([privateDisplay, audience]))
+        model.confirmSelectedDisplay()
+        model.send(.completeShieldedMove(screenID: privateDisplay.id))
+        model.showOverlay()
+
+        model.topologyWillChange()
+        model.refreshDisplays(.success([audience]))
+
+        XCTAssertTrue(model.isPaused)
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertTrue(model.isShielded)
+    }
+
+    func testReconnectRemainsHiddenPausedUntilExplicitConfirmation() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([privateDisplay, audience]))
+        model.confirmSelectedDisplay()
+        model.topologyWillChange()
+        model.refreshDisplays(.success([audience]))
+        model.refreshDisplays(.success([privateDisplay, audience]))
+
+        XCTAssertTrue(model.isPaused)
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertTrue(model.isShielded)
+        XCTAssertFalse(model.isSelectionConfirmed)
+    }
+
+    func testM2PreservesOnePanelAndOneAppModel() {
+        let runtime = AppRuntime(proofLevel: .statusBar)
+
+        XCTAssertEqual(runtime.dependencies.appModelConstructionCount, 1)
+        XCTAssertEqual(runtime.overlayController.configurationSnapshot.panelCount, 1)
+        XCTAssertEqual(
+            ObjectIdentifier(runtime.model),
+            runtime.controllerWindowController.modelIdentity
+        )
+    }
+
     func testTitleTrimsDefaultsAndCapsWithoutSplittingCharacter() {
         let model = AppModel(overlayController: OverlayPanelController())
         model.send(.setScriptTitle("   "))

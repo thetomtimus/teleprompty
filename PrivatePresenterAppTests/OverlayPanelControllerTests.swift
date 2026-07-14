@@ -5,6 +5,41 @@ import XCTest
 
 @MainActor
 final class OverlayPanelControllerTests: XCTestCase {
+    #if DEBUG
+    func testM2PreservesDiagnosticHAndLDirectDispatchWithoutControllerRaise() {
+        let runtime = AppRuntime(proofLevel: .statusBar)
+        let presentationCount = runtime.controllerWindowController.presentationCount
+
+        runtime.diagnosticHotKeyService.invokeForTesting(.visibility)
+        runtime.diagnosticHotKeyService.invokeForTesting(.lock)
+
+        XCTAssertEqual(runtime.controllerWindowController.presentationCount, presentationCount)
+        XCTAssertFalse(runtime.overlayController.teleprompterPanel.isKeyWindow)
+        XCTAssertFalse(runtime.overlayController.teleprompterPanel.isMainWindow)
+    }
+    #endif
+
+    func testM2PreservesEveryDragAndResizeFrameWithinSelectedDisplay() {
+        let controller = OverlayPanelController()
+        let selected = NSRect(x: -1_920, y: -120, width: 1_920, height: 1_040)
+        controller.stageHidden(
+            proposedFrame: NSRect(x: -1_500, y: 100, width: 700, height: 350),
+            on: selected
+        )
+        for edge in ClampedPanelInteractionController.ResizeEdge.allCases {
+            controller.updateDrag(translation: CGSize(width: 9_000, height: -9_000))
+            controller.endInteraction()
+            controller.updateResize(
+                edge: edge,
+                translation: CGSize(width: 9_000, height: 9_000)
+            )
+            controller.endInteraction()
+        }
+
+        XCTAssertFalse(controller.appliedFrames.isEmpty)
+        XCTAssertTrue(controller.appliedFrames.allSatisfy(selected.contains))
+    }
+
     func testShowingNonactivatingPanelNeverActivatesOrMakesKeyOrMain() {
         var operations: [OverlayPanelOperation] = []
         let controller = OverlayPanelController(operationRecorder: { operations.append($0) })
