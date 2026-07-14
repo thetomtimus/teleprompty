@@ -14,6 +14,10 @@ enum AppCommand {
     case replaceScript(text: String)
     case applyScriptEdit(ScriptTextEdit)
     case readerResyncRequested(appliedRevision: UInt64)
+    case setScriptTitle(String)
+    case setFontSize(Double)
+    case setTextAlignment(TeleprompterTextAlignment)
+    case setActiveBandEnabled(Bool)
     case requestClear
     case confirmClear(token: ClearToken)
     case cancelClear

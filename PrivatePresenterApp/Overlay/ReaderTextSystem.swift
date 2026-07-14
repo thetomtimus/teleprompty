@@ -12,6 +12,7 @@ enum ReaderFullReplacementReason: String, CaseIterable, Equatable, Hashable, Sen
 final class ReaderTextSystem {
     let textView: NSTextView
     let textStorage: NSTextStorage
+    let activeBandView: NSView
     private(set) var appliedRevision: UInt64
     private(set) var isAwaitingResync = false
     private(set) var incrementalMutationCount = 0
@@ -32,6 +33,7 @@ final class ReaderTextSystem {
         }
         self.textView = textView
         self.textStorage = textStorage
+        activeBandView = NSView()
         appliedRevision = revision
         self.onResyncRequested = onResyncRequested
 
@@ -43,6 +45,8 @@ final class ReaderTextSystem {
         textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 28, height: 24)
         configureViewport(NSSize(width: 640, height: 360))
+        activeBandView.wantsLayer = true
+        activeBandView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
         textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
     }
 
@@ -157,6 +161,7 @@ final class ReaderTextSystem {
 
     func setActiveBandEnabled(_ enabled: Bool) {
         isActiveBandEnabled = enabled
+        activeBandView.isHidden = !enabled
     }
 
     private func latchResync() {

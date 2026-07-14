@@ -65,14 +65,14 @@ final class ControllerWindowController: NSWindowController {
         #endif
         let initialFrame =
             untrustedInitialFrame
-            ?? NSRect(x: 0, y: 0, width: 620, height: 360)
+            ?? NSRect(x: 0, y: 0, width: 840, height: 760)
         let window = NSWindow(
             contentRect: initialFrame,
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Private Presenter — Overlay Proof"
+        window.title = "Private Presenter"
         window.contentViewController = NSHostingController(rootView: ControllerView(model: model))
         window.setFrame(initialFrame, display: false)
         super.init(window: window)

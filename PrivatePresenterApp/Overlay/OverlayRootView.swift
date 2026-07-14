@@ -1,18 +1,20 @@
 import SwiftUI
 
-/// Deliberately small proof surface. Product chrome and visual polish are deferred until
-/// the physical Milestone 0 gate has passed.
+/// Opaque, nonactivating static-reader surface. Scrolling is deliberately deferred to M3.
+@MainActor
 struct OverlayRootView: View {
     static let cornerRadius: CGFloat = 18
     static let interiorIsFullyOpaque = true
     static let resizeZones = ClampedPanelInteractionController.ResizeEdge.allCases
 
+    let readerSystem: ReaderTextSystem?
     let onDragChanged: (CGSize) -> Void
     let onDragEnded: () -> Void
     let onResizeChanged: (ClampedPanelInteractionController.ResizeEdge, CGSize) -> Void
     let onResizeEnded: () -> Void
 
     init(
+        readerSystem: ReaderTextSystem? = nil,
         onDragChanged: @escaping (CGSize) -> Void = { _ in },
         onDragEnded: @escaping () -> Void = {},
         onResizeChanged:
@@ -22,6 +24,7 @@ struct OverlayRootView: View {
             ) -> Void = { _, _ in },
         onResizeEnded: @escaping () -> Void = {}
     ) {
+        self.readerSystem = readerSystem
         self.onDragChanged = onDragChanged
         self.onDragEnded = onDragEnded
         self.onResizeChanged = onResizeChanged
@@ -30,16 +33,19 @@ struct OverlayRootView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.12, green: 0.16, blue: 0.26)
-
-            VStack(spacing: 12) {
-                Text("Private Presenter overlay proof")
-                    .font(.system(size: 24, weight: .semibold))
-                Text("The diagnostic controller owns select, show, lock, and hide.")
-                    .font(.system(size: 16))
+            Color(red: 0.05, green: 0.06, blue: 0.09)
+            VStack(spacing: 0) {
+                Text("Private Presenter")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+                if let readerSystem {
+                    ReaderTextView(system: readerSystem)
+                } else {
+                    Color.clear
+                }
             }
-            .foregroundStyle(.white)
-            .padding(32)
         }
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay(alignment: .top) {

@@ -114,6 +114,7 @@ final class OverlayPanelController: NSWindowController {
 
         panel.contentViewController = NSHostingController(
             rootView: OverlayRootView(
+                readerSystem: readerTextSystem,
                 onDragChanged: { [weak self] translation in
                     self?.updateDrag(translation: translation)
                 },

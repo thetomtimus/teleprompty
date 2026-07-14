@@ -70,6 +70,18 @@ final class AppEffectAdapter {
         overlayController.readerTextSystem.onResyncRequested = { [weak model] revision in
             model?.send(.readerResyncRequested(appliedRevision: revision))
         }
+        overlayController.readerTextSystem.replaceAuthoritatively(
+            text: model.document.text,
+            revision: model.document.revision,
+            reason: .initial
+        )
+        overlayController.readerTextSystem.updateAttributes(
+            fontSize: model.preferences.fontSizePoints,
+            alignment: model.preferences.textAlignment
+        )
+        overlayController.readerTextSystem.setActiveBandEnabled(
+            model.preferences.isActiveBandEnabled
+        )
     }
 
     func handle(_ effect: AppEffect) {
@@ -95,6 +107,12 @@ final class AppEffectAdapter {
                 revision: revision,
                 reason: reason
             )
+        case .updateReaderAttributes(let fontSize, let alignment, let activeBandEnabled):
+            overlayController.readerTextSystem.updateAttributes(
+                fontSize: fontSize,
+                alignment: alignment
+            )
+            overlayController.readerTextSystem.setActiveBandEnabled(activeBandEnabled)
         case .scheduleSnapshot(let snapshot):
             enqueuePersistence { store in
                 try await store.scheduleSave(snapshot)

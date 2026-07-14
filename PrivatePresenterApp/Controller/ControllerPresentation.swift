@@ -1,0 +1,69 @@
+import Foundation
+
+enum ControllerControl: Hashable, Sendable {
+    case title
+    case editor
+    case clear
+    case openClose
+    case hideShow
+    case lock
+    case displaySelection
+    case fontSize
+    case alignment
+    case activeBand
+    case start
+    case pause
+    case restart
+    case speed
+    case focusMode
+}
+
+struct ControllerPresentation: Equatable, Sendable {
+    static let emptyScriptInstruction =
+        "Paste or type a script to prepare the teleprompter. Smooth scrolling becomes available in M3."
+    static let m3Explanation = "Smooth scrolling is available in M3."
+    static let m4Explanation = "Focus Mode and product shortcuts are available in M4."
+
+    let scriptText: String
+    let isPanelVisible: Bool
+    let isClearConfirmationRequired: Bool
+
+    var isEmpty: Bool {
+        scriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var emptyInstruction: String? { isEmpty ? Self.emptyScriptInstruction : nil }
+    var openCloseLabel: String { isPanelVisible ? "Close Teleprompter" : "Open Teleprompter" }
+    var hideShowLabel: String { isPanelVisible ? "Hide Panel" : "Show Panel" }
+
+    func isEnabled(_ control: ControllerControl) -> Bool {
+        switch control {
+        case .start, .pause, .restart, .speed, .focusMode:
+            false
+        case .clear:
+            !isEmpty
+        default:
+            true
+        }
+    }
+
+    func explanation(for control: ControllerControl) -> String? {
+        switch control {
+        case .start, .pause, .restart, .speed:
+            Self.m3Explanation
+        case .focusMode:
+            Self.m4Explanation
+        default:
+            nil
+        }
+    }
+
+    func productCommand(for control: ControllerControl) -> AppCommand? {
+        switch control {
+        case .openClose, .hideShow:
+            isPanelVisible ? .hideOverlay : .showOverlay
+        default:
+            nil
+        }
+    }
+}

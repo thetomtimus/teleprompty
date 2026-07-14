@@ -191,6 +191,14 @@ final class AppModel {
                     revision: document.revision,
                     reason: .resync
                 ))
+        case .setScriptTitle(let title):
+            setScriptTitle(title)
+        case .setFontSize(let size):
+            setFontSize(size)
+        case .setTextAlignment(let alignment):
+            setTextAlignment(alignment)
+        case .setActiveBandEnabled(let enabled):
+            setActiveBandEnabled(enabled)
         case .requestClear:
             requestClear()
         case .confirmClear(let token):
@@ -431,6 +439,68 @@ final class AppModel {
         effectHandler(.scheduleSnapshot(persistedSnapshot))
     }
 
+    private func setScriptTitle(_ title: String) {
+        let normalized = Self.normalizedTitle(title)
+        guard normalized != document.title else { return }
+        localError = nil
+        invalidatePendingClearForDurableChange()
+        document.title = normalized
+        document.updatedAt = now()
+        snapshotRevision += 1
+        effectHandler(.scheduleSnapshot(snapshot()))
+    }
+
+    private func setFontSize(_ size: Double) {
+        let normalized = size.isFinite
+            ? min(max(size, TeleprompterPreferences.fontSizeRange.lowerBound),
+                TeleprompterPreferences.fontSizeRange.upperBound)
+            : TeleprompterPreferences.defaultFontSizePoints
+        guard normalized != preferences.fontSizePoints else { return }
+        invalidatePendingClearForDurableChange()
+        preferences.fontSizePoints = normalized
+        commitReaderAppearanceChange()
+    }
+
+    private func setTextAlignment(_ alignment: TeleprompterTextAlignment) {
+        guard alignment != preferences.textAlignment else { return }
+        invalidatePendingClearForDurableChange()
+        preferences.textAlignment = alignment
+        commitReaderAppearanceChange()
+    }
+
+    private func setActiveBandEnabled(_ enabled: Bool) {
+        guard enabled != preferences.isActiveBandEnabled else { return }
+        invalidatePendingClearForDurableChange()
+        preferences.isActiveBandEnabled = enabled
+        commitReaderAppearanceChange()
+    }
+
+    private func commitReaderAppearanceChange() {
+        snapshotRevision += 1
+        let persistedSnapshot = snapshot()
+        effectHandler(
+            .updateReaderAttributes(
+                fontSize: preferences.fontSizePoints,
+                alignment: preferences.textAlignment,
+                activeBandEnabled: preferences.isActiveBandEnabled
+            ))
+        effectHandler(.scheduleSnapshot(persistedSnapshot))
+    }
+
+    private static func normalizedTitle(_ title: String) -> String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "Lecture Teleprompter" }
+        var result = ""
+        var scalarCount = 0
+        for character in trimmed {
+            let characterScalars = character.unicodeScalars.count
+            guard scalarCount + characterScalars <= 120 else { break }
+            result.append(character)
+            scalarCount += characterScalars
+        }
+        return result.isEmpty ? "Lecture Teleprompter" : result
+    }
+
     private func requestClear() {
         guard !document.text.isEmpty else { return }
         pendingClear = PendingClear(
@@ -546,6 +616,11 @@ final class AppModel {
                 text: document.text,
                 revision: document.revision,
                 reason: .restore
+            ),
+            .updateReaderAttributes(
+                fontSize: preferences.fontSizePoints,
+                alignment: preferences.textAlignment,
+                activeBandEnabled: preferences.isActiveBandEnabled
             ),
         ])
     }
@@ -882,7 +957,9 @@ final class AppModel {
             .topologyWillChange, .displayInventoryLoaded, .displayInventoryFailed,
             .keepScriptHidden, .completeShieldedMove, .readerResyncRequested:
             return true
-        case .replaceScript, .applyScriptEdit, .requestClear, .confirmClear, .cancelClear,
+        case .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
+            .setTextAlignment, .setActiveBandEnabled, .requestClear,
+            .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .showOverlay, .setLocked,
             .restore, .restoreFailed, .selectDisplay, .confirmSelectedDisplay:
             return false
@@ -930,7 +1007,7 @@ final class AppModel {
             overlayController.hide()
         case .setPanelLocked(let locked):
             overlayController.setLocked(locked)
-        case .applyReaderEdit, .replaceReader, .scheduleSnapshot,
+        case .applyReaderEdit, .replaceReader, .updateReaderAttributes, .scheduleSnapshot,
             .flushSnapshot, .saveSnapshotImmediately,
             .flushPersistence, .moveControllerWhileShielded, .resetViewport,
             .reassessPrivacy, .queryTopology, .evaluatePrivacy:
@@ -974,7 +1051,7 @@ extension PrivacyDirective {
 extension AppEffect {
     var diagnosticName: DiagnosticEffectName {
         switch self {
-        case .applyReaderEdit, .replaceReader: .other
+        case .applyReaderEdit, .replaceReader, .updateReaderAttributes: .other
         case .stagePanelHidden: .stagePanelHidden
         case .showPanel: .showPanel
         case .hidePanel: .hidePanel
