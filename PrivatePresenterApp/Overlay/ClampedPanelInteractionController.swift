@@ -5,7 +5,7 @@ import TeleprompterCore
 /// clamped before the sole `setFrame` call; native unconstrained drag/resize is absent.
 @MainActor
 final class ClampedPanelInteractionController {
-    enum ResizeEdge: Sendable {
+    enum ResizeEdge: CaseIterable, Hashable, Sendable {
         case top, bottom, left, right
         case topLeft, topRight, bottomLeft, bottomRight
 

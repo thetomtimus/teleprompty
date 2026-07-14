@@ -40,12 +40,15 @@ struct OverlayConfigurationCandidate: Equatable, Sendable {
 enum OverlayConfigurationSelector {
     static func select(
         from candidates: [OverlayConfigurationCandidate],
-        sourceDefaultLevel: OverlayPanelLevel = .statusBar,
+        sourceDefaultLevel: OverlayPanelLevel = .floating,
         sourceDefaultOrdering: OverlayPanelOrderingMode = .frontRegardless
     ) -> OverlayConfigurationCandidate? {
         let passing = candidates.filter(\.completePass)
         guard !passing.isEmpty else { return nil }
-        return passing.min { lhs, rhs in
+        let lowestPassingLevel: OverlayPanelLevel =
+            passing.contains(where: { $0.level == .floating }) ? .floating : .statusBar
+        let retainedLevel = passing.filter { $0.level == lowestPassingLevel }
+        return retainedLevel.min { lhs, rhs in
             if lhs.safetyVector != rhs.safetyVector {
                 return lhs.safetyVector.lexicographicallyPrecedes(rhs.safetyVector)
             }
@@ -56,7 +59,6 @@ enum OverlayConfigurationSelector {
                 rhs.level == sourceDefaultLevel
                 && rhs.ordering == sourceDefaultOrdering
             if lhsDefault != rhsDefault { return lhsDefault }
-            if lhs.level != rhs.level { return lhs.level == .floating }
             if lhs.ordering != rhs.ordering { return lhs.ordering == sourceDefaultOrdering }
             return false
         }
@@ -71,7 +73,7 @@ class TeleprompterPanel: NSPanel {
     private(set) var isOverlayLocked = false
     var containmentFrame: NSRect?
 
-    init(contentRect: NSRect, proofLevel: OverlayPanelLevel = .statusBar) {
+    init(contentRect: NSRect, proofLevel: OverlayPanelLevel = .floating) {
         super.init(
             contentRect: contentRect,
             styleMask: [.borderless, .nonactivatingPanel],

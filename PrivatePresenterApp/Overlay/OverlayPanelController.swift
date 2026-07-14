@@ -34,15 +34,25 @@ enum OverlayPanelOperation: Equatable {
     case makeMain
 }
 
+struct OverlayAppliedFrameRecord: Equatable, Sendable {
+    let appliedFrame: NSRect
+    let selectedFullFrame: NSRect
+    let selectedVisibleFrame: NSRect
+    let containmentFrame: NSRect
+}
+
 /// Sole owner and creator of the process's one teleprompter panel.
 @MainActor
 final class OverlayPanelController: NSWindowController {
     let teleprompterPanel: TeleprompterPanel
     let interactionController: ClampedPanelInteractionController
+    private(set) var selectedFullScreenFrame: NSRect?
+    private(set) var selectedVisibleScreenFrame: NSRect?
     private(set) var selectedScreenFrame: NSRect?
     private(set) var appliedFrames: [NSRect] = []
     private var interactionStartFrame: NSRect?
     private let operationRecorder: (OverlayPanelOperation) -> Void
+    private let appliedFrameRecorder: (OverlayAppliedFrameRecord) -> Void
     #if DEBUG
     let orderingMode: OverlayPanelOrderingMode
     #endif
@@ -50,28 +60,32 @@ final class OverlayPanelController: NSWindowController {
     #if DEBUG
     convenience init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
-        proofLevel: OverlayPanelLevel = .statusBar,
+        proofLevel: OverlayPanelLevel = .floating,
         orderingMode: OverlayPanelOrderingMode = .frontRegardless,
-        operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in }
+        operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in },
+        appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void = { _ in }
     ) {
         self.init(
             initialFrame: initialFrame,
             proofLevel: proofLevel,
             orderingModeObject: orderingMode,
-            operationRecorder: operationRecorder
+            operationRecorder: operationRecorder,
+            appliedFrameRecorder: appliedFrameRecorder
         )
     }
     #else
     convenience init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
-        proofLevel: OverlayPanelLevel = .statusBar,
-        operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in }
+        proofLevel: OverlayPanelLevel = .floating,
+        operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in },
+        appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void = { _ in }
     ) {
         self.init(
             initialFrame: initialFrame,
             proofLevel: proofLevel,
             orderingModeObject: nil,
-            operationRecorder: operationRecorder
+            operationRecorder: operationRecorder,
+            appliedFrameRecorder: appliedFrameRecorder
         )
     }
     #endif
@@ -80,7 +94,8 @@ final class OverlayPanelController: NSWindowController {
         initialFrame: NSRect,
         proofLevel: OverlayPanelLevel,
         orderingModeObject: Any?,
-        operationRecorder: @escaping (OverlayPanelOperation) -> Void
+        operationRecorder: @escaping (OverlayPanelOperation) -> Void,
+        appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void
     ) {
         let panel = TeleprompterPanel(contentRect: initialFrame, proofLevel: proofLevel)
         teleprompterPanel = panel
@@ -88,6 +103,7 @@ final class OverlayPanelController: NSWindowController {
         orderingMode = orderingModeObject as? OverlayPanelOrderingMode ?? .frontRegardless
         #endif
         self.operationRecorder = operationRecorder
+        self.appliedFrameRecorder = appliedFrameRecorder
         interactionController = ClampedPanelInteractionController { [weak panel] frame in
             operationRecorder(.applyContainedFrame)
             panel?.setFrame(frame, display: false)
@@ -117,17 +133,23 @@ final class OverlayPanelController: NSWindowController {
         fatalError("init(coder:) is not supported")
     }
 
-    func stageHidden(proposedFrame: NSRect, on screenFrame: NSRect) {
-        selectedScreenFrame = screenFrame
-        teleprompterPanel.containmentFrame = screenFrame
+    func stageHidden(
+        proposedFrame: NSRect,
+        on visibleFrame: NSRect,
+        fullFrame: NSRect? = nil
+    ) {
+        configureSelectedFrames(visibleFrame: visibleFrame, fullFrame: fullFrame)
         operationRecorder(.orderOut)
         teleprompterPanel.orderOut(nil)
         applyContainedFrame(proposedFrame)
     }
 
-    func show(proposedFrame: NSRect, on screenFrame: NSRect) {
-        selectedScreenFrame = screenFrame
-        teleprompterPanel.containmentFrame = screenFrame
+    func show(
+        proposedFrame: NSRect,
+        on visibleFrame: NSRect,
+        fullFrame: NSRect? = nil
+    ) {
+        configureSelectedFrames(visibleFrame: visibleFrame, fullFrame: fullFrame)
         applyContainedFrame(proposedFrame)
         // Intentionally neither makeKeyAndOrderFront nor NSApp.activate.
         #if DEBUG
@@ -159,7 +181,7 @@ final class OverlayPanelController: NSWindowController {
     func applyContainedFrame(_ candidate: NSRect) -> NSRect? {
         guard let selectedScreenFrame else { return nil }
         let frame = interactionController.apply(candidate: candidate, inside: selectedScreenFrame)
-        appliedFrames.append(frame)
+        recordAppliedFrame(frame)
         return frame
     }
 
@@ -180,7 +202,7 @@ final class OverlayPanelController: NSWindowController {
             delta: NSSize(width: translation.width, height: translation.height),
             inside: selectedScreenFrame
         )
-        appliedFrames.append(frame)
+        recordAppliedFrame(frame)
     }
 
     func updateResize(
@@ -196,11 +218,34 @@ final class OverlayPanelController: NSWindowController {
             delta: NSSize(width: translation.width, height: translation.height),
             inside: selectedScreenFrame
         )
-        appliedFrames.append(frame)
+        recordAppliedFrame(frame)
     }
 
     func endInteraction() {
         interactionStartFrame = nil
+    }
+
+    private func configureSelectedFrames(visibleFrame: NSRect, fullFrame: NSRect?) {
+        selectedFullScreenFrame = fullFrame ?? visibleFrame
+        selectedVisibleScreenFrame = visibleFrame
+        selectedScreenFrame = visibleFrame
+        teleprompterPanel.containmentFrame = visibleFrame
+    }
+
+    private func recordAppliedFrame(_ frame: NSRect) {
+        guard
+            let selectedFullScreenFrame,
+            let selectedVisibleScreenFrame,
+            let selectedScreenFrame
+        else { return }
+        appliedFrames.append(frame)
+        appliedFrameRecorder(
+            OverlayAppliedFrameRecord(
+                appliedFrame: frame,
+                selectedFullFrame: selectedFullScreenFrame,
+                selectedVisibleFrame: selectedVisibleScreenFrame,
+                containmentFrame: selectedScreenFrame
+            ))
     }
 
     var configurationSnapshot: OverlayConfigurationSnapshot {

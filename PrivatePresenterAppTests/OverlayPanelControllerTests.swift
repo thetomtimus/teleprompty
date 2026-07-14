@@ -63,6 +63,21 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertEqual(runtime.model.commandDispatchCount, commandCount + 1)
         XCTAssertEqual(runtime.controllerWindowController.showCount, controllerShowCount)
     }
+
+    func testDiagnosticLockChordMutatesOneModelWithoutRaisingOrderedOutController() {
+        let runtime = AppRuntime(proofLevel: .floating)
+        runtime.controllerWindowController.close()
+        let modelIdentity = ObjectIdentifier(runtime.model)
+        let controllerModelIdentity = runtime.controllerWindowController.modelIdentity
+        let presentationCount = runtime.controllerWindowController.presentationCount
+
+        runtime.diagnosticHotKeyService.invokeForTesting(.lock)
+
+        XCTAssertTrue(runtime.model.isLocked)
+        XCTAssertEqual(modelIdentity, controllerModelIdentity)
+        XCTAssertEqual(runtime.controllerWindowController.presentationCount, presentationCount)
+        XCTAssertFalse(runtime.controllerWindowController.window?.isVisible ?? false)
+    }
     #endif
 
     func testControllerCreatesExactlyOnePanel() {
@@ -189,26 +204,123 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertTrue(selected.contains(controller.teleprompterPanel.frame))
     }
 
-    #if DEBUG
-    func testPhaseAControllerObserverRecordsExistingShowShieldedEntryAndExit() {
-        var operations: [ControllerWindowOperation] = []
-        let controller = makeControllerWindowController { operations.append($0) }
+    func testEveryAppliedFrameIsRecordedExactlyOnce() {
+        var records: [OverlayAppliedFrameRecord] = []
+        let controller = OverlayPanelController(
+            appliedFrameRecorder: { records.append($0) }
+        )
+        let visible = NSRect(x: -1_920, y: -120, width: 1_920, height: 1_040)
+        controller.stageHidden(
+            proposedFrame: NSRect(x: -1_500, y: 100, width: 700, height: 350),
+            on: visible
+        )
+        controller.updateDrag(translation: CGSize(width: 80, height: 40))
+        controller.endInteraction()
+        controller.updateResize(edge: .right, translation: CGSize(width: 60, height: 0))
 
-        controller.showShielded(on: nil)
-
-        XCTAssertEqual(operations.first, .showShieldedEntry)
-        XCTAssertEqual(operations.last, .showShieldedExit)
+        XCTAssertEqual(controller.appliedFrames.count, 3)
+        XCTAssertEqual(records.map(\.appliedFrame), controller.appliedFrames)
     }
 
-    func testPhaseAControllerObserverRecordsFrameShowWindowAndShowCount() {
+    func testRecordedFrameIncludesSeparateSelectedFullVisibleAndContainmentFrames() throws {
+        var records: [OverlayAppliedFrameRecord] = []
+        let controller = OverlayPanelController(
+            appliedFrameRecorder: { records.append($0) }
+        )
+        let full = NSRect(x: 1_440, y: 300, width: 1_920, height: 1_080)
+        let visible = NSRect(x: 1_440, y: 300, width: 1_920, height: 1_040)
+
+        controller.stageHidden(
+            proposedFrame: NSRect(x: 1_600, y: 400, width: 700, height: 350),
+            on: visible,
+            fullFrame: full
+        )
+
+        let record = try XCTUnwrap(records.last)
+        XCTAssertEqual(record.selectedFullFrame, full)
+        XCTAssertEqual(record.selectedVisibleFrame, visible)
+        XCTAssertEqual(record.containmentFrame, visible)
+        XCTAssertTrue(visible.contains(record.appliedFrame))
+    }
+
+    func testLockRestoresClickThroughWithoutChangingFrame() {
+        let controller = OverlayPanelController()
+        let visible = NSRect(x: 0, y: 0, width: 1_440, height: 860)
+        controller.stageHidden(
+            proposedFrame: NSRect(x: 100, y: 100, width: 700, height: 350),
+            on: visible
+        )
+        let frame = controller.teleprompterPanel.frame
+
+        controller.setLocked(true)
+
+        XCTAssertTrue(controller.teleprompterPanel.ignoresMouseEvents)
+        XCTAssertEqual(controller.teleprompterPanel.frame, frame)
+    }
+
+    func testSecondContainmentDefenseRejectsCrossDisplayFrame() {
+        let controller = OverlayPanelController()
+        let privateDisplay = NSRect(x: -1_920, y: 0, width: 1_920, height: 1_040)
+        controller.stageHidden(
+            proposedFrame: NSRect(x: -1_500, y: 100, width: 700, height: 350),
+            on: privateDisplay
+        )
+
+        let result = controller.teleprompterPanel.constrainFrameRect(
+            NSRect(x: 500, y: 100, width: 700, height: 350),
+            to: nil
+        )
+
+        XCTAssertTrue(privateDisplay.contains(result))
+    }
+
+    #if DEBUG
+    func testDragAndResizeNeverPresentNormalController() {
+        let runtime = AppRuntime(proofLevel: .floating)
+        let visible = NSRect(x: 0, y: 0, width: 1_440, height: 860)
+        runtime.overlayController.stageHidden(
+            proposedFrame: NSRect(x: 100, y: 100, width: 700, height: 350),
+            on: visible
+        )
+        let presentationCount = runtime.controllerWindowController.presentationCount
+
+        runtime.overlayController.updateDrag(translation: CGSize(width: 30, height: 20))
+        runtime.overlayController.endInteraction()
+        for edge in ClampedPanelInteractionController.ResizeEdge.allCases {
+            runtime.overlayController.updateResize(
+                edge: edge,
+                translation: CGSize(width: 10, height: 10)
+            )
+            runtime.overlayController.endInteraction()
+        }
+
+        XCTAssertEqual(runtime.controllerWindowController.presentationCount, presentationCount)
+    }
+    #endif
+
+    #if DEBUG
+    func testControllerPlacementRecordsEntryAndExitWithoutPresentation() {
         var operations: [ControllerWindowOperation] = []
         let controller = makeControllerWindowController { operations.append($0) }
-        let countBefore = controller.showCount
 
-        controller.showShielded(on: nil)
+        controller.placeControllerWhileShielded(on: nil)
+
+        XCTAssertEqual(operations.first, .placementEntry)
+        XCTAssertEqual(operations.last, .placementExit)
+        XCTAssertFalse(operations.contains(.presentationEntry))
+        XCTAssertFalse(operations.contains(.showWindow))
+        XCTAssertFalse(operations.contains(.presentationExit))
+    }
+
+    func testStartupPresentationRecordsFrameShowWindowAndPresentationCount() {
+        var operations: [ControllerWindowOperation] = []
+        let controller = makeControllerWindowController { operations.append($0) }
+        let countBefore = controller.presentationCount
+
+        controller.presentShieldedControllerAtStartup(on: nil)
 
         XCTAssertTrue(operations.contains(.showWindow))
-        XCTAssertEqual(controller.showCount, countBefore + 1)
+        XCTAssertEqual(controller.presentationCount, countBefore + 1)
         if NSScreen.main != nil {
             XCTAssertTrue(operations.contains(.frameChanged))
         }
@@ -216,7 +328,7 @@ final class OverlayPanelControllerTests: XCTestCase {
 
     func testPhaseAControllerObserverRecordsVisibilityOrderKeyMainAndOcclusion() {
         let controller = makeControllerWindowController()
-        controller.showShielded(on: nil)
+        controller.presentShieldedControllerAtStartup(on: nil)
 
         let state = controller.window?.diagnosticState
 
@@ -230,8 +342,8 @@ final class OverlayPanelControllerTests: XCTestCase {
         let observed = makeControllerWindowController { _ in }
         let unobserved = makeControllerWindowController()
 
-        observed.showShielded(on: nil)
-        unobserved.showShielded(on: nil)
+        observed.presentShieldedControllerAtStartup(on: nil)
+        unobserved.presentShieldedControllerAtStartup(on: nil)
 
         XCTAssertEqual(observed.window?.frame, unobserved.window?.frame)
         XCTAssertEqual(observed.window?.isVisible, unobserved.window?.isVisible)
@@ -240,7 +352,7 @@ final class OverlayPanelControllerTests: XCTestCase {
 
     func testColdShowTraceSupportsControllerVisibleAndOrderedOutStates() {
         let visible = makeControllerWindowController()
-        visible.showShielded(on: nil)
+        visible.presentShieldedControllerAtStartup(on: nil)
         let orderedOut = makeControllerWindowController()
         orderedOut.close()
 
@@ -259,7 +371,7 @@ final class OverlayPanelControllerTests: XCTestCase {
 
     func testObservedVisibleControllerMatchesVisibleDesktopSpaceCohort() {
         let controller = makeControllerWindowController()
-        controller.showShielded(on: nil)
+        controller.presentShieldedControllerAtStartup(on: nil)
 
         XCTAssertEqual(controller.observedDiagnosticCohort(), .visibleDesktopSpace)
     }
@@ -288,6 +400,28 @@ final class OverlayPanelControllerTests: XCTestCase {
 
         XCTAssertEqual(controller.showCount, showCount)
         XCTAssertEqual(controller.window?.isVisible, visible)
+    }
+
+    func testPlacementPreservesVisibleControllerState() {
+        let controller = makeControllerWindowController()
+        controller.presentShieldedControllerAtStartup(on: nil)
+        let presentationCount = controller.presentationCount
+
+        controller.placeControllerWhileShielded(on: nil)
+
+        XCTAssertTrue(controller.window?.isVisible ?? false)
+        XCTAssertEqual(controller.presentationCount, presentationCount)
+    }
+
+    func testPlacementPreservesOrderedOutControllerState() {
+        let controller = makeControllerWindowController()
+        controller.close()
+        let presentationCount = controller.presentationCount
+
+        controller.placeControllerWhileShielded(on: nil)
+
+        XCTAssertFalse(controller.window?.isVisible ?? false)
+        XCTAssertEqual(controller.presentationCount, presentationCount)
     }
 
     func testOrderedOutCohortQuitDoesNotPresentOrOrderController() async {

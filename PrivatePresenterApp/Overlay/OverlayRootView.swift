@@ -5,6 +5,7 @@ import SwiftUI
 struct OverlayRootView: View {
     static let cornerRadius: CGFloat = 18
     static let interiorIsFullyOpaque = true
+    static let resizeZones = ClampedPanelInteractionController.ResizeEdge.allCases
 
     let onDragChanged: (CGSize) -> Void
     let onDragEnded: () -> Void

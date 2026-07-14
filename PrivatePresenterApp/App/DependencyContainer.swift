@@ -113,7 +113,8 @@ final class AppEffectAdapter {
             #endif
             overlayController.stageHidden(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
-                on: display.visibleFrame
+                on: display.visibleFrame,
+                fullFrame: display.frame
             )
         case .showPanel(let display):
             #if DEBUG
@@ -125,7 +126,8 @@ final class AppEffectAdapter {
             #endif
             overlayController.show(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
-                on: display.visibleFrame
+                on: display.visibleFrame,
+                fullFrame: display.frame
             )
         case .hidePanel:
             #if DEBUG
@@ -138,7 +140,7 @@ final class AppEffectAdapter {
             #endif
             overlayController.setLocked(locked)
         case .moveControllerWhileShielded(let display):
-            controllerWindowController?.showShielded(on: display)
+            controllerWindowController?.placeControllerWhileShielded(on: display)
             let model = model
             Task { @MainActor in
                 await Task.yield()
@@ -329,7 +331,19 @@ final class DependencyContainer {
         self.diagnosticRecorder = diagnosticRecorder
         overlayController = OverlayPanelController(
             proofLevel: proofLevel,
-            orderingMode: orderingMode
+            orderingMode: orderingMode,
+            appliedFrameRecorder: { record in
+                diagnosticRecorder?.record(
+                    kind: .panelOperation,
+                    payload: DiagnosticEventPayload(
+                        panelOperation: .applyContainedFrame,
+                        selectedFullFrame: DiagnosticRect(record.selectedFullFrame),
+                        selectedVisibleFrame: DiagnosticRect(record.selectedVisibleFrame),
+                        containmentFrame: DiagnosticRect(record.containmentFrame),
+                        appliedFrame: DiagnosticRect(record.appliedFrame)
+                    )
+                )
+            }
         )
         #else
         overlayController = OverlayPanelController(proofLevel: proofLevel)

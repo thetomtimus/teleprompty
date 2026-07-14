@@ -9,11 +9,15 @@ public struct DisplayDescriptor: Equatable, Sendable {
     public var isBuiltIn: Bool
     public var isMain: Bool
     public var isOnline: Bool
-    public var bounds: DisplayRect
-    public var visibleFrame: DisplayRect
-    public var scale: Double
+    /// Geometry exists only when AppKit exposes this online display as an
+    /// `NSScreen`. CoreGraphics-only topology members remain safety inputs but
+    /// can never be selected as overlay destinations.
+    public var bounds: DisplayRect?
+    public var visibleFrame: DisplayRect?
+    public var scale: Double?
     public var mirrorSourceSessionID: UInt32?
     public var mirroredSessionIDs: Set<UInt32>
+    public var isInHardwareMirrorSet: Bool
 
     public init(
         sessionID: UInt32,
@@ -22,11 +26,12 @@ public struct DisplayDescriptor: Equatable, Sendable {
         isBuiltIn: Bool,
         isMain: Bool,
         isOnline: Bool,
-        bounds: DisplayRect,
-        visibleFrame: DisplayRect,
-        scale: Double,
+        bounds: DisplayRect? = nil,
+        visibleFrame: DisplayRect? = nil,
+        scale: Double? = nil,
         mirrorSourceSessionID: UInt32? = nil,
-        mirroredSessionIDs: Set<UInt32> = []
+        mirroredSessionIDs: Set<UInt32> = [],
+        isInHardwareMirrorSet: Bool = false
     ) {
         self.sessionID = sessionID
         self.fingerprint = fingerprint
@@ -39,10 +44,15 @@ public struct DisplayDescriptor: Equatable, Sendable {
         self.scale = scale
         self.mirrorSourceSessionID = mirrorSourceSessionID
         self.mirroredSessionIDs = mirroredSessionIDs
+        self.isInHardwareMirrorSet = isInHardwareMirrorSet
     }
 
     public var isParticipatingInMirroring: Bool {
-        mirrorSourceSessionID != nil || !mirroredSessionIDs.isEmpty
+        isInHardwareMirrorSet || mirrorSourceSessionID != nil || !mirroredSessionIDs.isEmpty
+    }
+
+    public var isDrawableDestination: Bool {
+        bounds != nil && visibleFrame != nil && scale != nil
     }
 }
 
@@ -53,6 +63,13 @@ public struct DisplayTopologySnapshot: Equatable, Sendable {
     public init(displays: [DisplayDescriptor], querySucceeded: Bool) {
         self.displays = displays
         self.querySucceeded = querySucceeded
+    }
+
+    public var verifiedMirroring: Bool {
+        querySucceeded
+            && displays.lazy
+                .filter(\.isOnline)
+                .contains(where: \.isParticipatingInMirroring)
     }
 }
 

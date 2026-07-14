@@ -20,15 +20,76 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
         XCTAssertEqual(event?.kind, .carbonReceived)
     }
 
+    func testEvidenceExportsSelectedAndAppliedFramesSeparately() async {
+        let harness = makeDiagnosticRecorderHarness()
+        let full = DiagnosticRect(CGRect(x: 0, y: 0, width: 1_920, height: 1_080))
+        let visible = DiagnosticRect(CGRect(x: 0, y: 0, width: 1_920, height: 1_040))
+        let applied = DiagnosticRect(CGRect(x: 100, y: 100, width: 700, height: 350))
+        harness.recorder.record(
+            kind: .panelOperation,
+            payload: DiagnosticEventPayload(
+                panelOperation: .applyContainedFrame,
+                selectedFullFrame: full,
+                selectedVisibleFrame: visible,
+                containmentFrame: visible,
+                appliedFrame: applied
+            )
+        )
+
+        _ = await harness.recorder.finish()
+
+        let event = harness.sink.envelopes.first { $0.payload.appliedFrame != nil }
+        XCTAssertEqual(event?.payload.selectedFullFrame, full)
+        XCTAssertEqual(event?.payload.selectedVisibleFrame, visible)
+        XCTAssertEqual(event?.payload.containmentFrame, visible)
+        XCTAssertEqual(event?.payload.appliedFrame, applied)
+    }
+
+    @MainActor
+    func testPrivacyDirectiveEffectAndApplicationOrderShareCorrelation() async {
+        let harness = makeDiagnosticRecorderHarness()
+        let dependencies = DependencyContainer(
+            proofLevel: .floating,
+            diagnosticRecorder: harness.recorder
+        )
+        let runtime = AppRuntime(
+            proofLevel: .floating,
+            diagnosticEvidenceRecorder: harness.recorder,
+            dependencies: dependencies
+        )
+        let correlationID = UUID()
+
+        runtime.model.send(.topologyWillChange, correlationID: correlationID)
+        _ = await harness.recorder.finish()
+
+        let events = harness.sink.envelopes.filter { $0.correlationID == correlationID }
+        let directiveBefore = try! XCTUnwrap(
+            events.firstIndex { $0.kind == .directiveBefore }
+        )
+        let directiveAfter = try! XCTUnwrap(
+            events.lastIndex { $0.kind == .directiveAfter }
+        )
+        let effectEmitted = try! XCTUnwrap(
+            events.firstIndex { $0.kind == .effectEmitted }
+        )
+        let effectApplyAfter = try! XCTUnwrap(
+            events.lastIndex { $0.kind == .effectApplyAfter }
+        )
+        XCTAssertLessThan(directiveBefore, directiveAfter)
+        XCTAssertLessThan(directiveAfter, effectEmitted)
+        XCTAssertLessThan(effectEmitted, effectApplyAfter)
+        XCTAssertTrue(events.allSatisfy { $0.correlationID == correlationID })
+    }
+
     @MainActor
     func testCarbonReceiptIsStampedBeforeMainDispatchForSameCorrelation() async {
         let harness = makeDiagnosticRecorderHarness()
         let mainDispatch = expectation(description: "main dispatch")
         let service = DiagnosticHotKeyService(
-            carbonReceipt: { correlationID in
+            carbonReceipt: { correlationID, _ in
                 harness.recorder.record(kind: .carbonReceived, correlationID: correlationID)
             },
-            action: { correlationID in
+            action: { correlationID, _ in
                 harness.recorder.record(kind: .mainDispatchBegan, correlationID: correlationID)
                 mainDispatch.fulfill()
             }

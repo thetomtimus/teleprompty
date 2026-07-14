@@ -12,22 +12,24 @@ public struct DisplayTopologyEvaluator: Sendable {
         }
 
         let onlineDisplays = snapshot.displays.filter(\.isOnline)
-        guard !onlineDisplays.contains(where: \.isParticipatingInMirroring) else {
+        guard !snapshot.verifiedMirroring else {
             return unsafe(.blockedMirroring)
         }
 
+        let drawableDisplays = onlineDisplays.filter(\.isDrawableDestination)
+
         guard let selection else {
-            return evaluateWithoutSelection(onlineDisplays)
+            return evaluateWithoutSelection(drawableDisplays)
         }
 
-        let matches = onlineDisplays.filter {
+        let matches = drawableDisplays.filter {
             identityRelationship($0.fingerprint, selection.fingerprint) == .match
         }
         let hasConflict = onlineDisplays.contains {
             identityRelationship($0.fingerprint, selection.fingerprint) == .conflict
         }
         let explicitCurrentSelection = explicitlySelectedDisplay(
-            from: onlineDisplays,
+            from: drawableDisplays,
             selection: selection
         )
         if explicitCurrentSelection == nil, hasConflict || matches.count > 1 {
@@ -35,7 +37,7 @@ public struct DisplayTopologyEvaluator: Sendable {
         }
 
         guard let selectedDisplay = explicitCurrentSelection ?? matches.first else {
-            let stagedBuiltIn = uniqueBuiltIn(in: onlineDisplays)
+            let stagedBuiltIn = uniqueBuiltIn(in: drawableDisplays)
             return unsafe(
                 .selectedDisplayMissing,
                 candidate: stagedBuiltIn,

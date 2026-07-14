@@ -749,13 +749,188 @@ final class AppModelTests: XCTestCase {
         let builtIn = display(id: 1, builtIn: true, x: 0)
 
         XCTAssertEqual(controller.window?.frame, staleProjectorFrame)
-        controller.showShielded(on: builtIn)
+        controller.presentShieldedControllerAtStartup(on: builtIn)
 
         XCTAssertTrue(model.isShielded)
         XCTAssertTrue(
             builtIn.visibleFrame.contains(controller.window?.frame ?? .zero)
         )
     }
+
+    func testMirroringWhileVisibleHidesAndShieldsBeforeRecovery() {
+        let controller = OverlayPanelController()
+        let model = AppModel(overlayController: controller)
+        let builtIn = display(id: 1, builtIn: true, x: 0)
+        let projector = display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([builtIn, projector]))
+        model.confirmSelectedDisplay()
+        model.send(.completeShieldedMove(screenID: builtIn.id))
+        model.showOverlay()
+        XCTAssertTrue(controller.teleprompterPanel.isVisible)
+
+        model.topologyWillChange()
+        let mirroredSink = mirroredDisplay(id: 2, name: "Projector", sourceID: 1)
+        let mirroredSource = RuntimeDisplay(
+            id: 1,
+            localizedName: "Built-in Display",
+            isBuiltIn: true,
+            isMain: true,
+            isOnline: true,
+            frame: builtIn.frame,
+            visibleFrame: builtIn.visibleFrame,
+            scale: builtIn.scale,
+            persistentUUID: builtIn.persistentUUID,
+            mirrorSourceID: nil,
+            isInMirrorSet: true
+        )
+        model.refreshDisplays(.success([mirroredSource, mirroredSink]))
+
+        XCTAssertFalse(controller.teleprompterPanel.isVisible)
+        XCTAssertTrue(model.isShielded)
+        XCTAssertTrue(model.isPaused)
+        XCTAssertEqual(model.warning, AppModel.mirroringWarning)
+        XCTAssertFalse(model.isSelectionConfirmed)
+    }
+
+    func testSelectedPrivateDisplayDisconnectHidesBeforeRecovery() {
+        let controller = OverlayPanelController()
+        let model = AppModel(overlayController: controller)
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([privateDisplay, audience]))
+        model.confirmSelectedDisplay()
+        model.send(.completeShieldedMove(screenID: privateDisplay.id))
+        model.showOverlay()
+
+        model.topologyWillChange()
+        model.refreshDisplays(.success([audience]))
+
+        XCTAssertFalse(controller.teleprompterPanel.isVisible)
+        XCTAssertTrue(model.isShielded)
+        XCTAssertTrue(model.isPaused)
+        XCTAssertFalse(model.isSelectionConfirmed)
+        XCTAssertNil(model.selectedDisplayID)
+    }
+
+    func testControllerRemainsShieldedAfterReconnectUntilConfirmation() {
+        let controller = OverlayPanelController()
+        let model = AppModel(overlayController: controller)
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([privateDisplay, audience]))
+        model.confirmSelectedDisplay()
+        model.send(.completeShieldedMove(screenID: privateDisplay.id))
+        model.showOverlay()
+        model.topologyWillChange()
+        model.refreshDisplays(.success([audience]))
+
+        model.refreshDisplays(.success([privateDisplay, audience]))
+        model.showOverlay()
+
+        XCTAssertTrue(model.isShielded)
+        XCTAssertFalse(model.isSelectionConfirmed)
+        XCTAssertTrue(model.isPaused)
+        XCTAssertFalse(controller.teleprompterPanel.isVisible)
+    }
+
+    func testPendingShowCannotSurviveTopologyChange() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        let before = model.pendingShowGeneration
+
+        model.topologyWillChange()
+
+        XCTAssertGreaterThan(model.pendingShowGeneration, before)
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertTrue(model.isShielded)
+    }
+
+    func testNonDrawableOnlineMirrorStillUsesExactWarningAndCannotBeBypassed() throws {
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let inventory = try SystemDisplayService.makeInventory(
+            drawableDisplays: [privateDisplay],
+            onlineIDs: [1, 2],
+            factsByID: [
+                1: DisplayHardwareFacts(
+                    isBuiltIn: true,
+                    mirrorSourceID: nil,
+                    isInMirrorSet: true,
+                    persistentUUID: "display-1",
+                    vendorID: 1,
+                    modelID: 1,
+                    serialNumber: 1
+                ),
+                2: DisplayHardwareFacts(
+                    isBuiltIn: false,
+                    mirrorSourceID: 1,
+                    isInMirrorSet: true,
+                    persistentUUID: "display-2",
+                    vendorID: 2,
+                    modelID: 2,
+                    serialNumber: 2
+                ),
+            ]
+        )
+        let model = AppModel(overlayController: OverlayPanelController())
+
+        model.refreshDisplayInventory(.success(inventory))
+        model.selectDisplay(privateDisplay.id)
+        model.confirmSelectedDisplay()
+        model.showOverlay()
+
+        XCTAssertEqual(model.warning, AppModel.mirroringWarning)
+        XCTAssertTrue(model.isShielded)
+        XCTAssertFalse(model.isSelectionConfirmed)
+        XCTAssertEqual(inventory.displays.map(\.id), [privateDisplay.id])
+        XCTAssertEqual(inventory.topology.displays.count, 2)
+    }
+
+    #if DEBUG
+    func testTopologyPlacementNeverPresentsNormalController() async {
+        let runtime = AppRuntime(proofLevel: .floating)
+        runtime.controllerWindowController.close()
+        runtime.model.send(.restore(nil))
+        let builtIn = display(id: 1, builtIn: true, x: 0)
+        let projector = display(id: 2, builtIn: false, x: 1_440)
+        let presentationCount = runtime.controllerWindowController.presentationCount
+
+        runtime.model.refreshDisplays(.success([builtIn, projector]))
+        runtime.model.confirmSelectedDisplay()
+        await Task.yield()
+        runtime.model.topologyWillChange()
+        runtime.model.refreshDisplays(.success([builtIn, projector]))
+        await Task.yield()
+
+        XCTAssertEqual(runtime.controllerWindowController.presentationCount, presentationCount)
+        XCTAssertFalse(runtime.controllerWindowController.window?.isVisible ?? false)
+    }
+
+    func testHLockTopologyDragAndResizeNeverOrderControllerOnScreen() async {
+        let runtime = AppRuntime(proofLevel: .floating)
+        runtime.controllerWindowController.close()
+        runtime.model.send(.restore(nil))
+        let builtIn = display(id: 1, builtIn: true, x: 0)
+        let projector = display(id: 2, builtIn: false, x: 1_440)
+        runtime.model.refreshDisplays(.success([builtIn, projector]))
+        runtime.model.confirmSelectedDisplay()
+        await Task.yield()
+        let presentationCount = runtime.controllerWindowController.presentationCount
+
+        runtime.diagnosticHotKeyService.invokeForTesting(.visibility)
+        runtime.diagnosticHotKeyService.invokeForTesting(.lock)
+        runtime.model.topologyWillChange()
+        runtime.model.refreshDisplays(.success([builtIn, projector]))
+        runtime.overlayController.updateDrag(translation: CGSize(width: 20, height: 20))
+        runtime.overlayController.endInteraction()
+        runtime.overlayController.updateResize(
+            edge: .bottomRight,
+            translation: CGSize(width: 20, height: 20)
+        )
+        await Task.yield()
+
+        XCTAssertEqual(runtime.controllerWindowController.presentationCount, presentationCount)
+        XCTAssertFalse(runtime.controllerWindowController.window?.isVisible ?? false)
+    }
+    #endif
 
     private func modelWithScript(
         effectHandler: @escaping @MainActor (AppEffect) -> Void = { _ in }

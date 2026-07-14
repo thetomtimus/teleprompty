@@ -36,7 +36,7 @@ final class AppModel {
 
     #if DEBUG
     private(set) var focusEvidence: [LabeledFocusSnapshot] = []
-    private(set) var diagnosticHotKeyStatus = "Control-Option-H not registered"
+    private(set) var diagnosticHotKeyStatus = "Control-Option-H/L not registered"
     @ObservationIgnored private let diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder?
     @ObservationIgnored private(set) var diagnosticCorrelationID: UUID?
     #endif
@@ -221,6 +221,15 @@ final class AppModel {
         }
     }
 
+    #if DEBUG
+    func send(_ command: AppCommand, correlationID: UUID) {
+        let previousCorrelationID = diagnosticCorrelationID
+        diagnosticCorrelationID = correlationID
+        send(command)
+        diagnosticCorrelationID = previousCorrelationID
+    }
+    #endif
+
     func beginTerminationQuiescence() {
         isTerminationQuiescing = true
     }
@@ -280,11 +289,11 @@ final class AppModel {
     }
 
     #if DEBUG
-    func setDiagnosticHotKeyStatus(_ status: Int32) {
+    func setDiagnosticHotKeyStatus(_ status: DiagnosticHotKeyRegistrationStatus) {
         diagnosticHotKeyStatus =
-            status == 0
-            ? "Control-Option-H registered"
-            : "Control-Option-H registration failed (OSStatus \(status))"
+            status.allRegistered
+            ? "Control-Option-H and Control-Option-L registered"
+            : "Diagnostic hot-key registration failed (H=\(status.visibility), L=\(status.lock))"
     }
 
     func toggleOverlayFromDiagnosticHotKey(correlationID: UUID? = nil) {
@@ -307,6 +316,22 @@ final class AppModel {
             kind: .commandAfter,
             correlationID: correlationID,
             payload: DiagnosticEventPayload(command: command)
+        )
+        diagnosticCorrelationID = nil
+    }
+
+    func toggleLockFromDiagnosticHotKey(correlationID: UUID? = nil) {
+        diagnosticCorrelationID = correlationID
+        diagnosticEvidenceRecorder?.record(
+            kind: .commandBefore,
+            correlationID: correlationID,
+            payload: DiagnosticEventPayload(command: .toggleLock)
+        )
+        send(.setLocked(!preferences.isLocked))
+        diagnosticEvidenceRecorder?.record(
+            kind: .commandAfter,
+            correlationID: correlationID,
+            payload: DiagnosticEventPayload(command: .toggleLock)
         )
         diagnosticCorrelationID = nil
     }
@@ -834,12 +859,14 @@ final class AppModel {
         case .stagePanelHidden(let display):
             overlayController.stageHidden(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
-                on: display.visibleFrame
+                on: display.visibleFrame,
+                fullFrame: display.frame
             )
         case .showPanel(let display):
             overlayController.show(
                 proposedFrame: overlayController.defaultFrame(on: display.visibleFrame),
-                on: display.visibleFrame
+                on: display.visibleFrame,
+                fullFrame: display.frame
             )
         case .hidePanel:
             overlayController.hide()

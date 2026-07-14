@@ -44,6 +44,7 @@ enum DiagnosticFaultCode: String, Codable, CaseIterable, Hashable, Sendable {
     case configControllerCohortInvalid = "CONFIG_CONTROLLER_COHORT_INVALID"
     case configRepetitionInvalid = "CONFIG_REPETITION_INVALID"
     case controllerCohortMismatch = "CONTROLLER_COHORT_MISMATCH"
+    case hotKeyRegistrationFailed = "HOT_KEY_REGISTRATION_FAILED"
     case configExecutableHashInvalid = "CONFIG_EXECUTABLE_HASH_INVALID"
     case configBuildLogPathInvalid = "CONFIG_BUILD_LOG_PATH_INVALID"
     case configBuildLogHashInvalid = "CONFIG_BUILD_LOG_HASH_INVALID"
@@ -129,6 +130,12 @@ enum DiagnosticWindowLifecycle: String, Codable, Sendable {
 enum DiagnosticCommandName: String, Codable, Sendable {
     case showOverlay
     case hideOverlay
+    case toggleLock
+}
+
+enum DiagnosticHotKeyActionName: String, Codable, Sendable {
+    case visibility
+    case lock
 }
 
 enum DiagnosticEffectName: String, Codable, Sendable {
@@ -162,10 +169,12 @@ enum DiagnosticPanelOperationName: String, Codable, Sendable {
 }
 
 enum DiagnosticControllerOperationName: String, Codable, Sendable {
-    case showShieldedEntry
+    case placementEntry
     case frameChanged
+    case placementExit
+    case presentationEntry
     case showWindow
-    case showShieldedExit
+    case presentationExit
 }
 
 enum DiagnosticWindowOwner: String, Codable, Sendable {
@@ -213,6 +222,7 @@ struct DiagnosticEventPayload: Codable, Equatable, Sendable {
     var declaredControllerCohort: DiagnosticControllerCohort?
     var observedControllerCohort: DiagnosticControllerCohort?
     var command: DiagnosticCommandName?
+    var hotKeyAction: DiagnosticHotKeyActionName?
     var effect: DiagnosticEffectName?
     var privacyDirective: DiagnosticPrivacyDirectiveName?
     var panelOperation: DiagnosticPanelOperationName?
@@ -225,6 +235,10 @@ struct DiagnosticEventPayload: Codable, Equatable, Sendable {
     var focus: DiagnosticFocusState?
     var panelState: DiagnosticWindowState?
     var controllerState: DiagnosticWindowState?
+    var selectedFullFrame: DiagnosticRect?
+    var selectedVisibleFrame: DiagnosticRect?
+    var containmentFrame: DiagnosticRect?
+    var appliedFrame: DiagnosticRect?
     var proofStatus: DiagnosticSerializedProofStatus?
     var permanentInvalidation: DiagnosticFaultCode?
     var implementationCommit: String?
@@ -236,6 +250,7 @@ struct DiagnosticEventPayload: Codable, Equatable, Sendable {
         declaredControllerCohort: DiagnosticControllerCohort? = nil,
         observedControllerCohort: DiagnosticControllerCohort? = nil,
         command: DiagnosticCommandName? = nil,
+        hotKeyAction: DiagnosticHotKeyActionName? = nil,
         effect: DiagnosticEffectName? = nil,
         privacyDirective: DiagnosticPrivacyDirectiveName? = nil,
         panelOperation: DiagnosticPanelOperationName? = nil,
@@ -248,6 +263,10 @@ struct DiagnosticEventPayload: Codable, Equatable, Sendable {
         focus: DiagnosticFocusState? = nil,
         panelState: DiagnosticWindowState? = nil,
         controllerState: DiagnosticWindowState? = nil,
+        selectedFullFrame: DiagnosticRect? = nil,
+        selectedVisibleFrame: DiagnosticRect? = nil,
+        containmentFrame: DiagnosticRect? = nil,
+        appliedFrame: DiagnosticRect? = nil,
         proofStatus: DiagnosticSerializedProofStatus? = nil,
         permanentInvalidation: DiagnosticFaultCode? = nil,
         implementationCommit: String? = nil
@@ -258,6 +277,7 @@ struct DiagnosticEventPayload: Codable, Equatable, Sendable {
         self.declaredControllerCohort = declaredControllerCohort
         self.observedControllerCohort = observedControllerCohort
         self.command = command
+        self.hotKeyAction = hotKeyAction
         self.effect = effect
         self.privacyDirective = privacyDirective
         self.panelOperation = panelOperation
@@ -270,6 +290,10 @@ struct DiagnosticEventPayload: Codable, Equatable, Sendable {
         self.focus = focus
         self.panelState = panelState
         self.controllerState = controllerState
+        self.selectedFullFrame = selectedFullFrame
+        self.selectedVisibleFrame = selectedVisibleFrame
+        self.containmentFrame = containmentFrame
+        self.appliedFrame = appliedFrame
         self.proofStatus = proofStatus
         self.permanentInvalidation = permanentInvalidation
         self.implementationCommit = implementationCommit
@@ -286,7 +310,7 @@ struct DiagnosticEventEnvelope: Codable, Equatable, Sendable {
 }
 
 struct DiagnosticProofConfiguration: Codable, Equatable, Sendable {
-    static let defaultLevel = OverlayPanelLevel.statusBar
+    static let defaultLevel = OverlayPanelLevel.floating
     static let defaultOrdering = OverlayPanelOrderingMode.frontRegardless
 
     let implementationCommit: String

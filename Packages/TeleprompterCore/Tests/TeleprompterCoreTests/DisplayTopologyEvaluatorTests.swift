@@ -36,6 +36,61 @@ final class DisplayTopologyEvaluatorTests: XCTestCase {
         XCTAssertFalse(result.canOpenOverlay)
     }
 
+    func testVerifiedMirroringRequiresHardwareMirrorFacts() {
+        let first = display(id: 1, name: "Built-in Display", builtIn: true)
+        let second = display(id: 2, name: "Projector")
+
+        XCTAssertFalse(
+            DisplayTopologySnapshot(displays: [first, second], querySucceeded: true)
+                .verifiedMirroring
+        )
+
+        var mirrored = second
+        mirrored.isInHardwareMirrorSet = true
+        XCTAssertTrue(
+            DisplayTopologySnapshot(displays: [first, mirrored], querySucceeded: true)
+                .verifiedMirroring
+        )
+    }
+
+    func testDistinctExtendedDisplaysAreNotMislabelledMirrored() {
+        let privateDisplay = display(id: 1, name: "Built-in Display", builtIn: true)
+        let projector = display(id: 2, name: "Projector")
+
+        let result = evaluate(
+            displays: [privateDisplay, projector],
+            selection: .init(
+                fingerprint: privateDisplay.fingerprint,
+                isConfirmed: true,
+                isConfirmedInCurrentSession: true,
+                currentSessionID: privateDisplay.sessionID
+            )
+        )
+
+        XCTAssertEqual(result.assessment, .safeCandidate)
+        XCTAssertTrue(result.canOpenOverlay)
+    }
+
+    func testCGOnlyDisplayCannotBecomeSelectedDestination() {
+        var cgOnly = display(id: 2, name: "CoreGraphics only")
+        cgOnly.bounds = nil
+        cgOnly.visibleFrame = nil
+        cgOnly.scale = nil
+
+        let result = evaluate(
+            displays: [cgOnly],
+            selection: .init(
+                fingerprint: cgOnly.fingerprint,
+                isConfirmed: true,
+                isConfirmedInCurrentSession: true,
+                currentSessionID: cgOnly.sessionID
+            )
+        )
+
+        XCTAssertEqual(result.assessment, .selectedDisplayMissing)
+        XCTAssertFalse(result.canOpenOverlay)
+    }
+
     func testNoBuiltInRequiresSelection() {
         let projector = display(id: 20, name: "Projector")
         let confidenceMonitor = display(id: 21, name: "Confidence Monitor")

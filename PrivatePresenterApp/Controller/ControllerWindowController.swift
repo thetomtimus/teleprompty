@@ -3,10 +3,12 @@ import SwiftUI
 
 #if DEBUG
 enum ControllerWindowOperation: Equatable, Sendable {
-    case showShieldedEntry
+    case placementEntry
     case frameChanged
+    case placementExit
+    case presentationEntry
     case showWindow
-    case showShieldedExit
+    case presentationExit
 }
 #endif
 
@@ -16,7 +18,10 @@ final class ControllerWindowController: NSWindowController {
     #if DEBUG
     private let operationRecorder: (ControllerWindowOperation) -> Void
     #endif
-    private(set) var showCount = 0
+    private(set) var placementCount = 0
+    private(set) var presentationCount = 0
+
+    var showCount: Int { presentationCount }
 
     var modelIdentity: ObjectIdentifier {
         ObjectIdentifier(model)
@@ -78,14 +83,14 @@ final class ControllerWindowController: NSWindowController {
         fatalError("init(coder:) is not supported")
     }
 
-    /// Saved frames are deliberately ignored during M0. The shielded controller is
-    /// positioned only on the current built-in candidate (or main screen fallback).
-    func showShielded(on candidate: RuntimeDisplay?) {
+    /// Moves the controller while preserving its current ordered-in/ordered-out state.
+    /// Saved frames are ignored during M0 and the destination is always clamped.
+    func placeControllerWhileShielded(on candidate: RuntimeDisplay?) {
         guard let window else { return }
         #if DEBUG
-        operationRecorder(.showShieldedEntry)
+        operationRecorder(.placementEntry)
         #endif
-        showCount += 1
+        placementCount += 1
         let screenFrame = candidate?.visibleFrame ?? NSScreen.main?.visibleFrame
         if let screenFrame {
             let origin = NSPoint(
@@ -104,11 +109,24 @@ final class ControllerWindowController: NSWindowController {
             #endif
         }
         #if DEBUG
+        operationRecorder(.placementExit)
+        #endif
+    }
+
+    /// Startup is the sole implicit controller presentation in the M0 proof app.
+    func presentShieldedControllerAtStartup(on candidate: RuntimeDisplay?) {
+        guard window != nil else { return }
+        #if DEBUG
+        operationRecorder(.presentationEntry)
+        #endif
+        placeControllerWhileShielded(on: candidate)
+        presentationCount += 1
+        #if DEBUG
         operationRecorder(.showWindow)
         #endif
         showWindow(nil)
         #if DEBUG
-        operationRecorder(.showShieldedExit)
+        operationRecorder(.presentationExit)
         #endif
     }
 

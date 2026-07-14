@@ -27,6 +27,9 @@ struct AppRuntimeStartupSeams {
     var load: (@MainActor () async -> SnapshotLoadResult)?
     var observeAndQuery: (@MainActor () -> Result<RuntimeDisplayInventory, Error>)?
     var registerDiagnosticHotKey: (@MainActor () -> Int32)?
+    #if DEBUG
+    var registerDiagnosticHotKeys: (@MainActor () -> DiagnosticHotKeyRegistrationStatus)?
+    #endif
     var record: @MainActor (AppRuntimeStartupEvent) -> Void
     #if DEBUG
     var recordDiagnosticLifecycle: @MainActor (AppRuntimeDiagnosticLifecycleEvent) -> Void
@@ -37,6 +40,8 @@ struct AppRuntimeStartupSeams {
         load: (@MainActor () async -> SnapshotLoadResult)? = nil,
         observeAndQuery: (@MainActor () -> Result<RuntimeDisplayInventory, Error>)? = nil,
         registerDiagnosticHotKey: (@MainActor () -> Int32)? = nil,
+        registerDiagnosticHotKeys:
+            (@MainActor () -> DiagnosticHotKeyRegistrationStatus)? = nil,
         record: @escaping @MainActor (AppRuntimeStartupEvent) -> Void = { _ in },
         recordDiagnosticLifecycle:
             @escaping @MainActor (
@@ -46,6 +51,7 @@ struct AppRuntimeStartupSeams {
         self.load = load
         self.observeAndQuery = observeAndQuery
         self.registerDiagnosticHotKey = registerDiagnosticHotKey
+        self.registerDiagnosticHotKeys = registerDiagnosticHotKeys
         self.record = record
         self.recordDiagnosticLifecycle = recordDiagnosticLifecycle
     }
@@ -86,11 +92,12 @@ final class AppRuntime {
     private var currentDiagnosticCorrelationID: UUID?
     private var firstShowCohortValidated = false
     private var closedDiagnosticCorrelationCount = 0
+    private var topologyDiagnosticCorrelationID: UUID?
     #endif
 
     #if DEBUG
     convenience init(
-        proofLevel: OverlayPanelLevel = .statusBar,
+        proofLevel: OverlayPanelLevel = .floating,
         diagnosticConfiguration: DiagnosticProofConfiguration? = nil,
         diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder? = nil,
         enforcesDiagnosticControllerCohort: Bool = true,
@@ -108,7 +115,7 @@ final class AppRuntime {
     }
     #else
     convenience init(
-        proofLevel: OverlayPanelLevel = .statusBar,
+        proofLevel: OverlayPanelLevel = .floating,
         dependencies: DependencyContainer? = nil,
         startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
     ) {
@@ -185,8 +192,8 @@ final class AppRuntime {
             model: model,
             controller: controllerWindowController
         )
-        displayService.onReconfigurationBegan = { [weak model] in
-            model?.send(.topologyWillChange)
+        displayService.onReconfigurationBegan = { [weak self] in
+            self?.receiveTopologyWillChange()
         }
         displayService.onScreensChanged = { [weak self] result in
             self?.receive(result)
@@ -239,7 +246,7 @@ final class AppRuntime {
         startupSeams.recordDiagnosticLifecycle(.installObservers)
         #endif
         startupSeams.record(.shieldController)
-        controllerWindowController.showShielded(on: nil)
+        controllerWindowController.presentShieldedControllerAtStartup(on: nil)
 
         startupSeams.record(.load)
         let loadResult: SnapshotLoadResult
@@ -277,20 +284,57 @@ final class AppRuntime {
         startupSeams.record(.evaluatePrivacy)
 
         #if DEBUG
-        let status: Int32
-        if let register = startupSeams.registerDiagnosticHotKey {
+        let status: DiagnosticHotKeyRegistrationStatus
+        if let register = startupSeams.registerDiagnosticHotKeys {
             status = register()
+        } else if let register = startupSeams.registerDiagnosticHotKey {
+            let overriddenStatus = register()
+            status = DiagnosticHotKeyRegistrationStatus(
+                visibility: overriddenStatus,
+                lock: overriddenStatus
+            )
         } else {
             status = diagnosticHotKeyService.register()
         }
         model.setDiagnosticHotKeyStatus(status)
+        if !status.allRegistered {
+            diagnosticEvidenceRecorder?.invalidate(.hotKeyRegistrationFailed)
+        }
         startupSeams.recordDiagnosticLifecycle(.registerHotKey)
         startupSeams.record(.registerDiagnosticHotKey)
         #endif
     }
 
     private func receive(_ result: Result<RuntimeDisplayInventory, Error>) {
+        #if DEBUG
+        if let topologyDiagnosticCorrelationID {
+            switch result {
+            case .success(let inventory):
+                model.send(
+                    .displayInventoryLoaded(inventory),
+                    correlationID: topologyDiagnosticCorrelationID
+                )
+            case .failure:
+                model.send(
+                    .displayInventoryFailed,
+                    correlationID: topologyDiagnosticCorrelationID
+                )
+            }
+            self.topologyDiagnosticCorrelationID = nil
+            return
+        }
+        #endif
         model.refreshDisplayInventory(result)
+    }
+
+    private func receiveTopologyWillChange() {
+        #if DEBUG
+        let correlationID = UUID()
+        topologyDiagnosticCorrelationID = correlationID
+        model.send(.topologyWillChange, correlationID: correlationID)
+        #else
+        model.send(.topologyWillChange)
+        #endif
     }
 
     #if DEBUG
@@ -324,11 +368,20 @@ final class AppRuntime {
     private func makeDiagnosticHotKeyService() -> DiagnosticHotKeyService {
         let recorder = diagnosticEvidenceRecorder
         return DiagnosticHotKeyService(
-            carbonReceipt: { correlationID in
-                recorder?.record(kind: .carbonReceived, correlationID: correlationID)
+            carbonReceipt: { correlationID, hotKeyAction in
+                recorder?.record(
+                    kind: .carbonReceived,
+                    correlationID: correlationID,
+                    payload: DiagnosticEventPayload(
+                        hotKeyAction: hotKeyAction.diagnosticName
+                    )
+                )
             },
-            action: { [weak self] correlationID in
-                self?.handleDiagnosticVisibilityHotKey(correlationID: correlationID)
+            action: { [weak self] correlationID, hotKeyAction in
+                self?.handleDiagnosticHotKey(
+                    hotKeyAction,
+                    correlationID: correlationID
+                )
             }
         )
     }
@@ -340,25 +393,35 @@ final class AppRuntime {
             correlationProvider: { [weak self] in self?.currentDiagnosticCorrelationID },
             postCorrelationQuitEligibilityProvider: { [weak self] in
                 guard let self else { return false }
-                return self.closedDiagnosticCorrelationCount == 3
+                return self.closedDiagnosticCorrelationCount >= 3
                     && self.activeDiagnosticCorrelations.isEmpty
             }
         )
     }
 
-    private func handleDiagnosticVisibilityHotKey(correlationID: UUID) {
+    private func handleDiagnosticHotKey(
+        _ hotKeyAction: DiagnosticHotKeyAction,
+        correlationID: UUID
+    ) {
         diagnosticEvidenceRecorder?.record(
             kind: .mainDispatchBegan,
             correlationID: correlationID,
-            payload: DiagnosticEventPayload(focus: captureDiagnosticFocus())
+            payload: DiagnosticEventPayload(
+                hotKeyAction: hotKeyAction.diagnosticName,
+                focus: captureDiagnosticFocus()
+            )
         )
         activeDiagnosticCorrelations.append(correlationID)
         currentDiagnosticCorrelationID = correlationID
 
-        let isFirstShow = model.overlaySession.visibility != .visible
-        if !isFirstShow || validateControllerCohortBeforeFirstHotKey() {
+        if validateControllerCohortBeforeFirstHotKey() {
             // Direct command-owner dispatch: no controller opening or raising.
-            model.toggleOverlayFromDiagnosticHotKey(correlationID: correlationID)
+            switch hotKeyAction {
+            case .visibility:
+                model.toggleOverlayFromDiagnosticHotKey(correlationID: correlationID)
+            case .lock:
+                model.toggleLockFromDiagnosticHotKey(correlationID: correlationID)
+            }
         }
 
         diagnosticObserverSet?.scheduleFocusSamples(
@@ -389,10 +452,21 @@ final class AppRuntime {
 extension ControllerWindowOperation {
     fileprivate var diagnosticName: DiagnosticControllerOperationName {
         switch self {
-        case .showShieldedEntry: .showShieldedEntry
+        case .placementEntry: .placementEntry
         case .frameChanged: .frameChanged
+        case .placementExit: .placementExit
+        case .presentationEntry: .presentationEntry
         case .showWindow: .showWindow
-        case .showShieldedExit: .showShieldedExit
+        case .presentationExit: .presentationExit
+        }
+    }
+}
+
+extension DiagnosticHotKeyAction {
+    fileprivate var diagnosticName: DiagnosticHotKeyActionName {
+        switch self {
+        case .visibility: .visibility
+        case .lock: .lock
         }
     }
 }
