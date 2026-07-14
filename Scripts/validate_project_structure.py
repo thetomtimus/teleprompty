@@ -340,6 +340,104 @@ DATA_SAFETY_PATTERNS = (
     r"\bNSUserNotification\b",
 )
 
+M2_REQUIRED_PATHS = (
+    "PrivatePresenterApp/Text/ScriptTextEdit.swift",
+    "PrivatePresenterApp/Controller/EditorTextSystem.swift",
+    "PrivatePresenterApp/Controller/ScriptEditorTextView.swift",
+    "PrivatePresenterApp/Controller/ControllerPresentation.swift",
+    "PrivatePresenterApp/Controller/DebugDiagnosticsView.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+    "PrivatePresenterAppTests/EditorTextSystemTests.swift",
+    "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
+    "PrivatePresenterAppTests/ControllerPresentationTests.swift",
+)
+
+M2_NAMED_TESTS = (
+    "testEditorReportsEditedRangeAndDelta",
+    "testScriptTextEditValidatesBaseAndResultRevision",
+    "testScriptTextEditIsSendableAcrossActorBoundary",
+    "testUTF16EmojiEditBoundaries",
+    "testCombiningCharacterEditUsesUTF16DeltaWithoutCorruption",
+    "testProgrammaticEditorSyncDoesNotEmitUserEdit",
+    "testEditorCallbackIsMainActorIsolated",
+    "testEditorUsesTextKit2WithoutLegacyLayoutManager",
+    "testStaleOrOutOfOrderEditCannotOverwriteAuthority",
+    "testAcceptedEditMutatesStateBeforeReaderAndSnapshotEffects",
+    "testIncrementalEditDoesNotReplaceReaderStorage",
+    "testRevisionGapPerformsOneResync",
+    "testMultipleUpdatesDuringGapRequestOnlyOneResync",
+    "testDuplicateAndStaleReaderUpdatesAreIgnored",
+    "testContiguousInvalidRangePerformsOneAuthoritativeResync",
+    "testStorageLengthDivergencePerformsOneAuthoritativeResync",
+    "testResyncToLatestRevisionRestoresIncrementalDelivery",
+    "testInitialRestoreClearAndLatchedGapOrApplicationFailureAreOnlyFullReplacementReasons",
+    "testReaderResyncCallbackIsMainActorIsolated",
+    "testReaderUsesTextKit2WithoutLegacyLayoutManager",
+    "testFontAndAlignmentUpdatesDoNotMutateReaderText",
+    "testActiveBandToggleDoesNotMutateReaderText",
+    "testEmptyInstructionAndDisabledStart",
+    "testClearPresentsConfirmation",
+    "testWhitespaceOnlyScriptUsesEmptyInstruction",
+    "testNonemptyM2ScriptStillExplainsScrollingIsM3",
+    "testM2StartPauseRestartDoNotDispatchPlaybackCommands",
+    "testM2FocusModeExplainsM4AndDoesNotChangeChrome",
+    "testProductControllerExposesOpenCloseAndHideShowThroughOnePanelState",
+    "testTitleTrimsDefaultsAndCapsWithoutSplittingCharacter",
+    "testFontSizeAlignmentAndActiveBandPersistThroughV1Snapshot",
+    "testAcceptedEditSchedulesAutosaveAfterAuthoritativeMutation",
+    "testRapidEditsDebounceToLatestSnapshot",
+    "testAutosaveDoesNotBlockMainActorEffectDispatch",
+    "testAutosaveDiagnosticsExcludeScriptTitleAndReplacementText",
+    "testMapsNSScreenNumberToSessionID",
+    "testBuildsFingerprintFromUUIDAndHardware",
+    "testDuplicateZeroSerialDisplaysAreAmbiguous",
+    "testRawDisplayIDIsNotEncoded",
+    "testQueryFailureIsUnsafe",
+    "testMissingOrWrongTypedNSScreenNumberFailsClosed",
+    "testDuplicateDrawableSessionIDsFailClosed",
+    "testDuplicateOnlineSessionIDsFailClosed",
+    "testZeroSessionIDFailsClosed",
+    "testZeroVendorModelAndSerialAreNotStrongIdentity",
+    "testLocalizedNameDoesNotOverrideHardwareConflict",
+    "testAmbiguousFingerprintCannotRestoreAcrossSessionWithoutConfirmation",
+    "testExplicitCurrentSessionChoiceDoesNotEnterEncodedSnapshot",
+    "testMirroringWarningUsesRequiredText",
+    "testShieldPrecedesWarningAndReposition",
+    "testSelectedDisplayNameIsVisible",
+    "testAmbiguityRequiresExplicitConfirmation",
+    "testMenuNeverContainsPrivateTitle",
+    "testRecoveryNeverResumesAutomatically",
+    "testPerDisplayFramesRemainSeparate",
+    "testExactMirroringWarningIsSeparateFromRecoveryGuidance",
+    "testSelectedNameIsHiddenUntilCurrentSessionConfirmation",
+    "testTopologyStatusDistinguishesExtendedMirroredSingleMissingAmbiguousAndQueryFailure",
+    "testAmbiguousWeakDisplayFrameIsNotAutoRestoredOrPersisted",
+    "testRestoredNormalizedFrameReclampsToCurrentContainment",
+    "testFrameCallbackPersistsOnlyCurrentConfirmedDisplayFingerprint",
+    "testDisplayLossPausesHidesShieldsBeforeFallbackPlacement",
+    "testReconnectRemainsHiddenPausedUntilExplicitConfirmation",
+    "testPendingShowCannotSurviveTopologyChange",
+    "testWindowMenuDiagnosticAndAccessibilityLabelsExcludeSentinelPrivateContent",
+    "testM2PreservesOnePanelAndOneAppModel",
+    "testM2PreservesStatusBarFrontRegardlessAndPermanentNonKeyNonMain",
+    "testM2PreservesDiagnosticHAndLDirectDispatchWithoutControllerRaise",
+    "testM2PreservesEveryDragAndResizeFrameWithinSelectedDisplay",
+    "testM2PreservesOpaqueRoundedReaderSurface",
+)
+
+M2_PROHIBITED_PATTERNS = (
+    "NSStatusItem",
+    "MenuBarExtra",
+    "addGlobalMonitorForEvents",
+    "CGEventTap",
+    "AXIsProcessTrusted",
+    "WKWebView",
+    "URLSession",
+    ".screenSaver",
+    ".layoutManager",
+)
+
 
 def fail(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
@@ -482,6 +580,86 @@ def validate_m0_prohibited_surfaces() -> None:
         fail("prohibited M0 behavior marker in product source: " + ", ".join(violations))
 
 
+def validate_m2_source() -> list[str]:
+    violations: list[str] = []
+    missing_paths = [path for path in M2_REQUIRED_PATHS if not (ROOT / path).is_file()]
+    violations.extend(f"missing-path:{path}" for path in missing_paths)
+
+    test_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for root in (
+            ROOT / "Packages/TeleprompterCore/Tests",
+            ROOT / "PrivatePresenterAppTests",
+        )
+        for path in root.rglob("*.swift")
+    )
+    violations.extend(
+        f"missing-test:{name}" for name in M2_NAMED_TESTS if name not in test_sources
+    )
+
+    production_files = list((ROOT / "PrivatePresenterApp").rglob("*.swift"))
+    for path in production_files:
+        source = path.read_text(encoding="utf-8")
+        for pattern in M2_PROHIBITED_PATTERNS:
+            if pattern in source:
+                violations.append(f"prohibited:{pattern}:{path.relative_to(ROOT)}")
+
+    app_model = read("PrivatePresenterApp/App/AppModel.swift")
+    if app_model.count("final class AppModel") != 1:
+        violations.append("authority:AppModel-count")
+    if "@MainActor\n@Observable\nfinal class AppModel" not in app_model:
+        violations.append("authority:AppModel-main-actor")
+
+    app_sources = "\n".join(path.read_text(encoding="utf-8") for path in production_files)
+    if app_sources.count("TeleprompterPanel(contentRect:") != 1:
+        violations.append("authority:panel-construction-count")
+
+    editor_source = read("PrivatePresenterApp/Controller/EditorTextSystem.swift")
+    reader_source = read("PrivatePresenterApp/Overlay/ReaderTextSystem.swift")
+    if "NSTextView(usingTextLayoutManager: true)" not in editor_source:
+        violations.append("textkit:editor-not-textkit2")
+    if "NSTextView(usingTextLayoutManager: true)" not in reader_source:
+        violations.append("textkit:reader-not-textkit2")
+    if "private(set) var isAwaitingResync" not in reader_source:
+        violations.append("reader:resync-latch-missing")
+    if "incrementalMutationCount" not in reader_source or "fullReplacementCount" not in reader_source:
+        violations.append("reader:mutation-instrumentation-missing")
+
+    controller_source = read("PrivatePresenterApp/Controller/ControllerView.swift")
+    for marker in (
+        'Button("Start") {}.disabled(true)',
+        'Button("Pause") {}.disabled(true)',
+        'Button("Restart") {}.disabled(true)',
+        'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
+    ):
+        if marker not in controller_source:
+            violations.append(f"controller:missing-disabled-marker:{marker}")
+    for prohibited_dispatch in ("model.send(.start)", "model.send(.togglePlayback)", "model.send(.restart)"):
+        if prohibited_dispatch in controller_source:
+            violations.append(f"controller:future-dispatch:{prohibited_dispatch}")
+
+    if "static let currentSchemaVersion = 1" not in read(
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/PersistedSnapshot.swift"
+    ):
+        violations.append("schema:persisted-snapshot-version")
+    if "static let currentSchemaVersion = 1" not in read(
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift"
+    ):
+        violations.append("schema:script-document-version")
+
+    snapshot_store_baseline = git(
+        "show",
+        "d17e74a95f8e4b29dd691b911eb1f775421e2b30:"
+        "PrivatePresenterApp/Services/SnapshotStore.swift",
+    )
+    if snapshot_store_baseline.returncode != 0:
+        violations.append("snapshot-store:planning-baseline-unavailable")
+    elif snapshot_store_baseline.stdout != read("PrivatePresenterApp/Services/SnapshotStore.swift"):
+        violations.append("snapshot-store:production-source-changed")
+
+    return violations
+
+
 def main() -> None:
     missing = [path for path in REQUIRED_PATHS if not (ROOT / path).is_file()]
     if missing:
@@ -544,8 +722,11 @@ def main() -> None:
     validate_data_safety()
     validate_historical_result_prefix()
     validate_m0_prohibited_surfaces()
+    m2_violations = validate_m2_source()
+    if m2_violations:
+        fail("Milestone 2 source validation failed: " + ", ".join(m2_violations))
     validate_xcode_listing()
-    print("Project structure validation passed (Milestone 0 Phase B source).")
+    print("Project structure validation passed (Milestone 0 Phase B + Milestone 2 source).")
 
 
 if __name__ == "__main__":
