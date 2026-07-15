@@ -43,7 +43,12 @@ jobs:
             --entitlements PrivatePresenterApp/Resources/PrivatePresenter.entitlements \
             "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
-          test "$(lipo -archs "$app/Contents/MacOS/Private Presenter")" = arm64
+          architectures="$(lipo -archs "$app/Contents/MacOS/Private Presenter")"
+          printf 'Packaged architectures: %s\n' "$architectures"
+          case " $architectures " in
+            *" arm64 "*) ;;
+            *) echo "error: packaged app does not contain arm64" >&2; exit 1 ;;
+          esac
 
           mkdir -p dist/package
           ditto "$app" 'dist/package/Private Presenter.app'
