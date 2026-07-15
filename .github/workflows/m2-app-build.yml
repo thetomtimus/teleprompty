@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Check out M2 candidate
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install pinned XcodeGen
         run: |
