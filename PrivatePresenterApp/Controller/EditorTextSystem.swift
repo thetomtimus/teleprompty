@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class EditorTextSystem: NSObject, NSTextStorageDelegate {
+final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
     let textView: NSTextView
     let textStorage: NSTextStorage
     private var authoritativeText: String

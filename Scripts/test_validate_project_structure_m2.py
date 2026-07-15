@@ -60,6 +60,7 @@ class Milestone2ValidatorContractTests(unittest.TestCase):
             source,
         )
         self.assertNotIn("NSTextStorage.EditActions", source)
+        self.assertIn("@preconcurrency NSTextStorageDelegate", source)
 
     def test_current_m2_source_satisfies_validator(self) -> None:
         self.assertEqual(VALIDATOR.validate_m2_source(), [])
