@@ -18,8 +18,10 @@ final class ReaderTextSystem {
     private(set) var incrementalMutationCount = 0
     private(set) var fullReplacementCount = 0
     private(set) var resyncRequestCount = 0
+    private(set) var textMutationCount = 0
     private(set) var isActiveBandEnabled = true
     private var readerAttributes: [NSAttributedString.Key: Any] = [:]
+    private(set) weak var viewportAdapter: ReaderViewportAdapter?
     var onResyncRequested: (@MainActor (UInt64) -> Void)?
 
     init(
@@ -33,7 +35,7 @@ final class ReaderTextSystem {
         }
         self.textView = textView
         self.textStorage = textStorage
-        activeBandView = NSView()
+        activeBandView = ReaderActiveBandView()
         appliedRevision = revision
         self.onResyncRequested = onResyncRequested
 
@@ -48,6 +50,7 @@ final class ReaderTextSystem {
         activeBandView.wantsLayer = true
         activeBandView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
         textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
+        textMutationCount += 1
     }
 
     func apply(_ edit: ScriptTextEdit) {
@@ -81,6 +84,7 @@ final class ReaderTextSystem {
             )
         }
         textStorage.endEditing()
+        textMutationCount += 1
         guard textStorage.length == edit.resultUTF16Length,
             textStorage.string == result
         else {
@@ -113,6 +117,7 @@ final class ReaderTextSystem {
             )
         }
         textStorage.endEditing()
+        textMutationCount += 1
         appliedRevision = revision
         fullReplacementCount += 1
         isAwaitingResync = false
@@ -134,10 +139,11 @@ final class ReaderTextSystem {
         }
     }
 
-    func configureViewport(_ size: NSSize) {
+    func configureViewport(_ size: NSSize, documentHeight: CGFloat? = nil) {
         let width = max(size.width, 1)
         let height = max(size.height, 1)
-        textView.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let contentHeight = max(height, documentHeight ?? height)
+        textView.frame = NSRect(x: 0, y: 0, width: width, height: contentHeight)
         textView.minSize = NSSize(width: 0, height: height)
         textView.maxSize = NSSize(
             width: CGFloat.greatestFiniteMagnitude,
@@ -156,12 +162,17 @@ final class ReaderTextSystem {
             in: NSRange(location: 0, length: textStorage.length),
             with: text
         )
+        textMutationCount += 1
     }
     #endif
 
     func setActiveBandEnabled(_ enabled: Bool) {
         isActiveBandEnabled = enabled
         activeBandView.isHidden = !enabled
+    }
+
+    func attachViewportAdapter(_ adapter: ReaderViewportAdapter) {
+        viewportAdapter = adapter
     }
 
     private func latchResync() {

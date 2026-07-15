@@ -1,13 +1,15 @@
 import SwiftUI
 
-/// Opaque, nonactivating static-reader surface. Scrolling is deliberately deferred to M3.
+/// Opaque, nonactivating reader surface with its header outside the clipped document.
 @MainActor
 struct OverlayRootView: View {
     static let cornerRadius: CGFloat = 18
+    static let readerHeaderHeight: CGFloat = 36
     static let interiorIsFullyOpaque = true
     static let resizeZones = ClampedPanelInteractionController.ResizeEdge.allCases
 
     let readerSystem: ReaderTextSystem?
+    let readerViewportFraction: Double
     let onDragChanged: (CGSize) -> Void
     let onDragEnded: () -> Void
     let onResizeChanged: (ClampedPanelInteractionController.ResizeEdge, CGSize) -> Void
@@ -15,6 +17,7 @@ struct OverlayRootView: View {
 
     init(
         readerSystem: ReaderTextSystem? = nil,
+        readerViewportFraction: Double = 0.5,
         onDragChanged: @escaping (CGSize) -> Void = { _ in },
         onDragEnded: @escaping () -> Void = {},
         onResizeChanged:
@@ -25,6 +28,7 @@ struct OverlayRootView: View {
         onResizeEnded: @escaping () -> Void = {}
     ) {
         self.readerSystem = readerSystem
+        self.readerViewportFraction = readerViewportFraction
         self.onDragChanged = onDragChanged
         self.onDragEnded = onDragEnded
         self.onResizeChanged = onResizeChanged
@@ -39,9 +43,12 @@ struct OverlayRootView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.75))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 36)
+                    .frame(height: Self.readerHeaderHeight)
                 if let readerSystem {
-                    ReaderTextView(system: readerSystem)
+                    ReaderTextView(
+                        system: readerSystem,
+                        viewportFraction: readerViewportFraction
+                    )
                 } else {
                     Color.clear
                 }
@@ -49,7 +56,7 @@ struct OverlayRootView: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay(alignment: .top) {
-            interactionZone(edge: nil).frame(height: 36)
+            interactionZone(edge: nil).frame(height: Self.readerHeaderHeight)
         }
         .overlay(alignment: .top) {
             interactionZone(edge: .top).frame(height: 10)
