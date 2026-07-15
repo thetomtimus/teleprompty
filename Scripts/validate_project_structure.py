@@ -439,6 +439,140 @@ M2_PROHIBITED_PATTERNS = (
 )
 
 
+M3_REQUIRED_PATHS = (
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Scrolling/ScrollCommand.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Scrolling/ScrollEngine.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Scrolling/ReadingPositionMapper.swift",
+    "Packages/TeleprompterCore/Tests/TeleprompterCoreTests/ScrollEngineTests.swift",
+    "Packages/TeleprompterCore/Tests/TeleprompterCoreTests/ReadingPositionMapperTests.swift",
+    "PrivatePresenterApp/Interfaces/ReaderViewport.swift",
+    "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
+    "PrivatePresenterApp/Overlay/DisplayLinkFrameClock.swift",
+    "PrivatePresenterApp/Overlay/ScrollSessionController.swift",
+    "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "PrivatePresenterApp/App/AppCommand.swift",
+    "PrivatePresenterApp/App/AppEffect.swift",
+    "PrivatePresenterApp/App/AppModel.swift",
+    "PrivatePresenterApp/App/DependencyContainer.swift",
+    "PrivatePresenterApp/App/AppRuntime.swift",
+    "PrivatePresenterApp/Controller/ControllerPresentation.swift",
+    "PrivatePresenterApp/Controller/ControllerView.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+    "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+    "PrivatePresenterApp/Overlay/OverlayPanelController.swift",
+    "PrivatePresenterAppTests/AppModelTests.swift",
+    "PrivatePresenterAppTests/ControllerPresentationTests.swift",
+    "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
+    "PrivatePresenterAppTests/OverlayPanelControllerTests.swift",
+    "Scripts/test_validate_project_structure_m3.py",
+    "Scripts/validate_project_structure.py",
+)
+
+M3_CANONICAL_NAMED_TESTS = (
+    "testElapsedTimeNotFrameCountControlsOffset",
+    "testSixtyAndOneTwentyHertzMatch",
+    "testPausePreservesExactOffset",
+    "testSpeedChangeDoesNotJump",
+    "testEndClampsAndPauses",
+    "testRestartReturnsZeroAndPauses",
+    "testForwardBackwardClamp",
+    "testSuspensionDoesNotJump",
+    "testInsertionBeforeAnchorShiftsOffset",
+    "testDeletionBeforeAnchorShiftsOffset",
+    "testEditAfterAnchorDoesNotMove",
+    "testOverlapClampsAndRequestsPause",
+    "testEmojiOffsetsAreUTF16Safe",
+    "testLayoutChangeRestoresViewportFraction",
+    "testReaderHidesScrollerAndClips",
+    "testMaximumOffsetAccountsForToolbarInset",
+    "testBandDoesNotBecomeTextSelection",
+    "testRestorePlacesAnchorAtBand",
+    "testScrollTickPerformsNoTextMutation",
+    "testFakeTicksDriveViewport",
+    "testPauseStopsClock",
+    "testHiddenPanelStopsClock",
+    "testStaleGenerationCallbackIsIgnored",
+    "testTickDoesNotPublishSwiftUIStatePerFrame",
+    "testEndPublishesOnePausedTransition",
+)
+
+M3_ADDED_NAMED_TESTS = (
+    "testStartTimestampMakesFirstTickAdvance",
+    "testSpeedChangeSettlesOldSpeedBeforeInstallingNewSpeed",
+    "testInvalidTimestampPausesOnceWithoutMovement",
+    "testSuspensionGapPausesOnceWithoutCatchUp",
+    "testUptimeClockDomainIsUsedConsistently",
+    "testMaximumOffsetChangeRequiresPause",
+    "testManualMoveSettlesElapsedTimeBeforeClamping",
+    "testTerminalStopReasonIsEdgeTriggered",
+    "testInsertionExactlyAtAnchorClampsAndRequestsPause",
+    "testInvalidRangeOverflowClampsAndRequestsPause",
+    "testSplitSurrogateRangeClampsAndRequestsPause",
+    "testResultDocumentMismatchClampsAndRequestsPause",
+    "testAnchorNormalizesBackwardToScalarBoundary",
+    "testExactIndependentContextsSelectUniqueCandidate",
+    "testAbsentContextClampsAndRequestsPause",
+    "testAmbiguousEqualContextTieClampsAndRequestsPause",
+    "testReaderLayerOrderIsBackgroundBandThenTransparentClip",
+    "testBottomDocumentPaddingIsExactlySixtyFourPoints",
+    "testExistingHeaderIsNotDoubleCountedInMaximumOffset",
+    "testBandUsesPersistedViewportFractionAndFixedHeight",
+    "testBandIsNonHitTestingAndAccessibilityIgnored",
+    "testIncrementalEditRestoresMappedAnchor",
+    "testInsertionAtAnchorPausesAndRestoresBoundary",
+    "testRevisionGapResyncIsSynchronousAndSingle",
+    "testResizeRestoresAnchorAtBand",
+    "testFontChangeRestoresAnchorAtBand",
+    "testAlignmentChangeRestoresAnchorAtBand",
+    "testThreeCompleteLinesPreferredForManualStep",
+    "testManualStepFallsBackToClampedViewportFraction",
+    "testClockRequiresAttachedReaderView",
+    "testDisplayLinkUsesCommonModeAndTimestamp",
+    "testDetachInvalidatesClockBeforeReplacement",
+    "testScreenMoveInvalidatesAndRecreatesWithoutAutoResume",
+    "testTeardownInvalidatesClockAndReleasesOwners",
+    "testAppModelIsSoleSessionGenerationIssuer",
+    "testSpeedChangeDoesNotAdvanceGeneration",
+    "testPauseInvalidatesGenerationBeforeStopEffect",
+    "testHideStopsAndCapturesBeforeOrderOut",
+    "testPrivacyLossStopsBeforeShieldMove",
+    "testClockUnavailablePublishesExactlyOnePausedTransition",
+    "testOnlyAuthorizedRetiringGenerationTerminalCaptureIsAccepted",
+    "testArbitraryStaleTerminalCaptureIsRejected",
+    "testSemanticCheckpointsAreAtMostOncePerSecond",
+    "testReaderResyncHasNoTaskYieldOrRecursiveEffectHandling",
+    "testEndInvalidatesClockBeforeOnePausedTransition",
+    "testControllerExposesBackAndForwardWithoutM4GlobalInput",
+)
+
+M3_PROHIBITED_PATTERNS = (
+    "NSStatusItem",
+    "MenuBarExtra",
+    "addGlobalMonitorForEvents",
+    "addLocalMonitorForEvents",
+    "CGEventTap",
+    "CGEvent.tapCreate",
+    "AXIsProcessTrusted",
+    "AXUIElement",
+    "AXObserver",
+    "WKWebView",
+    "URLSession",
+    "URLRequest",
+    "NSURLConnection",
+    "NWConnection",
+    "import Network",
+    "import ApplicationServices",
+    ".layoutManager",
+    "NSLayoutManager",
+    "NSClassFromString",
+    "dlsym(",
+)
+
+M3_ALLOWED_PACKAGE_DEPENDENCIES = ("TeleprompterCore", "Carbon.framework")
+M3_BASELINE = "802953089e88369e2a8e9fb744f4e32b30d9727d"
+
+
 def fail(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
     raise SystemExit(1)
@@ -626,15 +760,40 @@ def validate_m2_source() -> list[str]:
         violations.append("reader:mutation-instrumentation-missing")
 
     controller_source = read("PrivatePresenterApp/Controller/ControllerView.swift")
-    for marker in (
-        'Button("Start") {}.disabled(true)',
-        'Button("Pause") {}.disabled(true)',
-        'Button("Restart") {}.disabled(true)',
-        'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
+    m3_source_present = all(
+        (ROOT / path).is_file()
+        for path in (
+            "Packages/TeleprompterCore/Sources/TeleprompterCore/Scrolling/ScrollEngine.swift",
+            "PrivatePresenterApp/Overlay/ScrollSessionController.swift",
+            "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+        )
+    )
+    if m3_source_present:
+        control_markers = (
+            'Button("Start") { dispatch(.start) }',
+            'Button("Pause") { dispatch(.pause) }',
+            'Button("Restart") { dispatch(.restart) }',
+            'Button("Back") { dispatch(.back) }',
+            'Button("Forward") { dispatch(.forward) }',
+            'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
+        )
+        for marker in control_markers:
+            if marker not in controller_source:
+                violations.append(f"controller:missing-m3-marker:{marker}")
+    else:
+        for marker in (
+            'Button("Start") {}.disabled(true)',
+            'Button("Pause") {}.disabled(true)',
+            'Button("Restart") {}.disabled(true)',
+            'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
+        ):
+            if marker not in controller_source:
+                violations.append(f"controller:missing-disabled-marker:{marker}")
+    for prohibited_dispatch in (
+        "model.send(.start)",
+        "model.send(.togglePlayback)",
+        "model.send(.restart)",
     ):
-        if marker not in controller_source:
-            violations.append(f"controller:missing-disabled-marker:{marker}")
-    for prohibited_dispatch in ("model.send(.start)", "model.send(.togglePlayback)", "model.send(.restart)"):
         if prohibited_dispatch in controller_source:
             violations.append(f"controller:future-dispatch:{prohibited_dispatch}")
 
@@ -656,6 +815,155 @@ def validate_m2_source() -> list[str]:
         violations.append("snapshot-store:planning-baseline-unavailable")
     elif snapshot_store_baseline.stdout != read("PrivatePresenterApp/Services/SnapshotStore.swift"):
         violations.append("snapshot-store:production-source-changed")
+
+    return violations
+
+
+def validate_m3_source() -> list[str]:
+    violations: list[str] = []
+    # Keep this inventory explicit: M3 may add its validator contract, but its
+    # controlled-Mac result is forbidden until native/package/physical evidence exists.
+    missing_paths = [path for path in M3_REQUIRED_PATHS if not (ROOT / path).is_file()]
+    violations.extend(f"missing-path:{path}" for path in missing_paths)
+
+    swift_test_paths = [
+        path.relative_to(ROOT).as_posix()
+        for root in (ROOT / "Packages/TeleprompterCore/Tests", ROOT / "PrivatePresenterAppTests")
+        for path in root.rglob("*.swift")
+    ]
+    test_sources = "\n".join(read(path) for path in swift_test_paths)
+    violations.extend(
+        f"missing-test:{name}"
+        for name in (*M3_CANONICAL_NAMED_TESTS, *M3_ADDED_NAMED_TESTS)
+        if name not in test_sources
+    )
+
+    production_paths = [
+        path.relative_to(ROOT).as_posix()
+        for root in (ROOT / "Packages/TeleprompterCore/Sources", ROOT / "PrivatePresenterApp")
+        for path in root.rglob("*.swift")
+    ]
+    production_sources = {path: read(path) for path in production_paths}
+    for path, text in production_sources.items():
+        for pattern in M3_PROHIBITED_PATTERNS:
+            if pattern in text:
+                violations.append(f"prohibited:{pattern}:{path}")
+
+    app_sources = {
+        path: text
+        for path, text in production_sources.items()
+        if path.startswith("PrivatePresenterApp/")
+    }
+    joined_app_sources = "\n".join(app_sources.values())
+    if joined_app_sources.count("final class AppModel") != 1:
+        violations.append("authority:AppModel-count")
+    if joined_app_sources.count("TeleprompterPanel(contentRect:") != 1:
+        violations.append("authority:panel-construction-count")
+    if joined_app_sources.count("ScrollSessionController(") != 1:
+        violations.append("authority:scroll-session-construction-count")
+
+    app_model_path = "PrivatePresenterApp/App/AppModel.swift"
+    app_model = app_sources[app_model_path]
+    if "@MainActor\n@Observable\nfinal class AppModel" not in app_model:
+        violations.append("authority:AppModel-main-actor")
+    if "struct ScrollSessionGeneration" not in app_model or "fileprivate init" not in app_model:
+        violations.append("authority:generation-issuer")
+    for path, text in app_sources.items():
+        if path != app_model_path and "ScrollSessionGeneration()" in text:
+            violations.append(f"authority:generation-issued-outside-AppModel:{path}")
+
+    editor = app_sources["PrivatePresenterApp/Controller/EditorTextSystem.swift"]
+    reader = app_sources["PrivatePresenterApp/Overlay/ReaderTextSystem.swift"]
+    adapter = app_sources["PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift"]
+    if "NSTextView(usingTextLayoutManager: true)" not in editor:
+        violations.append("textkit:editor-not-textkit2")
+    if "NSTextView(usingTextLayoutManager: true)" not in reader:
+        violations.append("textkit:reader-not-textkit2")
+    for marker in ("textLayoutManager", "ensureLayout(for:", "enumerateTextLayoutFragments"):
+        if marker not in adapter:
+            violations.append(f"textkit:adapter-missing:{marker}")
+
+    snapshot = production_sources[
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/PersistedSnapshot.swift"
+    ]
+    document = production_sources[
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift"
+    ]
+    if "static let currentSchemaVersion = 1" not in snapshot:
+        violations.append("schema:persisted-snapshot-version")
+    if "static let currentSchemaVersion = 1" not in document:
+        violations.append("schema:script-document-version")
+
+    runtime = app_sources["PrivatePresenterApp/App/AppRuntime.swift"]
+    dependency_container = app_sources["PrivatePresenterApp/App/DependencyContainer.swift"]
+    panel = app_sources["PrivatePresenterApp/Overlay/TeleprompterPanel.swift"]
+    if "proofLevel: OverlayPanelLevel = .statusBar" not in runtime:
+        violations.append("panel:status-bar-default")
+    if "orderingMode: OverlayPanelOrderingMode = .frontRegardless" not in dependency_container:
+        violations.append("panel:front-regardless-default")
+    if "override var canBecomeKey: Bool { false }" not in panel:
+        violations.append("panel:permanent-non-key")
+    if "override var canBecomeMain: Bool { false }" not in panel:
+        violations.append("panel:permanent-non-main")
+
+    clock = app_sources["PrivatePresenterApp/Overlay/DisplayLinkFrameClock.swift"]
+    clock_markers = (
+        "readerView.window != nil",
+        "readerView.window?.screen != nil",
+        "readerView.displayLink(",
+        "link.timestamp",
+        "RunLoop.main",
+        "forMode: .common",
+        "link.invalidate()",
+    )
+    for marker in clock_markers:
+        if marker not in clock:
+            label = {
+                "link.timestamp": "clock:timestamp",
+                "forMode: .common": "clock:common-run-loop",
+            }.get(marker, f"clock:missing:{marker}")
+            violations.append(label)
+    if "targetTimestamp" in clock:
+        violations.append("clock:target-timestamp")
+    if "Date(" in clock or "Date." in clock:
+        violations.append("clock:wall-time")
+
+    session = app_sources["PrivatePresenterApp/Overlay/ScrollSessionController.swift"]
+    for marker in ("model.send(", "@Observable", "withObservationTracking"):
+        if marker in session:
+            violations.append("hot-path:model-publication")
+            break
+    if "Task {" in session or "DispatchQueue" in session:
+        violations.append("hot-path:asynchronous-session")
+
+    controller = app_sources["PrivatePresenterApp/Controller/ControllerView.swift"]
+    for marker in (
+        'Button("Start") { dispatch(.start) }',
+        'Button("Pause") { dispatch(.pause) }',
+        'Button("Restart") { dispatch(.restart) }',
+        'Button("Back") { dispatch(.back) }',
+        'Button("Forward") { dispatch(.forward) }',
+        'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
+    ):
+        if marker not in controller:
+            violations.append(f"controller:missing-m3-marker:{marker}")
+
+    project_baseline = git("show", f"{M3_BASELINE}:project.yml")
+    if project_baseline.returncode != 0:
+        violations.append("dependency:project-baseline-unavailable")
+    elif project_baseline.stdout != read("project.yml"):
+        violations.append("dependency:project-yml-changed")
+    package_path = "Packages/TeleprompterCore/Package.swift"
+    package_baseline = git("show", f"{M3_BASELINE}:{package_path}")
+    if package_baseline.returncode != 0:
+        violations.append("dependency:package-baseline-unavailable")
+    elif package_baseline.stdout != read(package_path):
+        violations.append("dependency:package-swift-changed")
+
+    project = read("project.yml")
+    for dependency in M3_ALLOWED_PACKAGE_DEPENDENCIES:
+        if dependency not in project:
+            violations.append(f"dependency:missing-allowed:{dependency}")
 
     return violations
 
@@ -725,8 +1033,14 @@ def main() -> None:
     m2_violations = validate_m2_source()
     if m2_violations:
         fail("Milestone 2 source validation failed: " + ", ".join(m2_violations))
+    m3_violations = validate_m3_source()
+    if m3_violations:
+        fail("Milestone 3 source validation failed: " + ", ".join(m3_violations))
     validate_xcode_listing()
-    print("Project structure validation passed (Milestone 0 Phase B + Milestone 2 source).")
+    print(
+        "Project structure validation passed "
+        "(Milestone 0 Phase B + Milestone 2 + Milestone 3 source)."
+    )
 
 
 if __name__ == "__main__":
