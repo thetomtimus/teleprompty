@@ -1,12 +1,19 @@
 # Private Presenter — Milestone 2 Controller/Editor and Production Display Safety
 
-Status: **RALPLAN-DR CONSENSUS APPROVED — CANONICAL M2 PLAN; IMPLEMENTATION REQUIRES THE EXPLICIT `$ralph` HANDOFF**
+Status: **COMPLETED — OWNER-APPROVED REAL-MAC SMOKE PASS; M3 AUTHORIZED**
 Planning date: 2026-07-14
 Repository: `/home/thomas/teleprompty-m2`
 GitHub/origin: `https://github.com/thetomtimus/teleprompty.git`
 Branch/baseline: clean `main` at `3526b4fa22f94c63c0237d55071f0d464a126e3a`
 Proof source authorized by owner: `06d7d5f`
 Scope: M2.1–M2.3 only; stop before M3–M6
+
+Closeout date: 2026-07-15. The owner-reported physical result is preserved at
+`docs/validation/m2-controller-editor-display-safety-result.md`. The rebuilt app passed
+the package-level Keynote/private-display smoke on an M4 Pro with macOS 26.5.2 and Xcode
+26.6. The supplied source SHA is the pre-M2 baseline, so exact rebuilt-source provenance
+remains a release-evidence follow-up; the owner explicitly accepted the physical result
+as M2 completion and authorized M3. Historical M0 evidence remains unchanged.
 
 ## 1. Outcome, authorization, and hard stop
 

@@ -1,142 +1,73 @@
-# Private Presenter — Milestone 0 Phase B Mac Handoff
+# Private Presenter — Milestone 2 Closeout and Milestone 3 Handoff
 
-Milestone 0 Phase A is complete. Its 24/24 valid diagnostic matrix proposed
-`.floating + frontRegardless` as the lowest bounded candidate without adding a
-focus workaround, Carbon target change, or activation-policy change. The first
-Phase B physical screenshot then eliminated `.floating`: it ordered internally
-but remained visually behind Keynote Presenter Display. `.statusBar +
-frontRegardless` is therefore the lowest physically visible bounded candidate.
+Status: **M2 COMPLETED BY OWNER-APPROVED REAL-MAC PHYSICAL PASS; M3 AUTHORIZED**
 
-Phase B implements only the stabilization surfaces authorized by that result:
+## M2 source and evidence
 
-- controller placement is separate from startup presentation;
-- Control-Option-H controls visibility and Control-Option-L controls lock state;
-- both global chords route typed commands through the one authoritative model;
-- all online Core Graphics displays participate in mirroring safety, while only
-  NSScreen-backed displays are drawable destinations;
-- the header and eight resize zones apply contained frames and export separate
-  full, visible, containment, and applied-frame evidence;
-- the rounded reading interior has rendered opacity coverage;
-- mirroring, disconnect, reconnect, pending-show, and stale-frame recovery fail
-  closed without automatically revealing or resuming content; and
-- the retained bounded default is `.statusBar + frontRegardless`.
+- M2 implementation lineage ends at `87a8e4f` plus the verified Mac-toolchain
+  reconciliation in `38521e1`.
+- The temporary GitHub packaging workflow is disabled and is not part of this
+  clean M2 source branch or intended `main` history.
+- GitHub run `29392288263` completed the macOS compile, tests, analyze, Release,
+  format, no-network, signing, and packaging gates on the code-equivalent test
+  branch. Its Xcode 16.4/macOS 15.5 package later crashed on Tom's macOS 26.5.2
+  machine after display confirmation.
+- Tom rebuilt the application with Xcode 26.6/macOS 26.5.2 and completed the
+  package-level Keynote/private-display physical smoke on 2026-07-15.
+- Owner-reported tested executable SHA-256:
+  `93016a94d19ad3ba69f240715dfb63edfab06d27b9a099c50c9e2452028160c6`.
+- Canonical owner report:
+  `docs/validation/m2-controller-editor-display-safety-result.md`.
+- Historical M0 evidence and its prior owner transition remain unchanged.
 
-This handoff still stops before every M2 editor, reader, and scrolling surface.
-M2 is unlocked only by the complete Mac automation, exact-binary focused smoke,
-review sequence, and 15-step real-display PASS defined in the stabilization
-plan and proof template.
+The physical report supplied `3526b4fa22f94c63c0237d55071f0d464a126e3a`
+as the source identity. That commit is the pre-M2 baseline, so it does not
+independently reconstruct the rebuilt executable. Tom explicitly accepted the
+physical result as M2 completion and authorized M3. Exact rebuilt-source-to-
+executable provenance remains visible as release evidence rather than being
+represented as completed.
 
-## Phase A evidence
+## Physical behavior accepted for M2
 
-- Causal decision commit: `6485e33`
-- Decision record:
-  `docs/validation/m0-phase-a-causal-decision-2026-07-14.md`
-- Result: 24/24 valid cells, no reproduced focus theft, no controller
-  presentation during H, no Carbon or activation-policy correction selected
-- Phase A candidate: `.floating + frontRegardless`
-- Phase B physical candidate: `.statusBar + frontRegardless`
+The real-Mac run confirmed the selected private display, visible bounded
+`.statusBar` overlay, clean audience display, permanent non-key/non-main panel,
+Keynote focus and ordinary slide input, click-through while locked, hide/show,
+unlock/relock, and final locked state. The app remained on the built-in private
+display while the LG ULTRAGEAR carried the audience presentation.
 
-Do not overwrite the Phase A evidence or the historical 14,486-byte prefix of
-`docs/validation/overlay-proof-result.md`.
+## Remaining toolchain follow-up
 
-## Automated Mac gate
+Under Xcode 26.6, the combined app-host `xcodebuild test` worker failed to
+materialize and was interrupted without a source-test failure. The standalone
+Debug app, Release arm64 app, Foundation suite (42 tests), analyze, format,
+structure/provenance, and prohibited-surface checks passed. Treat app-host test
+materialization and exact rebuilt-binary provenance as hardening/release follow-
+ups, not as completed evidence and not as a reopened M2 product gate.
 
-From the repository root:
+## M3 boundary
 
-```bash
-./Scripts/bootstrap-macos.sh
-test "$(xcodegen --version)" = "Version: 2.45.4"
-python3 Scripts/validate_project_structure.py
-swift test --package-path Packages/TeleprompterCore
-xcodebuild test \
-  -project PrivatePresenter.xcodeproj \
-  -scheme PrivatePresenter \
-  -configuration Debug \
-  -destination 'platform=macOS,arch=arm64' \
-  -derivedDataPath .build/DerivedData \
-  CODE_SIGNING_ALLOWED=NO \
-  -skip-testing:PrivatePresenterUITests
-xcodebuild analyze \
-  -project PrivatePresenter.xcodeproj \
-  -scheme PrivatePresenter \
-  -configuration Debug \
-  -destination 'platform=macOS,arch=arm64' \
-  -derivedDataPath .build/DerivedData \
-  CODE_SIGNING_ALLOWED=NO
-xcodebuild build \
-  -project PrivatePresenter.xcodeproj \
-  -scheme PrivatePresenter \
-  -configuration Release \
-  -destination 'platform=macOS,arch=arm64' \
-  -derivedDataPath .build/DerivedData-Release \
-  CODE_SIGNING_ALLOWED=NO
-xcrun swift-format lint --recursive \
-  Packages PrivatePresenterApp PrivatePresenterAppTests PrivatePresenterUITests
-./Scripts/verify-no-network.sh
-./Scripts/test-verify-m0-proof-provenance.sh
-shasum -a 256 -c docs/validation/source-artifact-checksums.sha256
-./Scripts/verify-macos.sh
-git diff --check
-```
+M3 is the first usable rehearsal-scrolling alpha. Implement only:
 
-The UI-test shell remains intentionally skipped. It is not a substitute for the
-physical gate.
+1. a pure elapsed-time scroll engine independent of display refresh rate;
+2. UTF-16-safe reading-anchor mapping that preserves position across edits;
+3. a clipped, nonselectable reader viewport with a stable active band and no
+   text mutation during scroll ticks; and
+4. a display-link session controller that does not publish SwiftUI state every
+   frame and stops cleanly when paused, hidden, ended, or stale.
 
-## Exact clean proof build
+Preserve one `@MainActor` AppModel, one panel, separate editor/reader TextKit 2
+stacks, current display privacy, `.statusBar + frontRegardless`, permanent non-
+key/non-main behavior, containment, opacity, durability, menu/content privacy,
+and the M2 incremental edit/resync contract.
 
-After automation and reviews pass, commit the Phase B source. Require a clean
-tree, then build and copy one proof app exactly as described in section 10.1 of
-`docs/plans/2026-07-12-milestone-0-stabilization.md`. Record:
+Do not pull M4 product hotkeys, Focus Mode, menu-bar control, global event
+monitoring, Accessibility permission, focus-return hacks, M5 hardening, or M6
+visual polish into M3.
 
-- exact 40-character clean commit;
-- proof executable, build log, and manifest paths;
-- executable and build-log SHA-256 values; and
-- successful `Scripts/verify-m0-proof-provenance.sh` output.
+## Environment-separated verification
 
-`Config/Debug.xcconfig` disables Xcode's debug-dylib launcher indirection, and
-the verifier rejects a sibling `Private Presenter.debug.dylib`. The executable
-SHA-256 therefore binds the actual proof code rather than a stable launcher.
-
-Do not rebuild between focused smoke and the physical gate.
-
-## Focused Phase B smoke
-
-Use the source-default `.statusBar + frontRegardless` configuration. Enter a
-fresh Keynote full-screen presentation in extended-display mode, then exercise:
-
-1. H show, H hide, H show;
-2. L unlock, header drag, and all eight resize zones;
-3. L lock;
-4. ordinary Keynote mouse, Space, and arrow input;
-5. explicit macOS Space switch and return;
-6. controller-visible and controller-ordered-out cohorts;
-7. actual mirroring with the exact safety warning and blocked show;
-8. external-display disconnect/reconnect with no auto reveal or resume; and
-9. stale projector-frame recovery while the controller remains shielded.
-
-Every accepted evidence file must bind the clean commit, source defaults,
-cohort, repetition, executable hash, build-log hash, and manifest path; contain
-three typed H correlations plus two typed L correlations; close every
-correlation window; export applied-frame evidence; end with exactly one valid
-`sessionCompletion`; and leave no `.pending` sibling.
-
-Reject the smoke immediately if Private Presenter becomes active/frontmost,
-Keynote exits full screen, the panel becomes key/main, the normal controller is
-presented, any frame crosses the selected private display, any teleprompter
-pixel appears externally, or any permanent recorder/configuration fault occurs.
-
-## Complete physical gate and M2 decision
-
-Run all 15 steps in `docs/validation/overlay-proof-template.md`. The run needs a
-current Keynote, a real extended display/projector, mouse/Space/arrows/remote,
-physical audience-display observation/photo, actual mirroring, actual
-disconnect/reconnect, opacity and containment evidence, and resolved local paths.
-
-Append the current decision to `docs/validation/overlay-proof-result.md`; never
-edit its immutable historical prefix. M2 is unlocked only when every row is
-PASS on the same clean source-default commit and proof binary, the required
-review sequence approves that commit, and no critical/high/privacy issue remains.
-
-If the remote, physical audience observation/photo, or another required physical
-checkpoint is unavailable, record `BLOCKED`. A pushed commit, green automation,
-or focused smoke alone cannot honestly unlock M2.
+WSL may run structure/static/prohibited-surface checks and prepare Foundation-
+only source/tests, but it cannot claim Swift/AppKit/TextKit/display-link success.
+The M3 Mac handoff must run the pinned bootstrap, Foundation and app tests,
+analyze, Release, format/no-network checks, then a focused real-Mac scrolling
+smoke using the current Xcode/macOS toolchain.
