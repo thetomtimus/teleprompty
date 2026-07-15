@@ -74,7 +74,7 @@ final class EditorTextSystem: NSObject, NSTextStorageDelegate {
 
     func textStorage(
         _ textStorage: NSTextStorage,
-        didProcessEditing editedMask: NSTextStorage.EditActions,
+        didProcessEditing editedMask: NSTextStorageEditActions,
         range editedRange: NSRange,
         changeInLength delta: Int
     ) {

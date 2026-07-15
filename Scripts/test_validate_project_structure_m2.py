@@ -51,6 +51,16 @@ class Milestone2ValidatorContractTests(unittest.TestCase):
         ):
             self.assertIn(pattern, patterns)
 
+    def test_editor_delegate_uses_sdk_declared_edit_actions_type(self) -> None:
+        source = (
+            ROOT / "PrivatePresenterApp/Controller/EditorTextSystem.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "didProcessEditing editedMask: NSTextStorageEditActions",
+            source,
+        )
+        self.assertNotIn("NSTextStorage.EditActions", source)
+
     def test_current_m2_source_satisfies_validator(self) -> None:
         self.assertEqual(VALIDATOR.validate_m2_source(), [])
 
