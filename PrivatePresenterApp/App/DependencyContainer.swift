@@ -17,6 +17,12 @@ final class AppEffectAdapter {
     private var isTerminationDraining = false
     private var terminalFlushStarted = false
     private var terminalFlushSucceeded = false
+    lazy var carbonHotKeyService = CarbonHotKeyService(
+        registrar: CarbonHotKeyRegistrar(),
+        dispatch: { [weak self] action in
+            self?.model?.send(.performShortcut(action))
+        }
+    )
     #if DEBUG
     private var handleDepth = 0
     private(set) var maximumHandleDepth = 0
@@ -392,6 +398,16 @@ final class AppEffectAdapter {
             enqueuePersistence { store in
                 try await store.flush()
             }
+        case .reconfigureHotKeys(let bindings):
+            model?.send(
+                .hotKeyReconfigurationCompleted(
+                    carbonHotKeyService.reconfigure(bindings)
+                )
+            )
+        case .retryHotKeys:
+            model?.send(
+                .hotKeyReconfigurationCompleted(carbonHotKeyService.retry())
+            )
         case .stagePanelHidden(let display, let proposedFrame):
             #if DEBUG
             recordPanelOperation(.stageHidden, correlationID: correlationID)

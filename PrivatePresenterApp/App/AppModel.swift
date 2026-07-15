@@ -29,6 +29,7 @@ final class AppModel {
     private(set) var panelFrames: [PersistedPanelFrame]
     private(set) var shortcutBindings: [ShortcutBinding]
     private(set) var snapshotRevision: UInt64
+    private(set) var hotKeyStatus: HotKeyTransactionResult?
 
     private(set) var displays: [RuntimeDisplay] = []
     private(set) var selectedDisplayID: UInt32?
@@ -143,6 +144,7 @@ final class AppModel {
         panelFrames = []
         shortcutBindings = Self.defaultShortcutBindings
         snapshotRevision = 0
+        hotKeyStatus = nil
         restorationCompleted = !restorationRequired
         isPersistenceLoadSafe = !restorationRequired
         proofConfigurationSnapshot = overlayController.configurationSnapshot
@@ -294,6 +296,14 @@ final class AppModel {
             moveReader(.backward)
         case .moveForward:
             moveReader(.forward)
+        case .performShortcut(let action):
+            performShortcut(action)
+        case .requestHotKeyReconfiguration(let bindings):
+            effectHandler(.reconfigureHotKeys(bindings))
+        case .hotKeyReconfigurationCompleted(let result):
+            completeHotKeyTransaction(result)
+        case .retryHotKeyRegistration:
+            effectHandler(.retryHotKeys)
         case .showOverlay:
             showOverlayCommand()
         case .hideOverlay:
@@ -740,6 +750,59 @@ final class AppModel {
                 direction: direction,
                 uptime: CACurrentMediaTime()
             ))
+    }
+
+    private func performShortcut(_ action: ShortcutAction) {
+        switch action {
+        case .togglePlayback:
+            if overlaySession.playbackPhase == .playing {
+                pausePlayback()
+            } else if canStartFromGlobalCommand {
+                startPlayback()
+            }
+        case .increaseSpeed:
+            setSpeed(preferences.speedPointsPerSecond + TeleprompterPreferences.speedStep)
+        case .decreaseSpeed:
+            setSpeed(preferences.speedPointsPerSecond - TeleprompterPreferences.speedStep)
+        case .moveBackward:
+            moveReader(.backward)
+        case .moveForward:
+            moveReader(.forward)
+        case .toggleVisibility:
+            if overlaySession.visibility == .visible {
+                hideOverlayCommand()
+            } else {
+                showOverlayCommand()
+            }
+        case .toggleLock:
+            setLockedCommand(!preferences.isLocked)
+        }
+    }
+
+    private var canStartFromGlobalCommand: Bool {
+        restorationCompleted
+            && isPersistenceLoadSafe
+            && isSelectionConfirmed
+            && !isShielded
+            && overlaySession.recoveryConfirmationState == .confirmed
+    }
+
+    private func completeHotKeyTransaction(_ result: HotKeyTransactionResult) {
+        hotKeyStatus = result
+        switch result {
+        case .committed(let bindings):
+            localError = nil
+            guard bindings != shortcutBindings else { return }
+            shortcutBindings = bindings
+            snapshotRevision += 1
+            effectHandler(.scheduleSnapshot(snapshot()))
+        case .conflict, .degradedClean:
+            localError = .globalShortcutConflict
+        case .cleanupUnknown:
+            localError = .globalShortcutCleanupUnknown
+        case .invalid:
+            localError = .invalidShortcutConfiguration
+        }
     }
 
     private func restart() {
@@ -1282,6 +1345,8 @@ final class AppModel {
             .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,
             .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .setSpeed, .moveBackward, .moveForward,
+            .performShortcut, .requestHotKeyReconfiguration,
+            .hotKeyReconfigurationCompleted, .retryHotKeyRegistration,
             .showOverlay, .setLocked, .restore, .restoreFailed, .selectDisplay,
             .confirmSelectedDisplay, .readerAttachmentChanged, .readerScreenChanged,
             .readerBoundsWillChange, .readerBoundsChanged:
@@ -1339,6 +1404,7 @@ final class AppModel {
             .restoreScrollLayout, .teardownScrollSession, .applyReaderEdit,
             .replaceReader, .updateReaderAttributes, .scheduleSnapshot,
             .flushSnapshot, .saveSnapshotImmediately, .flushPersistence,
+            .reconfigureHotKeys, .retryHotKeys,
             .moveControllerWhileShielded, .resetViewport, .reassessPrivacy,
             .queryTopology, .evaluatePrivacy:
             break
@@ -1392,7 +1458,8 @@ extension AppEffect {
         case .setPanelLocked: .setPanelLocked
         case .moveControllerWhileShielded: .moveControllerWhileShielded
         case .scheduleSnapshot, .flushSnapshot, .saveSnapshotImmediately,
-            .flushPersistence, .resetViewport, .reassessPrivacy,
+            .flushPersistence, .reconfigureHotKeys, .retryHotKeys,
+            .resetViewport, .reassessPrivacy,
             .queryTopology, .evaluatePrivacy:
             .other
         }

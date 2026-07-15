@@ -44,6 +44,10 @@ enum AppCommand {
     case setSpeed(Double)
     case moveBackward
     case moveForward
+    case performShortcut(ShortcutAction)
+    case requestHotKeyReconfiguration([ShortcutBinding])
+    case hotKeyReconfigurationCompleted(HotKeyTransactionResult)
+    case retryHotKeyRegistration
 
     case showOverlay
     case hideOverlay

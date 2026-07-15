@@ -6,6 +6,7 @@ enum AppRuntimeStartupEvent: Equatable {
     case restore
     case observeAndQuery
     case evaluatePrivacy
+    case registerProductHotKeys
     case registerDiagnosticHotKey
     case flushPersistence
     case stopServices
@@ -29,6 +30,12 @@ struct AppRuntimeStartupSeams {
     var registerDiagnosticHotKey: (@MainActor () -> Int32)?
     #if DEBUG
     var registerDiagnosticHotKeys: (@MainActor () -> DiagnosticHotKeyRegistrationStatus)?
+    #endif
+
+    #if DEBUG
+    var requestsLegacyDiagnosticMode: Bool {
+        registerDiagnosticHotKey != nil || registerDiagnosticHotKeys != nil
+    }
     #endif
     var record: @MainActor (AppRuntimeStartupEvent) -> Void
     #if DEBUG
@@ -77,6 +84,7 @@ final class AppRuntime {
     let model: AppModel
     let controllerWindowController: ControllerWindowController
     let displayService: SystemDisplayService
+    let hotKeyStartupMode: HotKeyStartupMode
     #if DEBUG
     let diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder?
     let diagnosticConfiguration: DiagnosticProofConfiguration?
@@ -102,6 +110,7 @@ final class AppRuntime {
         diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder? = nil,
         enforcesDiagnosticControllerCohort: Bool = true,
         dependencies: DependencyContainer? = nil,
+        hotKeyStartupMode: HotKeyStartupMode? = nil,
         startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
     ) {
         self.init(
@@ -110,6 +119,7 @@ final class AppRuntime {
             diagnosticEvidenceRecorderObject: diagnosticEvidenceRecorder,
             enforcesDiagnosticControllerCohort: enforcesDiagnosticControllerCohort,
             dependencies: dependencies,
+            hotKeyStartupModeObject: hotKeyStartupMode,
             startupSeams: startupSeams
         )
     }
@@ -117,6 +127,7 @@ final class AppRuntime {
     convenience init(
         proofLevel: OverlayPanelLevel = .statusBar,
         dependencies: DependencyContainer? = nil,
+        hotKeyStartupMode: HotKeyStartupMode = .product,
         startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
     ) {
         self.init(
@@ -125,6 +136,7 @@ final class AppRuntime {
             diagnosticEvidenceRecorderObject: nil,
             enforcesDiagnosticControllerCohort: true,
             dependencies: dependencies,
+            hotKeyStartupModeObject: hotKeyStartupMode,
             startupSeams: startupSeams
         )
     }
@@ -136,6 +148,7 @@ final class AppRuntime {
         diagnosticEvidenceRecorderObject: AnyObject?,
         enforcesDiagnosticControllerCohort: Bool,
         dependencies suppliedDependencies: DependencyContainer?,
+        hotKeyStartupModeObject: Any?,
         startupSeams: AppRuntimeStartupSeams
     ) {
         #if DEBUG
@@ -181,6 +194,16 @@ final class AppRuntime {
         self.model = model
         self.controllerWindowController = controllerWindowController
         displayService = dependencies.displayService
+        #if DEBUG
+        hotKeyStartupMode =
+            hotKeyStartupModeObject as? HotKeyStartupMode
+            ?? ((diagnosticConfiguration != nil
+                || diagnosticEvidenceRecorder != nil
+                || startupSeams.requestsLegacyDiagnosticMode)
+                ? .legacyDiagnostic : .product)
+        #else
+        hotKeyStartupMode = hotKeyStartupModeObject as? HotKeyStartupMode ?? .product
+        #endif
         self.startupSeams = startupSeams
         #if DEBUG
         self.diagnosticConfiguration = diagnosticConfiguration
@@ -220,18 +243,25 @@ final class AppRuntime {
         startupSeams.record(.flushPersistence)
         let didFlush = await dependencies.effectAdapter.flushForTermination()
         guard didFlush else { return false }
-        #if DEBUG
-        diagnosticHotKeyService.unregister()
-        startupSeams.recordDiagnosticLifecycle(.unregisterHotKey)
-        startupSeams.recordDiagnosticLifecycle(.drainCorrelations)
-        while diagnosticObserverSet?.activeCorrelationCount ?? 0 > 0 {
-            do { try await Task.sleep(for: .milliseconds(10)) } catch { break }
+        switch hotKeyStartupMode {
+        case .product:
+            _ = dependencies.effectAdapter.carbonHotKeyService.shutdown()
+        case .legacyDiagnostic:
+            #if DEBUG
+            diagnosticHotKeyService.unregister()
+            startupSeams.recordDiagnosticLifecycle(.unregisterHotKey)
+            startupSeams.recordDiagnosticLifecycle(.drainCorrelations)
+            while diagnosticObserverSet?.activeCorrelationCount ?? 0 > 0 {
+                do { try await Task.sleep(for: .milliseconds(10)) } catch { break }
+            }
+            diagnosticObserverSet?.tearDown()
+            startupSeams.recordDiagnosticLifecycle(.tearDownObservers)
+            _ = await diagnosticEvidenceRecorder?.finish()
+            startupSeams.recordDiagnosticLifecycle(.finalizeEvidence)
+            #else
+            break
+            #endif
         }
-        diagnosticObserverSet?.tearDown()
-        startupSeams.recordDiagnosticLifecycle(.tearDownObservers)
-        _ = await diagnosticEvidenceRecorder?.finish()
-        startupSeams.recordDiagnosticLifecycle(.finalizeEvidence)
-        #endif
         displayService.stopObserving()
         controllerWindowController.close()
         startupSeams.record(.stopServices)
@@ -240,11 +270,13 @@ final class AppRuntime {
 
     private func runStartup(afterRestore: @MainActor () -> Void = {}) async {
         #if DEBUG
-        diagnosticObserverSet?.install(
-            panel: overlayController.teleprompterPanel,
-            controller: controllerWindowController.window
-        )
-        startupSeams.recordDiagnosticLifecycle(.installObservers)
+        if hotKeyStartupMode == .legacyDiagnostic {
+            diagnosticObserverSet?.install(
+                panel: overlayController.teleprompterPanel,
+                controller: controllerWindowController.window
+            )
+            startupSeams.recordDiagnosticLifecycle(.installObservers)
+        }
         #endif
         startupSeams.record(.shieldController)
         controllerWindowController.presentShieldedControllerAtStartup(on: nil)
@@ -284,26 +316,37 @@ final class AppRuntime {
         receive(inventoryResult)
         startupSeams.record(.evaluatePrivacy)
 
-        #if DEBUG
-        let status: DiagnosticHotKeyRegistrationStatus
-        if let register = startupSeams.registerDiagnosticHotKeys {
-            status = register()
-        } else if let register = startupSeams.registerDiagnosticHotKey {
-            let overriddenStatus = register()
-            status = DiagnosticHotKeyRegistrationStatus(
-                visibility: overriddenStatus,
-                lock: overriddenStatus
+        switch hotKeyStartupMode {
+        case .product:
+            let result = dependencies.effectAdapter.carbonHotKeyService.register(
+                model.shortcutBindings
             )
-        } else {
-            status = diagnosticHotKeyService.register()
+            model.send(.hotKeyReconfigurationCompleted(result))
+            startupSeams.record(.registerProductHotKeys)
+        case .legacyDiagnostic:
+            #if DEBUG
+            let status: DiagnosticHotKeyRegistrationStatus
+            if let register = startupSeams.registerDiagnosticHotKeys {
+                status = register()
+            } else if let register = startupSeams.registerDiagnosticHotKey {
+                let overriddenStatus = register()
+                status = DiagnosticHotKeyRegistrationStatus(
+                    visibility: overriddenStatus,
+                    lock: overriddenStatus
+                )
+            } else {
+                status = diagnosticHotKeyService.register()
+            }
+            model.setDiagnosticHotKeyStatus(status)
+            if !status.allRegistered {
+                diagnosticEvidenceRecorder?.invalidate(.hotKeyRegistrationFailed)
+            }
+            startupSeams.recordDiagnosticLifecycle(.registerHotKey)
+            startupSeams.record(.registerDiagnosticHotKey)
+            #else
+            break
+            #endif
         }
-        model.setDiagnosticHotKeyStatus(status)
-        if !status.allRegistered {
-            diagnosticEvidenceRecorder?.invalidate(.hotKeyRegistrationFailed)
-        }
-        startupSeams.recordDiagnosticLifecycle(.registerHotKey)
-        startupSeams.record(.registerDiagnosticHotKey)
-        #endif
     }
 
     private func receive(_ result: Result<RuntimeDisplayInventory, Error>) {

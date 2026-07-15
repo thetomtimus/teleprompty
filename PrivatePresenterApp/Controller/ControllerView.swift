@@ -7,20 +7,23 @@ struct ControllerView: View {
     @State private var clearToken: ClearToken?
 
     var body: some View {
-        if model.isShielded {
-            ControllerPrivacyShieldView(
-                displays: model.displays,
-                selectedDisplayID: Binding(
-                    get: { model.selectedDisplayID },
-                    set: { model.selectDisplay($0) }
-                ),
-                topologyStatus: model.topologyStatus,
-                warning: model.warning,
-                onConfirm: model.confirmSelectedDisplay,
-                onKeepHidden: model.keepScriptHidden
-            )
-        } else {
-            productController
+        VStack(spacing: 0) {
+            if model.isShielded {
+                ControllerPrivacyShieldView(
+                    displays: model.displays,
+                    selectedDisplayID: Binding(
+                        get: { model.selectedDisplayID },
+                        set: { model.selectDisplay($0) }
+                    ),
+                    topologyStatus: model.topologyStatus,
+                    warning: model.warning,
+                    onConfirm: model.confirmSelectedDisplay,
+                    onKeepHidden: model.keepScriptHidden
+                )
+            } else {
+                productController
+            }
+            globalShortcutStatus
         }
     }
 
@@ -184,6 +187,52 @@ struct ControllerView: View {
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .contain)
+    }
+
+    private var globalShortcutStatus: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(globalShortcutStatusText)
+                    .font(.caption)
+                Text("Shortcut editing is unavailable until the controlled-Mac proof is accepted.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if canRetryGlobalShortcuts {
+                Button("Retry") { model.send(.retryHotKeyRegistration) }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.bar)
+        .accessibilityIdentifier("privatePresenter.globalShortcutStatus")
+    }
+
+    private var globalShortcutStatusText: String {
+        guard let status = model.hotKeyStatus else { return "Global shortcuts are starting." }
+        switch status {
+        case .committed:
+            return "All seven global shortcuts are ready."
+        case .conflict(let failure):
+            return "Global shortcut conflict for \(failure.action.rawValue), key \(failure.shortcut.virtualKeyCode), status \(failure.status)."
+        case .degradedClean(let failure):
+            return "No global shortcuts are active after status \(failure.status). Resolve the conflict and Retry."
+        case .cleanupUnknown:
+            return CarbonHotKeyService.cleanupUnknownMessage
+        case .invalid:
+            return "The shortcut configuration is invalid. Defaults remain selected."
+        }
+    }
+
+    private var canRetryGlobalShortcuts: Bool {
+        guard let status = model.hotKeyStatus else { return false }
+        switch status {
+        case .conflict, .degradedClean:
+            return true
+        case .committed, .cleanupUnknown, .invalid:
+            return false
+        }
     }
 
     private func dispatch(_ control: ControllerControl) {

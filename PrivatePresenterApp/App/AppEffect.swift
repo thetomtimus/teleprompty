@@ -46,6 +46,8 @@ enum AppEffect: Equatable {
     case flushSnapshot(token: ClearToken, requiredRevision: UInt64)
     case saveSnapshotImmediately(PersistedSnapshot)
     case flushPersistence
+    case reconfigureHotKeys([ShortcutBinding])
+    case retryHotKeys
 
     case stagePanelHidden(RuntimeDisplay, proposedFrame: CGRect?)
     case showPanel(RuntimeDisplay, proposedFrame: CGRect?)
@@ -65,4 +67,6 @@ enum AppLocalError: String, Equatable, Sendable {
     case preClearFlushFailed
     case clearRequestInvalidated
     case invalidShortcutConfiguration
+    case globalShortcutConflict
+    case globalShortcutCleanupUnknown
 }
