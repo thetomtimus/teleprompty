@@ -6,7 +6,7 @@ import XCTest
 
 @MainActor
 final class OverlayPanelConfigurationTests: XCTestCase {
-    func testM2PreservesStatusBarFrontRegardlessAndPermanentNonKeyNonMain() {
+    func testM4PreservesStatusBarFrontRegardlessAndDynamicKeyNonMain() {
         let controller = OverlayPanelController()
         let snapshot = controller.configurationSnapshot
 
@@ -14,7 +14,7 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         #if DEBUG
         XCTAssertEqual(snapshot.ordering, "frontRegardless")
         #endif
-        XCTAssertFalse(snapshot.canBecomeKey)
+        XCTAssertEqual(snapshot.canBecomeKey, NSApp.isActive)
         XCTAssertFalse(snapshot.canBecomeMain)
     }
 
@@ -114,12 +114,12 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         XCTAssertFalse(panel.canBecomeMain)
     }
 
-    func testUnlockedPanelRestoresInteractionWithoutAcceptingKey() {
+    func testUnlockedPanelRestoresInteractionWithDynamicKeyEligibility() {
         let panel = makeController().teleprompterPanel
         panel.setLocked(true)
         panel.setLocked(false)
         XCTAssertFalse(panel.ignoresMouseEvents)
-        XCTAssertFalse(panel.canBecomeKey)
+        XCTAssertEqual(panel.canBecomeKey, NSApp.isActive)
         XCTAssertFalse(panel.canBecomeMain)
     }
 
