@@ -376,7 +376,7 @@ final class SystemDisplayService {
         return UInt32(numericValue)
     }
 
-    static func fingerprint(
+    nonisolated static func fingerprint(
         localizedName: String,
         facts: DisplayHardwareFacts
     ) -> DisplayFingerprint {

@@ -71,6 +71,12 @@ class Milestone2ValidatorContractTests(unittest.TestCase):
             source,
         )
 
+    def test_display_fingerprint_builder_is_nonisolated(self) -> None:
+        source = (
+            ROOT / "PrivatePresenterApp/Services/SystemDisplayService.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn("nonisolated static func fingerprint(", source)
+
     def test_current_m2_source_satisfies_validator(self) -> None:
         self.assertEqual(VALIDATOR.validate_m2_source(), [])
 
