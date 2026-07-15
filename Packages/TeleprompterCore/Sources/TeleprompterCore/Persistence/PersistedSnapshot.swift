@@ -118,7 +118,7 @@ public struct PersistedSnapshot: Codable, Equatable, Sendable {
     }
 
     private static func sortedBindings(_ bindings: [ShortcutBinding]) -> [ShortcutBinding] {
-        bindings.sorted { $0.action.rawValue < $1.action.rawValue }
+        bindings.sorted { $0.action.stableIndex < $1.action.stableIndex }
     }
 }
 

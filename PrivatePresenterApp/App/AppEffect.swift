@@ -64,4 +64,5 @@ enum AppLocalError: String, Equatable, Sendable {
     case snapshotSaveFailed
     case preClearFlushFailed
     case clearRequestInvalidated
+    case invalidShortcutConfiguration
 }

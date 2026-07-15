@@ -756,16 +756,22 @@ final class AppModel {
     private func restore(_ persistedSnapshot: PersistedSnapshot?) {
         let generation = retireScrollSession(reason: .restore)
         if let persistedSnapshot {
-            document = persistedSnapshot.document
-            preferences = persistedSnapshot.preferences
-            panelFrames = persistedSnapshot.panelFrames
-            shortcutBindings = persistedSnapshot.shortcutBindings
-            snapshotRevision = persistedSnapshot.revision
-            overlaySession = RestoredState(snapshot: persistedSnapshot).overlaySession
+            let shortcutResolution = ShortcutRestorePolicy.resolve(persistedSnapshot)
+            let restoredSnapshot = shortcutResolution.snapshot
+            document = restoredSnapshot.document
+            preferences = restoredSnapshot.preferences
+            panelFrames = restoredSnapshot.panelFrames
+            shortcutBindings = restoredSnapshot.shortcutBindings
+            snapshotRevision = restoredSnapshot.revision
+            overlaySession = RestoredState(snapshot: restoredSnapshot).overlaySession
             candidateFingerprint = preferences.selectedDisplayFingerprint
+            localError = shortcutResolution.usedDefaultBindings
+                ? .invalidShortcutConfiguration
+                : nil
         } else {
             overlaySession = OverlaySession()
             candidateFingerprint = preferences.selectedDisplayFingerprint
+            localError = nil
         }
         restorationCompleted = true
         isPersistenceLoadSafe = true
@@ -775,7 +781,6 @@ final class AppModel {
         isSelectionConfirmed = false
         isShielded = true
         warning = nil
-        localError = nil
         pendingClear = nil
         pendingShieldedMoveDisplayID = nil
         emit([
@@ -1155,9 +1160,7 @@ final class AppModel {
     }
 
     private static var defaultShortcutBindings: [ShortcutBinding] {
-        KeyboardShortcut.defaultMap.map {
-            ShortcutBinding(action: $0.key, shortcut: $0.value)
-        }.sorted { $0.action.rawValue < $1.action.rawValue }
+        ShortcutValidator.defaultBindings
     }
 
     private func retireScrollSessionEffect(
