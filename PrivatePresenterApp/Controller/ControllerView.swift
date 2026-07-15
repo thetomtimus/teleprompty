@@ -119,7 +119,7 @@ struct ControllerView: View {
                     )
                 )
 
-                futureControls
+                rehearsalControls
 
                 #if DEBUG
                 DebugDiagnosticsView(model: model)
@@ -150,18 +150,34 @@ struct ControllerView: View {
         }
     }
 
-    private var futureControls: some View {
+    private var rehearsalControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Button("Start") {}.disabled(true)
-                Button("Pause") {}.disabled(true)
-                Button("Restart") {}.disabled(true)
-                Slider(value: .constant(60), in: 10...240).disabled(true)
-                Text("Speed")
+                Button("Start") { dispatch(.start) }
+                    .disabled(!presentation.isEnabled(.start))
+                Button("Pause") { dispatch(.pause) }
+                    .disabled(!presentation.isEnabled(.pause))
+                Button("Restart") { dispatch(.restart) }
+                    .disabled(!presentation.isEnabled(.restart))
+                Button("Back") { dispatch(.back) }
+                    .disabled(!presentation.isEnabled(.back))
+                Button("Forward") { dispatch(.forward) }
+                    .disabled(!presentation.isEnabled(.forward))
             }
-            Text(ControllerPresentation.m3Explanation)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Speed")
+                Slider(
+                    value: Binding(
+                        get: { model.preferences.speedPointsPerSecond },
+                        set: { model.send(.setSpeed($0)) }
+                    ),
+                    in: TeleprompterPreferences.speedRange,
+                    step: TeleprompterPreferences.speedStep
+                )
+                .disabled(!presentation.isEnabled(.speed))
+                Text("\(Int(model.preferences.speedPointsPerSecond)) pt/s")
+                    .monospacedDigit()
+            }
             Toggle("Focus Mode", isOn: .constant(false)).disabled(true)
             Text(ControllerPresentation.m4Explanation)
                 .font(.caption)

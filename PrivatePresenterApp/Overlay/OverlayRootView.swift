@@ -10,6 +10,10 @@ struct OverlayRootView: View {
 
     let readerSystem: ReaderTextSystem?
     let readerViewportFraction: Double
+    let onReaderAttachmentChanged: @MainActor (Bool) -> Void
+    let onReaderScreenChanged: @MainActor () -> Void
+    let onReaderBoundsWillChange: @MainActor () -> Void
+    let onReaderBoundsChanged: @MainActor () -> Void
     let onDragChanged: (CGSize) -> Void
     let onDragEnded: () -> Void
     let onResizeChanged: (ClampedPanelInteractionController.ResizeEdge, CGSize) -> Void
@@ -18,6 +22,10 @@ struct OverlayRootView: View {
     init(
         readerSystem: ReaderTextSystem? = nil,
         readerViewportFraction: Double = 0.5,
+        onReaderAttachmentChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onReaderScreenChanged: @escaping @MainActor () -> Void = {},
+        onReaderBoundsWillChange: @escaping @MainActor () -> Void = {},
+        onReaderBoundsChanged: @escaping @MainActor () -> Void = {},
         onDragChanged: @escaping (CGSize) -> Void = { _ in },
         onDragEnded: @escaping () -> Void = {},
         onResizeChanged:
@@ -29,6 +37,10 @@ struct OverlayRootView: View {
     ) {
         self.readerSystem = readerSystem
         self.readerViewportFraction = readerViewportFraction
+        self.onReaderAttachmentChanged = onReaderAttachmentChanged
+        self.onReaderScreenChanged = onReaderScreenChanged
+        self.onReaderBoundsWillChange = onReaderBoundsWillChange
+        self.onReaderBoundsChanged = onReaderBoundsChanged
         self.onDragChanged = onDragChanged
         self.onDragEnded = onDragEnded
         self.onResizeChanged = onResizeChanged
@@ -47,7 +59,11 @@ struct OverlayRootView: View {
                 if let readerSystem {
                     ReaderTextView(
                         system: readerSystem,
-                        viewportFraction: readerViewportFraction
+                        viewportFraction: readerViewportFraction,
+                        onAttachmentChanged: onReaderAttachmentChanged,
+                        onScreenChanged: onReaderScreenChanged,
+                        onBoundsWillChange: onReaderBoundsWillChange,
+                        onBoundsChanged: onReaderBoundsChanged
                     )
                 } else {
                     Color.clear

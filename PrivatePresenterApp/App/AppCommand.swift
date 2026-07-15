@@ -14,6 +14,15 @@ enum AppCommand {
     case replaceScript(text: String)
     case applyScriptEdit(ScriptTextEdit)
     case readerResyncRequested(appliedRevision: UInt64)
+    case scrollCheckpoint(ScrollCheckpoint)
+    case scrollTerminal(ScrollTerminalResult)
+    case scrollTerminalCapture(ScrollTerminalCapture)
+    case scrollMutationCompleted(ScrollMutationResult)
+    case readerAttachmentChanged(isAttached: Bool)
+    case readerScreenChanged
+    case readerBoundsWillChange
+    case readerBoundsChanged
+    case teardownScrollSession
     case setScriptTitle(String)
     case setFontSize(Double)
     case setTextAlignment(TeleprompterTextAlignment)
@@ -32,6 +41,9 @@ enum AppCommand {
     case pause
     case togglePlayback
     case restart
+    case setSpeed(Double)
+    case moveBackward
+    case moveForward
 
     case showOverlay
     case hideOverlay

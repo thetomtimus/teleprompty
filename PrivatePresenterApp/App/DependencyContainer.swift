@@ -7,6 +7,11 @@ final class AppEffectAdapter {
     private let overlayController: OverlayPanelController
     private weak var model: AppModel?
     private weak var controllerWindowController: ControllerWindowController?
+    private let frameClockFactory: FrameClockFactory
+    private let readerViewportProvider: @MainActor () -> ReaderViewport?
+    private var scrollSession: ScrollSessionController?
+    private weak var scrollSessionViewport: AnyObject?
+    private var pendingViewportReplacementCapture: ScrollTerminalCapture?
     private var persistenceTask: Task<Void, Never>?
     private var persistenceGeneration: UInt64 = 0
     private var isTerminationDraining = false
@@ -15,6 +20,9 @@ final class AppEffectAdapter {
     #if DEBUG
     private var handleDepth = 0
     private(set) var maximumHandleDepth = 0
+    private(set) var scrollSessionConstructionCount = 0
+    var activeScrollSessionCount: Int { scrollSession == nil ? 0 : 1 }
+    var scrollSessionForTesting: ScrollSessionController? { scrollSession }
     #endif
     private let terminationFlushOverride: (@Sendable () async -> Bool)?
     #if DEBUG
@@ -26,26 +34,37 @@ final class AppEffectAdapter {
         snapshotStore: SnapshotStore,
         overlayController: OverlayPanelController,
         diagnosticRecorder: DiagnosticEvidenceRecorder? = nil,
-        terminationFlushOverride: (@Sendable () async -> Bool)? = nil
+        terminationFlushOverride: (@Sendable () async -> Bool)? = nil,
+        readerViewportProvider: (@MainActor () -> ReaderViewport?)? = nil,
+        frameClockFactory: @escaping FrameClockFactory = { view, onTick in
+            DisplayLinkFrameClock.make(attachedTo: view, onTick: onTick)
+        }
     ) {
         self.init(
             snapshotStore: snapshotStore,
             overlayController: overlayController,
             diagnosticRecorderObject: diagnosticRecorder,
-            terminationFlushOverride: terminationFlushOverride
+            terminationFlushOverride: terminationFlushOverride,
+            readerViewportProvider: readerViewportProvider,
+            frameClockFactory: frameClockFactory
         )
     }
     #else
     convenience init(
         snapshotStore: SnapshotStore,
         overlayController: OverlayPanelController,
-        terminationFlushOverride: (@Sendable () async -> Bool)? = nil
+        terminationFlushOverride: (@Sendable () async -> Bool)? = nil,
+        frameClockFactory: @escaping FrameClockFactory = { view, onTick in
+            DisplayLinkFrameClock.make(attachedTo: view, onTick: onTick)
+        }
     ) {
         self.init(
             snapshotStore: snapshotStore,
             overlayController: overlayController,
             diagnosticRecorderObject: nil,
-            terminationFlushOverride: terminationFlushOverride
+            terminationFlushOverride: terminationFlushOverride,
+            readerViewportProvider: nil,
+            frameClockFactory: frameClockFactory
         )
     }
     #endif
@@ -54,7 +73,9 @@ final class AppEffectAdapter {
         snapshotStore: SnapshotStore,
         overlayController: OverlayPanelController,
         diagnosticRecorderObject: AnyObject?,
-        terminationFlushOverride: (@Sendable () async -> Bool)?
+        terminationFlushOverride: (@Sendable () async -> Bool)?,
+        readerViewportProvider: (@MainActor () -> ReaderViewport?)?,
+        frameClockFactory: @escaping FrameClockFactory
     ) {
         self.snapshotStore = snapshotStore
         self.overlayController = overlayController
@@ -62,6 +83,10 @@ final class AppEffectAdapter {
         diagnosticRecorder = diagnosticRecorderObject as? DiagnosticEvidenceRecorder
         #endif
         self.terminationFlushOverride = terminationFlushOverride
+        self.frameClockFactory = frameClockFactory
+        self.readerViewportProvider = readerViewportProvider ?? { [weak overlayController] in
+            overlayController?.readerTextSystem.viewportAdapter
+        }
     }
 
     func connect(model: AppModel, controller: ControllerWindowController) {
@@ -69,6 +94,18 @@ final class AppEffectAdapter {
         controllerWindowController = controller
         overlayController.readerTextSystem.onResyncRequested = { [weak model] revision in
             model?.send(.readerResyncRequested(appliedRevision: revision))
+        }
+        overlayController.onReaderAttachmentChanged = { [weak model] isAttached in
+            model?.send(.readerAttachmentChanged(isAttached: isAttached))
+        }
+        overlayController.onReaderScreenChanged = { [weak model] in
+            model?.send(.readerScreenChanged)
+        }
+        overlayController.onReaderBoundsWillChange = { [weak model] in
+            model?.send(.readerBoundsWillChange)
+        }
+        overlayController.onReaderBoundsChanged = { [weak model] in
+            model?.send(.readerBoundsChanged)
         }
         overlayController.onAppliedFrame = { [weak model] record in
             guard let displayID = record.displayID else { return }
@@ -110,20 +147,219 @@ final class AppEffectAdapter {
         )
         #endif
         switch effect {
-        case .applyReaderEdit(let edit):
-            overlayController.readerTextSystem.apply(edit)
-        case .replaceReader(let text, let revision, let reason):
+        case .startScrollSession(let binding, let uptime):
+            guard let session = session() else {
+                model?.send(
+                    .scrollTerminal(
+                        ScrollTerminalResult(
+                            generation: binding.generation,
+                            reason: .clockUnavailable,
+                            anchor: binding.anchor,
+                            pixelOffset: binding.offset
+                        )
+                    )
+                )
+                break
+            }
+            let viewportBinding = bindingForCurrentViewport(binding)
+            let restored = session.start(binding: viewportBinding, uptime: uptime)
+            model?.send(
+                .scrollMutationCompleted(
+                    ScrollMutationResult(
+                        generation: binding.generation,
+                        anchor: restored.anchor,
+                        pixelOffset: restored.offset,
+                        outcome: .restored,
+                        mayResume: false
+                    )
+                )
+            )
+        case .stopScrollSession(
+            let retiring,
+            let replacement,
+            let reason,
+            let fallbackAnchor,
+            let fallbackOffset
+        ):
+            let capture = scrollSession?.stopAndCapture(
+                retiring: retiring,
+                replacement: replacement,
+                reason: reason,
+                fallbackAnchor: fallbackAnchor,
+                fallbackOffset: fallbackOffset
+            ) ?? ScrollTerminalCapture(
+                retiringGeneration: retiring,
+                replacementGeneration: replacement,
+                reason: reason,
+                anchor: fallbackAnchor,
+                pixelOffset: fallbackOffset
+            )
+            model?.send(.scrollTerminalCapture(capture))
+        case .updateScrollSpeed(let generation, let speed, let uptime):
+            scrollSession?.setSpeed(
+                generation: generation,
+                pointsPerSecond: speed,
+                uptime: uptime
+            )
+        case .moveScrollSession(let binding, let direction, let uptime):
+            guard let session = session() else { break }
+            if !session.isBound(to: binding.generation) {
+                reconcileAndReport(binding, using: session)
+            }
+            session.move(
+                generation: binding.generation,
+                direction: direction,
+                uptime: uptime
+            )
+        case .readerAttachmentChanged(let isAttached, let binding):
+            guard isAttached else {
+                invalidateViewportBoundSession()
+                break
+            }
+            guard let session = session() else { break }
+            reconcileAndReport(binding, using: session)
+        case .readerScreenChanged(let binding), .restoreScrollLayout(let binding):
+            guard let session = session() else { break }
+            reconcileAndReport(binding, using: session)
+        case .teardownScrollSession(let generation):
+            scrollSession?.teardown(generation: generation)
+            scrollSession = nil
+            scrollSessionViewport = nil
+            pendingViewportReplacementCapture = nil
+        case .applyReaderEdit(
+            let edit,
+            let preEditDocument,
+            let postEditDocument,
+            let generation,
+            let wasPlaying
+        ):
+            let result: ScrollMutationResult
+            if let session = session() {
+                if !session.isBound(to: generation) {
+                    _ = session.reconcilePaused(
+                        bindingForCurrentViewport(binding(
+                            generation: generation,
+                            anchor: model?.overlaySession.readingAnchor
+                        ))
+                    )
+                }
+                result = session.applyReaderEdit(
+                    edit,
+                    preEditDocument: preEditDocument,
+                    postEditDocument: postEditDocument,
+                    generation: generation,
+                    readerSystem: overlayController.readerTextSystem,
+                    wasPlaying: wasPlaying
+                )
+            } else {
+                let prior = model?.overlaySession.readingAnchor ?? ReadingAnchor()
+                let mapping = ReadingPositionMapper.map(
+                    anchor: prior,
+                    editedRangeUTF16: NSRange(
+                        location: edit.range.location,
+                        length: edit.range.length
+                    ),
+                    replacement: edit.replacement,
+                    preEditDocument: preEditDocument,
+                    postEditDocument: postEditDocument
+                )
+                overlayController.readerTextSystem.apply(edit)
+                result = ScrollMutationResult(
+                    generation: generation,
+                    anchor: mapping.anchor,
+                    pixelOffset: model?.overlaySession.pixelOffset ?? 0,
+                    outcome: mapping.requiresPause ? .adjusted : .restored,
+                    mayResume: false
+                )
+            }
+            model?.send(.scrollMutationCompleted(result))
+        case .replaceReader(let text, let revision, let reason, let generation, let anchor):
             overlayController.readerTextSystem.replaceAuthoritatively(
                 text: text,
                 revision: revision,
                 reason: reason
             )
-        case .updateReaderAttributes(let fontSize, let alignment, let activeBandEnabled):
+            if let viewport = overlayController.readerTextSystem.viewportAdapter {
+                let restoredAnchor = anchor
+                    ?? scrollSession?.lastTerminalCapture?.anchor
+                    ?? model?.overlaySession.readingAnchor
+                    ?? ReadingAnchor()
+                let offset: Double
+                if let session = session() {
+                    let restored = session.reconcilePaused(
+                        bindingForCurrentViewport(
+                            binding(generation: generation, anchor: restoredAnchor)
+                        )
+                    )
+                    offset = restored.offset
+                } else {
+                    viewport.ensureLayout()
+                    offset = viewport.restore(anchor: restoredAnchor)
+                }
+                model?.send(
+                    .scrollMutationCompleted(
+                        ScrollMutationResult(
+                            generation: generation,
+                            anchor: restoredAnchor,
+                            pixelOffset: offset,
+                            outcome: .restored,
+                            mayResume: false
+                        )
+                    )
+                )
+            }
+        case .updateReaderAttributes(
+            let fontSize,
+            let alignment,
+            let activeBandEnabled,
+            let generation,
+            let requestedAnchor
+        ):
             overlayController.readerTextSystem.updateAttributes(
                 fontSize: fontSize,
                 alignment: alignment
             )
             overlayController.readerTextSystem.setActiveBandEnabled(activeBandEnabled)
+            let restored: (anchor: ReadingAnchor, offset: Double)?
+            if let requestedAnchor,
+                let viewport = overlayController.readerTextSystem.viewportAdapter
+            {
+                if let session = session() {
+                    restored = session.reconcilePaused(
+                        bindingForCurrentViewport(
+                            binding(generation: generation, anchor: requestedAnchor)
+                        )
+                    )
+                } else {
+                    viewport.ensureLayout()
+                    restored = (requestedAnchor, viewport.restore(anchor: requestedAnchor))
+                }
+            } else {
+                let restoredAnchor = scrollSession?.lastTerminalCapture?.anchor
+                    ?? model?.overlaySession.readingAnchor
+                if let restoredAnchor, let session = session() {
+                    restored = session.reconcilePaused(
+                        bindingForCurrentViewport(
+                            binding(generation: generation, anchor: restoredAnchor)
+                        )
+                    )
+                } else {
+                    restored = nil
+                }
+            }
+            if let restored {
+                model?.send(
+                    .scrollMutationCompleted(
+                        ScrollMutationResult(
+                            generation: generation,
+                            anchor: restored.anchor,
+                            pixelOffset: restored.offset,
+                            outcome: .restored,
+                            mayResume: false
+                        )
+                    )
+                )
+            }
         case .scheduleSnapshot(let snapshot):
             enqueuePersistence { store in
                 try await store.scheduleSave(snapshot)
@@ -199,7 +435,10 @@ final class AppEffectAdapter {
                 await Task.yield()
                 model?.send(.completeShieldedMove(screenID: display.id))
             }
-        case .resetViewport, .reassessPrivacy, .queryTopology, .evaluatePrivacy:
+        case .resetViewport(let generation):
+            scrollSession?.restart(generation: generation)
+            overlayController.readerTextSystem.viewportAdapter?.setClipOriginY(0)
+        case .reassessPrivacy, .queryTopology, .evaluatePrivacy:
             break
         }
         #if DEBUG
@@ -256,6 +495,91 @@ final class AppEffectAdapter {
         persistenceTask = terminalTask
         _ = await terminalTask.value
         return terminalFlushSucceeded
+    }
+
+    private func session() -> ScrollSessionController? {
+        guard let viewport = readerViewportProvider() else {
+            invalidateViewportBoundSession()
+            return nil
+        }
+        if let scrollSession,
+            let scrollSessionViewport,
+            scrollSessionViewport === (viewport as AnyObject)
+        {
+            return scrollSession
+        }
+        invalidateViewportBoundSession()
+        let session = ScrollSessionController(
+            viewport: viewport,
+            clockFactory: frameClockFactory,
+            onEvent: { [weak model] event in
+                switch event {
+                case .checkpoint(let checkpoint):
+                    model?.send(.scrollCheckpoint(checkpoint))
+                case .terminal(let result):
+                    model?.send(.scrollTerminal(result))
+                }
+            }
+        )
+        scrollSession = session
+        scrollSessionViewport = viewport
+        #if DEBUG
+        scrollSessionConstructionCount += 1
+        #endif
+        return session
+    }
+
+    private func invalidateViewportBoundSession() {
+        if let capture = scrollSession?.invalidateForViewportReplacement() {
+            pendingViewportReplacementCapture = capture
+        }
+        scrollSession = nil
+        scrollSessionViewport = nil
+    }
+
+    private func bindingForCurrentViewport(
+        _ binding: ScrollSessionBinding
+    ) -> ScrollSessionBinding {
+        guard let capture = pendingViewportReplacementCapture else { return binding }
+        pendingViewportReplacementCapture = nil
+        guard capture.replacementGeneration == binding.generation else { return binding }
+        return ScrollSessionBinding(
+            generation: binding.generation,
+            anchor: capture.anchor,
+            offset: capture.pixelOffset,
+            speed: binding.speed
+        )
+    }
+
+    private func binding(
+        generation: ScrollSessionGeneration,
+        anchor: ReadingAnchor?
+    ) -> ScrollSessionBinding {
+        ScrollSessionBinding(
+            generation: generation,
+            anchor: anchor ?? model?.overlaySession.readingAnchor ?? ReadingAnchor(),
+            offset: model?.overlaySession.pixelOffset ?? 0,
+            speed: model?.preferences.speedPointsPerSecond
+                ?? TeleprompterPreferences.defaultSpeedPointsPerSecond
+        )
+    }
+
+    private func reconcileAndReport(
+        _ binding: ScrollSessionBinding,
+        using session: ScrollSessionController
+    ) {
+        let restored = session.reconcilePaused(bindingForCurrentViewport(binding))
+        model?.send(
+            .scrollMutationCompleted(
+                ScrollMutationResult(
+                    generation: binding.generation,
+                    anchor: restored.anchor,
+                    pixelOffset: restored.offset,
+                    outcome: .restored,
+                    mayResume: false
+                )
+            )
+        )
     }
 
     private func enqueuePersistence(

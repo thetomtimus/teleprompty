@@ -59,13 +59,28 @@ final class ReaderViewportContainerView: NSView {
     let scrollView = ReaderScrollView()
     private let system: ReaderTextSystem
     private var viewportFraction: Double
+    private let onAttachmentChanged: @MainActor (Bool) -> Void
+    private let onScreenChanged: @MainActor () -> Void
+    private let onBoundsWillChange: @MainActor () -> Void
+    private let onBoundsChanged: @MainActor () -> Void
     private(set) var viewportAdapter: ReaderViewportAdapter!
 
     override var isFlipped: Bool { true }
 
-    init(system: ReaderTextSystem, viewportFraction: Double) {
+    init(
+        system: ReaderTextSystem,
+        viewportFraction: Double,
+        onAttachmentChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onScreenChanged: @escaping @MainActor () -> Void = {},
+        onBoundsWillChange: @escaping @MainActor () -> Void = {},
+        onBoundsChanged: @escaping @MainActor () -> Void = {}
+    ) {
         self.system = system
         self.viewportFraction = Self.clampedFraction(viewportFraction)
+        self.onAttachmentChanged = onAttachmentChanged
+        self.onScreenChanged = onScreenChanged
+        self.onBoundsWillChange = onBoundsWillChange
+        self.onBoundsChanged = onBoundsChanged
         super.init(frame: .zero)
 
         wantsLayer = true
@@ -129,6 +144,27 @@ final class ReaderViewportContainerView: NSView {
         }
     }
 
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        onAttachmentChanged(newWindow != nil)
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        onScreenChanged()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let changed = frame.size != newSize && frame.size != .zero && newSize != .zero
+        if changed { onBoundsWillChange() }
+        super.setFrameSize(newSize)
+        if changed {
+            needsLayout = true
+            layoutSubtreeIfNeeded()
+            onBoundsChanged()
+        }
+    }
+
     func updateViewportFraction(_ fraction: Double) {
         viewportFraction = Self.clampedFraction(fraction)
         needsLayout = true
@@ -145,19 +181,38 @@ final class ReaderViewportContainerView: NSView {
 struct ReaderTextView: NSViewRepresentable {
     let system: ReaderTextSystem
     var viewportFraction = 0.5
+    var onAttachmentChanged: @MainActor (Bool) -> Void = { _ in }
+    var onScreenChanged: @MainActor () -> Void = {}
+    var onBoundsWillChange: @MainActor () -> Void = {}
+    var onBoundsChanged: @MainActor () -> Void = {}
 
     static func makeReaderView(
         system: ReaderTextSystem,
-        viewportFraction: Double = 0.5
+        viewportFraction: Double = 0.5,
+        onAttachmentChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onScreenChanged: @escaping @MainActor () -> Void = {},
+        onBoundsWillChange: @escaping @MainActor () -> Void = {},
+        onBoundsChanged: @escaping @MainActor () -> Void = {}
     ) -> ReaderViewportContainerView {
         ReaderViewportContainerView(
             system: system,
-            viewportFraction: viewportFraction
+            viewportFraction: viewportFraction,
+            onAttachmentChanged: onAttachmentChanged,
+            onScreenChanged: onScreenChanged,
+            onBoundsWillChange: onBoundsWillChange,
+            onBoundsChanged: onBoundsChanged
         )
     }
 
     func makeNSView(context: Context) -> ReaderViewportContainerView {
-        Self.makeReaderView(system: system, viewportFraction: viewportFraction)
+        Self.makeReaderView(
+            system: system,
+            viewportFraction: viewportFraction,
+            onAttachmentChanged: onAttachmentChanged,
+            onScreenChanged: onScreenChanged,
+            onBoundsWillChange: onBoundsWillChange,
+            onBoundsChanged: onBoundsChanged
+        )
     }
 
     func updateNSView(_ view: ReaderViewportContainerView, context: Context) {

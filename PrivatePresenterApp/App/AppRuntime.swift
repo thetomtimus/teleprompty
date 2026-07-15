@@ -215,6 +215,7 @@ final class AppRuntime {
         startupTask?.cancel()
         startupTask = nil
         model.send(.topologyWillChange)
+        model.send(.teardownScrollSession)
         model.beginTerminationQuiescence()
         startupSeams.record(.flushPersistence)
         let didFlush = await dependencies.effectAdapter.flushForTermination()

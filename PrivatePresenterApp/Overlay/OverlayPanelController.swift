@@ -57,6 +57,10 @@ final class OverlayPanelController: NSWindowController {
     private let operationRecorder: (OverlayPanelOperation) -> Void
     private let appliedFrameRecorder: (OverlayAppliedFrameRecord) -> Void
     var onAppliedFrame: ((OverlayAppliedFrameRecord) -> Void)?
+    var onReaderAttachmentChanged: (@MainActor (Bool) -> Void)?
+    var onReaderScreenChanged: (@MainActor () -> Void)?
+    var onReaderBoundsWillChange: (@MainActor () -> Void)?
+    var onReaderBoundsChanged: (@MainActor () -> Void)?
     #if DEBUG
     let orderingMode: OverlayPanelOrderingMode
     #endif
@@ -118,6 +122,18 @@ final class OverlayPanelController: NSWindowController {
         panel.contentViewController = NSHostingController(
             rootView: OverlayRootView(
                 readerSystem: readerTextSystem,
+                onReaderAttachmentChanged: { [weak self] isAttached in
+                    self?.onReaderAttachmentChanged?(isAttached)
+                },
+                onReaderScreenChanged: { [weak self] in
+                    self?.onReaderScreenChanged?()
+                },
+                onReaderBoundsWillChange: { [weak self] in
+                    self?.onReaderBoundsWillChange?()
+                },
+                onReaderBoundsChanged: { [weak self] in
+                    self?.onReaderBoundsChanged?()
+                },
                 onDragChanged: { [weak self] translation in
                     self?.updateDrag(translation: translation)
                 },

@@ -1,6 +1,15 @@
 import AppKit
 import Observation
+import QuartzCore
 import TeleprompterCore
+
+struct ScrollSessionGeneration: Equatable, Hashable, Sendable {
+    fileprivate let value: UUID
+
+    fileprivate init() {
+        value = UUID()
+    }
+}
 
 @MainActor
 @Observable
@@ -52,6 +61,16 @@ final class AppModel {
     @ObservationIgnored private var pendingShieldedMoveDisplayID: UInt32?
     @ObservationIgnored private var pendingCommands: [AppCommand] = []
     @ObservationIgnored private var isDrainingCommands = false
+    @ObservationIgnored private(set) var currentScrollGeneration = ScrollSessionGeneration()
+    @ObservationIgnored private var isReaderAttached = false
+    @ObservationIgnored private var pendingScrollRetirement: PendingScrollRetirement?
+    @ObservationIgnored private var lastAcceptedScrollCheckpointUptime: TimeInterval?
+
+    private struct PendingScrollRetirement {
+        let retiring: ScrollSessionGeneration
+        let replacement: ScrollSessionGeneration
+        let reason: ScrollRetirementReason
+    }
 
     private struct PendingClear {
         enum Phase: Equatable {
@@ -197,12 +216,44 @@ final class AppModel {
         case .applyScriptEdit(let edit):
             applyScriptEdit(edit)
         case .readerResyncRequested:
+            let generation = retireScrollSession(reason: .resync)
             effectHandler(
                 .replaceReader(
                     text: document.text,
                     revision: document.revision,
-                    reason: .resync
+                    reason: .resync,
+                    generation: generation,
+                    anchor: nil
                 ))
+        case .scrollCheckpoint(let checkpoint):
+            accept(checkpoint)
+        case .scrollTerminal(let terminal):
+            accept(terminal)
+        case .scrollTerminalCapture(let capture):
+            accept(capture)
+        case .scrollMutationCompleted(let result):
+            accept(result)
+        case .readerAttachmentChanged(let isAttached):
+            let wasAttached = isReaderAttached
+            isReaderAttached = isAttached
+            if wasAttached || overlaySession.playbackPhase == .playing {
+                _ = retireScrollSession(reason: .attachment)
+            }
+            effectHandler(
+                .readerAttachmentChanged(
+                    isAttached: isAttached,
+                    binding: currentScrollBinding
+                ))
+        case .readerScreenChanged:
+            _ = retireScrollSession(reason: .screenMove)
+            effectHandler(.readerScreenChanged(currentScrollBinding))
+        case .readerBoundsWillChange:
+            _ = retireScrollSession(reason: .resize)
+        case .readerBoundsChanged:
+            effectHandler(.restoreScrollLayout(currentScrollBinding))
+        case .teardownScrollSession:
+            let generation = retireScrollSession(reason: .teardown)
+            effectHandler(.teardownScrollSession(generation))
         case .setScriptTitle(let title):
             setScriptTitle(title)
         case .setFontSize(let size):
@@ -228,15 +279,21 @@ final class AppModel {
         case .start:
             startPlayback()
         case .pause:
-            overlaySession.playbackPhase = .paused
+            pausePlayback()
         case .togglePlayback:
             if overlaySession.playbackPhase == .playing {
-                overlaySession.playbackPhase = .paused
+                pausePlayback()
             } else {
                 startPlayback()
             }
         case .restart:
             restart()
+        case .setSpeed(let speed):
+            setSpeed(speed)
+        case .moveBackward:
+            moveReader(.backward)
+        case .moveForward:
+            moveReader(.forward)
         case .showOverlay:
             showOverlayCommand()
         case .hideOverlay:
@@ -251,7 +308,8 @@ final class AppModel {
             effectHandler(.flushPersistence)
         case .topologyWillChange:
             pendingShieldedMoveDisplayID = nil
-            emit(applyPrivacyDirectives(privacyCoordinator.topologyWillChange()))
+            let stop = retireScrollSessionEffect(reason: .topology)
+            emit([stop] + applyPrivacyDirectives(privacyCoordinator.topologyWillChange()))
         case .displayInventoryLoaded(let inventory):
             refreshDisplayInventory(inventory)
         case .displayInventoryFailed:
@@ -437,8 +495,11 @@ final class AppModel {
     }
 
     private func applyScriptEdit(_ edit: ScriptTextEdit) {
+        let preEditDocument = document.text
+        let wasPlaying = overlaySession.playbackPhase == .playing
+        let generation = retireScrollSession(reason: .readerEdit)
         guard let updatedText = try? edit.applying(
-            to: document.text,
+            to: preEditDocument,
             revision: document.revision
         ) else { return }
         localError = nil
@@ -449,7 +510,14 @@ final class AppModel {
         overlaySession.readingAnchor = overlaySession.readingAnchor.clamped(to: updatedText)
         snapshotRevision += 1
         let persistedSnapshot = snapshot()
-        effectHandler(.applyReaderEdit(edit))
+        effectHandler(
+            .applyReaderEdit(
+                edit: edit,
+                preEditDocument: preEditDocument,
+                postEditDocument: updatedText,
+                generation: generation,
+                wasPlaying: wasPlaying
+            ))
         effectHandler(.scheduleSnapshot(persistedSnapshot))
     }
 
@@ -490,13 +558,16 @@ final class AppModel {
     }
 
     private func commitReaderAppearanceChange() {
+        let generation = retireScrollSession(reason: .readerAttributes)
         snapshotRevision += 1
         let persistedSnapshot = snapshot()
         effectHandler(
             .updateReaderAttributes(
                 fontSize: preferences.fontSizePoints,
                 alignment: preferences.textAlignment,
-                activeBandEnabled: preferences.isActiveBandEnabled
+                activeBandEnabled: preferences.isActiveBandEnabled,
+                generation: generation,
+                anchor: nil
             ))
         effectHandler(.scheduleSnapshot(persistedSnapshot))
     }
@@ -597,6 +668,7 @@ final class AppModel {
             return
         }
 
+        let generation = retireScrollSession(reason: .clear)
         pendingClear = nil
         localError = nil
         document.text = ""
@@ -611,7 +683,9 @@ final class AppModel {
             .replaceReader(
                 text: document.text,
                 revision: document.revision,
-                reason: .clear
+                reason: .clear,
+                generation: generation,
+                anchor: overlaySession.readingAnchor
             ))
         effectHandler(.saveSnapshotImmediately(persistedSnapshot))
     }
@@ -621,21 +695,66 @@ final class AppModel {
             overlaySession.playbackPhase = .paused
             return
         }
+        guard overlaySession.playbackPhase == .paused else { return }
+        let generation = ScrollSessionGeneration()
+        currentScrollGeneration = generation
+        pendingScrollRetirement = nil
         overlaySession.playbackPhase = .playing
+        let uptime = CACurrentMediaTime()
+        lastAcceptedScrollCheckpointUptime = uptime
+        effectHandler(
+            .startScrollSession(
+                binding: currentScrollBinding,
+                uptime: uptime
+            ))
+    }
+
+    private func pausePlayback() {
+        guard overlaySession.playbackPhase == .playing else { return }
+        _ = retireScrollSession(reason: .commandPause)
+    }
+
+    private func setSpeed(_ speed: Double) {
+        let normalized = speed.isFinite
+            ? min(max(speed, TeleprompterPreferences.speedRange.lowerBound),
+                TeleprompterPreferences.speedRange.upperBound)
+            : TeleprompterPreferences.defaultSpeedPointsPerSecond
+        guard normalized != preferences.speedPointsPerSecond else { return }
+        invalidatePendingClearForDurableChange()
+        preferences.speedPointsPerSecond = normalized
+        snapshotRevision += 1
+        emit([
+            .updateScrollSpeed(
+                currentScrollGeneration,
+                normalized,
+                CACurrentMediaTime()
+            ),
+            .scheduleSnapshot(snapshot()),
+        ])
+    }
+
+    private func moveReader(_ direction: ScrollManualDirection) {
+        effectHandler(
+            .moveScrollSession(
+                binding: currentScrollBinding,
+                direction: direction,
+                uptime: CACurrentMediaTime()
+            ))
     }
 
     private func restart() {
         localError = nil
         invalidatePendingClearForDurableChange()
-        overlaySession.playbackPhase = .paused
+        let generation = retireScrollSession(reason: .restart)
         overlaySession.readingAnchor = ReadingAnchor()
         overlaySession.pixelOffset = 0
         snapshotRevision += 1
         effectHandler(.scheduleSnapshot(snapshot()))
-        effectHandler(.resetViewport)
+        effectHandler(.resetViewport(generation))
     }
 
     private func restore(_ persistedSnapshot: PersistedSnapshot?) {
+        let generation = retireScrollSession(reason: .restore)
         if let persistedSnapshot {
             document = persistedSnapshot.document
             preferences = persistedSnapshot.preferences
@@ -665,17 +784,22 @@ final class AppModel {
             .replaceReader(
                 text: document.text,
                 revision: document.revision,
-                reason: .restore
+                reason: .restore,
+                generation: generation,
+                anchor: overlaySession.readingAnchor
             ),
             .updateReaderAttributes(
                 fontSize: preferences.fontSizePoints,
                 alignment: preferences.textAlignment,
-                activeBandEnabled: preferences.isActiveBandEnabled
+                activeBandEnabled: preferences.isActiveBandEnabled,
+                generation: generation,
+                anchor: overlaySession.readingAnchor
             ),
         ])
     }
 
     private func restoreFailed() {
+        _ = retireScrollSession(reason: .restore)
         restorationCompleted = true
         isPersistenceLoadSafe = false
         overlaySession = OverlaySession()
@@ -706,6 +830,7 @@ final class AppModel {
     // MARK: - Display/privacy reducer
 
     private func refreshDisplayInventory(_ inventory: RuntimeDisplayInventory) {
+        let stop = retireScrollSessionEffect(reason: .privacy)
         isSelectionConfirmed = false
         displays = inventory.displays
         latestTopology = inventory.topology
@@ -732,10 +857,11 @@ final class AppModel {
             selectedDisplayID = nil
             candidateFingerprint = nil
         }
-        emit(effects)
+        emit([stop] + effects)
     }
 
     private func refreshDisplayInventoryFailed() {
+        let stop = retireScrollSessionEffect(reason: .privacy)
         displays = []
         selectedDisplayID = nil
         candidateFingerprint = nil
@@ -747,17 +873,18 @@ final class AppModel {
             )
         )
         warning = Self.queryFailureWarning
-        emit(effects)
+        emit([stop] + effects)
     }
 
     private func selectDisplayCommand(_ id: UInt32?) {
+        let stop = retireScrollSessionEffect(reason: .screenMove)
         isSelectionConfirmed = false
         isShielded = true
         overlaySession.visibility = .hidden
         overlaySession.currentSessionDisplayID = nil
         overlaySession.recoveryConfirmationState = .required
         pendingShieldedMoveDisplayID = nil
-        var effects: [AppEffect] = [.hidePanel]
+        var effects: [AppEffect] = [stop, .hidePanel]
         selectedDisplayID = id
         guard
             let id,
@@ -815,7 +942,8 @@ final class AppModel {
             confirmedSafeScreenID: selectedDisplayID,
             isSafe: true
         )
-        var effects = applyPrivacyDirectives(directives)
+        var effects = [retireScrollSessionEffect(reason: .privacy)]
+            + applyPrivacyDirectives(directives)
         warning = warningMessage(for: evaluation.assessment)
         pendingShieldedMoveDisplayID = selectedDisplayID
 
@@ -847,6 +975,7 @@ final class AppModel {
     }
 
     private func keepScriptHiddenCommand() {
+        let stop = retireScrollSessionEffect(reason: .privacy)
         isSelectionConfirmed = false
         isShielded = true
         overlaySession.visibility = .hidden
@@ -854,7 +983,7 @@ final class AppModel {
         overlaySession.currentSessionDisplayID = nil
         overlaySession.recoveryConfirmationState = .required
         pendingShieldedMoveDisplayID = nil
-        emit([.hidePanel])
+        emit([stop, .hidePanel])
     }
 
     private func showOverlayCommand() {
@@ -893,8 +1022,9 @@ final class AppModel {
     }
 
     private func hideOverlayCommand() {
+        let stop = retireScrollSessionEffect(reason: .hide)
         overlaySession.visibility = .hidden
-        effectHandler(.hidePanel)
+        emit([stop, .hidePanel])
     }
 
     private func setLockedCommand(_ locked: Bool) {
@@ -1030,18 +1160,128 @@ final class AppModel {
         }.sorted { $0.action.rawValue < $1.action.rawValue }
     }
 
+    private func retireScrollSessionEffect(
+        reason: ScrollRetirementReason
+    ) -> AppEffect {
+        let retiring = currentScrollGeneration
+        let replacement = ScrollSessionGeneration()
+        currentScrollGeneration = replacement
+        pendingScrollRetirement = PendingScrollRetirement(
+            retiring: retiring,
+            replacement: replacement,
+            reason: reason
+        )
+        lastAcceptedScrollCheckpointUptime = nil
+        overlaySession.playbackPhase = .paused
+        return .stopScrollSession(
+            retiring: retiring,
+            replacement: replacement,
+            reason: reason,
+            fallbackAnchor: overlaySession.readingAnchor,
+            fallbackOffset: overlaySession.pixelOffset
+        )
+    }
+
+    @discardableResult
+    private func retireScrollSession(
+        reason: ScrollRetirementReason
+    ) -> ScrollSessionGeneration {
+        effectHandler(retireScrollSessionEffect(reason: reason))
+        return currentScrollGeneration
+    }
+
+    private func accept(_ checkpoint: ScrollCheckpoint) {
+        let respectsCheckpointRate = lastAcceptedScrollCheckpointUptime.map({
+            checkpoint.uptime >= $0 && checkpoint.uptime - $0 >= 1
+        }) ?? true
+        guard
+            checkpoint.generation == currentScrollGeneration,
+            checkpoint.uptime.isFinite,
+            respectsCheckpointRate
+        else { return }
+        lastAcceptedScrollCheckpointUptime = checkpoint.uptime
+        acceptPosition(anchor: checkpoint.anchor, offset: checkpoint.pixelOffset)
+    }
+
+    private var currentScrollBinding: ScrollSessionBinding {
+        ScrollSessionBinding(
+            generation: currentScrollGeneration,
+            anchor: overlaySession.readingAnchor,
+            offset: overlaySession.pixelOffset,
+            speed: preferences.speedPointsPerSecond
+        )
+    }
+
+    private func accept(_ terminal: ScrollTerminalResult) {
+        guard
+            terminal.generation == currentScrollGeneration,
+            overlaySession.playbackPhase == .playing
+        else { return }
+        overlaySession.playbackPhase = .paused
+        currentScrollGeneration = ScrollSessionGeneration()
+        pendingScrollRetirement = nil
+        lastAcceptedScrollCheckpointUptime = nil
+        acceptPosition(anchor: terminal.anchor, offset: terminal.pixelOffset)
+    }
+
+    private func accept(_ capture: ScrollTerminalCapture) {
+        guard
+            let pending = pendingScrollRetirement,
+            capture.retiringGeneration == pending.retiring,
+            capture.replacementGeneration == pending.replacement,
+            capture.reason == pending.reason
+        else { return }
+        pendingScrollRetirement = nil
+        switch capture.reason {
+        case .restart, .readerEdit, .clear, .restore, .readerReplacement, .resync:
+            return
+        case .commandPause, .hide, .topology, .privacy,
+            .readerAttributes, .resize, .attachment, .screenMove, .teardown:
+            acceptPosition(anchor: capture.anchor, offset: capture.pixelOffset)
+        }
+    }
+
+    private func accept(_ result: ScrollMutationResult) {
+        guard result.generation == currentScrollGeneration else { return }
+        guard result.outcome != .failed else {
+            overlaySession.playbackPhase = .paused
+            return
+        }
+        acceptPosition(anchor: result.anchor, offset: result.pixelOffset)
+        if result.mayResume {
+            startPlayback()
+        }
+    }
+
+    private func acceptPosition(anchor: ReadingAnchor, offset: Double) {
+        let normalizedAnchor = anchor.clamped(to: document.text)
+        let normalizedOffset = offset.isFinite ? max(offset, 0) : 0
+        guard
+            overlaySession.readingAnchor != normalizedAnchor
+                || overlaySession.pixelOffset != normalizedOffset
+        else { return }
+        overlaySession.readingAnchor = normalizedAnchor
+        overlaySession.pixelOffset = normalizedOffset
+        snapshotRevision += 1
+        effectHandler(.scheduleSnapshot(snapshot()))
+    }
+
     private func acceptsDuringTermination(_ command: AppCommand) -> Bool {
         guard isTerminationQuiescing else { return true }
         switch command {
         case .completePreClearFlush, .pause, .hideOverlay, .flushPersistence,
             .topologyWillChange, .displayInventoryLoaded, .displayInventoryFailed,
-            .keepScriptHidden, .completeShieldedMove, .readerResyncRequested:
+            .keepScriptHidden, .completeShieldedMove, .readerResyncRequested,
+            .scrollCheckpoint, .scrollTerminal, .scrollTerminalCapture,
+            .scrollMutationCompleted, .teardownScrollSession:
             return true
         case .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
             .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,
             .confirmClear, .cancelClear,
-            .start, .togglePlayback, .restart, .showOverlay, .setLocked,
-            .restore, .restoreFailed, .selectDisplay, .confirmSelectedDisplay:
+            .start, .togglePlayback, .restart, .setSpeed, .moveBackward, .moveForward,
+            .showOverlay, .setLocked, .restore, .restoreFailed, .selectDisplay,
+            .confirmSelectedDisplay, .readerAttachmentChanged, .readerScreenChanged,
+            .readerBoundsWillChange, .readerBoundsChanged:
             return false
         }
     }
@@ -1091,10 +1331,13 @@ final class AppModel {
             overlayController.hide()
         case .setPanelLocked(let locked):
             overlayController.setLocked(locked)
-        case .applyReaderEdit, .replaceReader, .updateReaderAttributes, .scheduleSnapshot,
-            .flushSnapshot, .saveSnapshotImmediately,
-            .flushPersistence, .moveControllerWhileShielded, .resetViewport,
-            .reassessPrivacy, .queryTopology, .evaluatePrivacy:
+        case .startScrollSession, .stopScrollSession, .updateScrollSpeed,
+            .moveScrollSession, .readerAttachmentChanged, .readerScreenChanged,
+            .restoreScrollLayout, .teardownScrollSession, .applyReaderEdit,
+            .replaceReader, .updateReaderAttributes, .scheduleSnapshot,
+            .flushSnapshot, .saveSnapshotImmediately, .flushPersistence,
+            .moveControllerWhileShielded, .resetViewport, .reassessPrivacy,
+            .queryTopology, .evaluatePrivacy:
             break
         }
     }
@@ -1135,7 +1378,11 @@ extension PrivacyDirective {
 extension AppEffect {
     var diagnosticName: DiagnosticEffectName {
         switch self {
-        case .applyReaderEdit, .replaceReader, .updateReaderAttributes: .other
+        case .startScrollSession, .stopScrollSession, .updateScrollSpeed,
+            .moveScrollSession, .readerAttachmentChanged, .readerScreenChanged,
+            .restoreScrollLayout, .teardownScrollSession, .applyReaderEdit,
+            .replaceReader, .updateReaderAttributes:
+            .other
         case .stagePanelHidden: .stagePanelHidden
         case .showPanel: .showPanel
         case .hidePanel: .hidePanel

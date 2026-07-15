@@ -24,6 +24,8 @@ enum ControllerControl: Hashable, Sendable {
     case pause
     case restart
     case speed
+    case back
+    case forward
     case focusMode
 }
 
@@ -33,7 +35,7 @@ struct ControllerPresentation: Equatable, Sendable {
     static let mirroringRecoveryGuidance =
         "The script remains hidden. Turn off mirroring, then select and confirm the private display again."
     static let emptyScriptInstruction =
-        "Paste or type a script to prepare the teleprompter. Smooth scrolling becomes available in M3."
+        "Paste or type a script to prepare the teleprompter."
     static let m3Explanation = "Smooth scrolling is available in M3."
     static let m4Explanation = "Focus Mode and product shortcuts are available in M4."
     let scriptText: String
@@ -50,8 +52,10 @@ struct ControllerPresentation: Equatable, Sendable {
 
     func isEnabled(_ control: ControllerControl) -> Bool {
         switch control {
-        case .start, .pause, .restart, .speed, .focusMode:
+        case .focusMode:
             false
+        case .start, .pause, .restart, .speed, .back, .forward:
+            !isEmpty
         case .clear:
             !isEmpty
         default:
@@ -61,8 +65,8 @@ struct ControllerPresentation: Equatable, Sendable {
 
     func explanation(for control: ControllerControl) -> String? {
         switch control {
-        case .start, .pause, .restart, .speed:
-            Self.m3Explanation
+        case .start, .pause, .restart, .speed, .back, .forward:
+            nil
         case .focusMode:
             Self.m4Explanation
         default:
@@ -74,6 +78,16 @@ struct ControllerPresentation: Equatable, Sendable {
         switch control {
         case .openClose, .hideShow:
             isPanelVisible ? .hideOverlay : .showOverlay
+        case .start:
+            .start
+        case .pause:
+            .pause
+        case .restart:
+            .restart
+        case .back:
+            .moveBackward
+        case .forward:
+            .moveForward
         default:
             nil
         }
