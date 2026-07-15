@@ -73,13 +73,16 @@ struct ScriptTextEdit: Equatable, Sendable {
         guard !lengthOverflow, expectedLength == resultUTF16Length else {
             throw ScriptTextEditError.inconsistentLength
         }
-        let indices = try Self.indices(for: range, in: baseText)
-        var result = baseText
-        result.replaceSubrange(indices.start..<indices.end, with: replacement)
-        guard result.utf16.count == resultUTF16Length else {
+        let result = NSMutableString(string: baseText)
+        result.replaceCharacters(
+            in: NSRange(location: range.location, length: range.length),
+            with: replacement
+        )
+        let resultString = result as String
+        guard resultString.utf16.count == resultUTF16Length else {
             throw ScriptTextEditError.inconsistentLength
         }
-        return result
+        return resultString
     }
 
     private static func validate(range: UTF16TextRange, in text: String) throws {
@@ -87,31 +90,24 @@ struct ScriptTextEdit: Equatable, Sendable {
             throw ScriptTextEditError.invalidRange
         }
         let (end, overflow) = range.location.addingReportingOverflow(range.length)
-        guard !overflow, end <= text.utf16.count else {
+        guard !overflow, end <= text.utf16.count,
+            isUnicodeScalarBoundary(range.location, in: text),
+            isUnicodeScalarBoundary(end, in: text)
+        else {
             throw ScriptTextEditError.invalidRange
         }
-        _ = try indices(for: range, in: text)
     }
 
-    private static func indices(
-        for range: UTF16TextRange,
-        in text: String
-    ) throws -> (start: String.Index, end: String.Index) {
+    private static func isUnicodeScalarBoundary(_ offset: Int, in text: String) -> Bool {
         let utf16 = text.utf16
-        guard
-            let startUTF16 = utf16.index(
-                utf16.startIndex,
-                offsetBy: range.location,
-                limitedBy: utf16.endIndex
-            ),
-            let endUTF16 = utf16.index(
-                startUTF16,
-                offsetBy: range.length,
-                limitedBy: utf16.endIndex
-            ),
-            let start = String.Index(startUTF16, within: text),
-            let end = String.Index(endUTF16, within: text)
-        else { throw ScriptTextEditError.invalidRange }
-        return (start, end)
+        guard offset >= 0, offset <= utf16.count else { return false }
+        guard offset > 0, offset < utf16.count else { return true }
+        let previousIndex = utf16.index(utf16.startIndex, offsetBy: offset - 1)
+        let currentIndex = utf16.index(utf16.startIndex, offsetBy: offset)
+        let previous = utf16[previousIndex]
+        let current = utf16[currentIndex]
+        let previousIsHighSurrogate = previous >= 0xD800 && previous <= 0xDBFF
+        let currentIsLowSurrogate = current >= 0xDC00 && current <= 0xDFFF
+        return !(previousIsHighSurrogate && currentIsLowSurrogate)
     }
 }

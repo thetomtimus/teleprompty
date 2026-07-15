@@ -101,8 +101,7 @@ final class ReaderTextSystemTests: XCTestCase {
             snapshotStore: SnapshotStore(rootURL: root),
             overlayController: overlay
         )
-        var model: AppModel!
-        model = AppModel(
+        let model = AppModel(
             overlayController: overlay,
             effectHandler: { adapter.handle($0) }
         )
