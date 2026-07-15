@@ -8,17 +8,22 @@ import XCTest
 final class AppModelTests: XCTestCase {
     func testShieldPrecedesWarningAndReposition() {
         var observedSafeState = false
-        var model: AppModel!
-        model = AppModel(
+        let modelReference = AppModelReference()
+        let model = AppModel(
             overlayController: OverlayPanelController(),
             effectHandler: { effect in
                 if case .hidePanel = effect {
+                    guard let model = modelReference.value else {
+                        XCTFail("model reference must be connected before effects")
+                        return
+                    }
                     observedSafeState = model.isPaused
                         && model.overlaySession.visibility == .hidden
                         && model.isShielded
                 }
             }
         )
+        modelReference.value = model
         model.send(.replaceScript(text: "Generated script"))
         model.send(.start)
 
@@ -281,11 +286,12 @@ final class AppModelTests: XCTestCase {
 
     func testAcceptedEditSchedulesAutosaveAfterAuthoritativeMutation() throws {
         var observedText: String?
-        var model: AppModel!
-        model = AppModel(
+        let model = AppModel(
             overlayController: OverlayPanelController(),
             effectHandler: { effect in
-                if case .scheduleSnapshot = effect { observedText = model.document.text }
+                if case .scheduleSnapshot(let snapshot) = effect {
+                    observedText = snapshot.document.text
+                }
             }
         )
         let edit = try ScriptTextEdit.replacing(
@@ -348,14 +354,19 @@ final class AppModelTests: XCTestCase {
     }
 
     func testAcceptedEditMutatesStateBeforeReaderAndSnapshotEffects() throws {
-        var model: AppModel!
+        let modelReference = AppModelReference()
         var observed: [(AppEffect, String, UInt64)] = []
-        model = AppModel(
+        let model = AppModel(
             overlayController: OverlayPanelController(),
             effectHandler: { effect in
+                guard let model = modelReference.value else {
+                    XCTFail("model reference must be connected before effects")
+                    return
+                }
                 observed.append((effect, model.document.text, model.document.revision))
             }
         )
+        modelReference.value = model
         let edit = try ScriptTextEdit.replacing(
             in: "",
             range: UTF16TextRange(location: 0, length: 0),
@@ -372,13 +383,17 @@ final class AppModelTests: XCTestCase {
     }
 
     func testCommandsChangeStateBeforeEffects() {
-        var model: AppModel!
+        let modelReference = AppModelReference()
         var stateObservedByEffect = false
-        model = AppModel(
+        let model = AppModel(
             overlayController: OverlayPanelController(),
             now: { Date(timeIntervalSince1970: 20) },
             effectHandler: { effect in
                 if case .scheduleSnapshot = effect {
+                    guard let model = modelReference.value else {
+                        XCTFail("model reference must be connected before effects")
+                        return
+                    }
                     stateObservedByEffect =
                         model.document.text == "New lecture"
                         && model.document.revision == 1
@@ -386,6 +401,7 @@ final class AppModelTests: XCTestCase {
                 }
             }
         )
+        modelReference.value = model
 
         model.send(.replaceScript(text: "New lecture"))
 
@@ -485,16 +501,21 @@ final class AppModelTests: XCTestCase {
 
     func testRestoreAppliesPersistedLockAfterStateMutation() {
         let controller = OverlayPanelController()
-        var model: AppModel!
+        let modelReference = AppModelReference()
         var observedLockedState = false
-        model = AppModel(
+        let model = AppModel(
             overlayController: controller,
             effectHandler: { effect in
                 guard case .setPanelLocked(true) = effect else { return }
+                guard let model = modelReference.value else {
+                    XCTFail("model reference must be connected before effects")
+                    return
+                }
                 observedLockedState = model.isLocked && model.preferences.isLocked
                 controller.setLocked(true)
             }
         )
+        modelReference.value = model
 
         model.send(
             .restore(
@@ -799,14 +820,18 @@ final class AppModelTests: XCTestCase {
     }
 
     func testPrivacyEffectsObserveFullyCommittedShieldedState() {
-        var model: AppModel!
+        let modelReference = AppModelReference()
         var observedCommittedState = false
         let builtIn = display(id: 1, builtIn: true, x: 0)
         let projector = display(id: 2, builtIn: false, x: 1_440)
-        model = AppModel(
+        let model = AppModel(
             overlayController: OverlayPanelController(),
             effectHandler: { effect in
                 guard case .moveControllerWhileShielded = effect else { return }
+                guard let model = modelReference.value else {
+                    XCTFail("model reference must be connected before effects")
+                    return
+                }
                 observedCommittedState =
                     model.isShielded
                     && model.isSelectionConfirmed
@@ -814,6 +839,7 @@ final class AppModelTests: XCTestCase {
                     && model.preferences.selectedDisplayFingerprint != nil
             }
         )
+        modelReference.value = model
         model.refreshDisplays(.success([builtIn, projector]))
         observedCommittedState = false
 
@@ -935,15 +961,20 @@ final class AppModelTests: XCTestCase {
         let privateExternal = display(id: 3, builtIn: false, x: -1_440)
         var wasShieldedDuringMove = false
         var movedDisplayID: UInt32?
-        var model: AppModel!
-        model = AppModel(
+        let modelReference = AppModelReference()
+        let model = AppModel(
             overlayController: controller,
             effectHandler: { effect in
                 guard case .moveControllerWhileShielded(let display) = effect else { return }
+                guard let model = modelReference.value else {
+                    XCTFail("model reference must be connected before effects")
+                    return
+                }
                 wasShieldedDuringMove = model.isShielded
                 movedDisplayID = display.id
             }
         )
+        modelReference.value = model
 
         model.refreshDisplays(.success([privateExternal]))
         model.selectDisplay(privateExternal.id)
@@ -1407,6 +1438,11 @@ final class AppModelTests: XCTestCase {
             isInMirrorSet: false
         )
     }
+}
+
+@MainActor
+private final class AppModelReference {
+    weak var value: AppModel?
 }
 
 private actor TerminationFlushGate {

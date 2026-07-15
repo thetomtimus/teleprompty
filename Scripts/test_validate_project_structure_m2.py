@@ -51,6 +51,40 @@ class Milestone2ValidatorContractTests(unittest.TestCase):
         ):
             self.assertIn(pattern, patterns)
 
+    def test_editor_delegate_uses_sdk_declared_edit_actions_type(self) -> None:
+        source = (
+            ROOT / "PrivatePresenterApp/Controller/EditorTextSystem.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "didProcessEditing editedMask: NSTextStorageEditActions",
+            source,
+        )
+        self.assertNotIn("NSTextStorage.EditActions", source)
+        self.assertIn("@preconcurrency NSTextStorageDelegate", source)
+
+    def test_display_topology_mapping_gives_nil_an_optional_context(self) -> None:
+        source = (
+            ROOT / "PrivatePresenterApp/Services/SystemDisplayService.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "onlineIDs.compactMap { id -> DisplayDescriptor? in",
+            source,
+        )
+
+    def test_display_fingerprint_builder_is_nonisolated(self) -> None:
+        source = (
+            ROOT / "PrivatePresenterApp/Services/SystemDisplayService.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn("nonisolated static func fingerprint(", source)
+
+    def test_app_model_tests_do_not_mutate_captured_model_variables(self) -> None:
+        for relative_path in (
+            "PrivatePresenterAppTests/AppModelTests.swift",
+            "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
+        ):
+            source = (ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertNotIn("var model: AppModel!", source)
+
     def test_current_m2_source_satisfies_validator(self) -> None:
         self.assertEqual(VALIDATOR.validate_m2_source(), [])
 
