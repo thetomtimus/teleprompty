@@ -62,6 +62,15 @@ class Milestone2ValidatorContractTests(unittest.TestCase):
         self.assertNotIn("NSTextStorage.EditActions", source)
         self.assertIn("@preconcurrency NSTextStorageDelegate", source)
 
+    def test_display_topology_mapping_gives_nil_an_optional_context(self) -> None:
+        source = (
+            ROOT / "PrivatePresenterApp/Services/SystemDisplayService.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "onlineIDs.compactMap { id -> DisplayDescriptor? in",
+            source,
+        )
+
     def test_current_m2_source_satisfies_validator(self) -> None:
         self.assertEqual(VALIDATOR.validate_m2_source(), [])
 

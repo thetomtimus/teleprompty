@@ -119,7 +119,7 @@ struct RuntimeDisplayInventory: Equatable {
         onlineIDs: [UInt32]
     ) -> DisplayTopologySnapshot {
         let drawableByID = Dictionary(uniqueKeysWithValues: displays.map { ($0.id, $0) })
-        let descriptors = onlineIDs.map { id in
+        let descriptors = onlineIDs.compactMap { id -> DisplayDescriptor? in
             guard let facts = factsByID[id] else { return nil }
             let drawable = drawableByID[id]
             let mirroredIDs = Set(
@@ -144,7 +144,7 @@ struct RuntimeDisplayInventory: Equatable {
                 isInHardwareMirrorSet: facts.isInMirrorSet
             )
         }
-        return DisplayTopologySnapshot(displays: descriptors.compactMap { $0 }, querySucceeded: true)
+        return DisplayTopologySnapshot(displays: descriptors, querySucceeded: true)
     }
 
     fileprivate static func confidence(
