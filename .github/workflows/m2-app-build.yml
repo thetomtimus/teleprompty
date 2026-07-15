@@ -24,7 +24,7 @@ jobs:
           curl -fsSL -o /tmp/xcodegen.zip \
             https://github.com/yonaskolb/XcodeGen/releases/download/2.45.4/xcodegen.zip
           ditto -x -k /tmp/xcodegen.zip /tmp/xcodegen
-          sudo install -m 0755 /tmp/xcodegen/bin/xcodegen /usr/local/bin/xcodegen
+          sudo /tmp/xcodegen/xcodegen/install.sh /usr/local
           test "$(xcodegen --version)" = "Version: 2.45.4"
 
       - name: Run the complete automated macOS gate
