@@ -77,6 +77,14 @@ class Milestone2ValidatorContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("nonisolated static func fingerprint(", source)
 
+    def test_app_model_tests_do_not_mutate_captured_model_variables(self) -> None:
+        for relative_path in (
+            "PrivatePresenterAppTests/AppModelTests.swift",
+            "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
+        ):
+            source = (ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertNotIn("var model: AppModel!", source)
+
     def test_current_m2_source_satisfies_validator(self) -> None:
         self.assertEqual(VALIDATOR.validate_m2_source(), [])
 
