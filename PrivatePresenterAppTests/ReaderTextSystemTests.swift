@@ -219,17 +219,30 @@ final class ReaderTextSystemTests: XCTestCase {
     }
 
     func testStaticReaderClipRejectsViewportMovement() {
-        let clipView = StaticReaderClipView(
+        let clipView = ReaderClipView(
             frame: NSRect(x: 0, y: 0, width: 640, height: 360)
         )
         clipView.documentView = NSView(
             frame: NSRect(x: 0, y: 0, width: 640, height: 2_000)
         )
-        let initialOrigin = clipView.bounds.origin
-
         clipView.scroll(to: NSPoint(x: 0, y: 200))
 
-        XCTAssertEqual(clipView.bounds.origin, initialOrigin)
+        // Preserve the M2 lockout: arbitrary callers cannot move the clip.
+        XCTAssertTrue(ReaderScrollView.userScrollingIsDisabled)
+        XCTAssertEqual(clipView.bounds.origin, .zero)
+    }
+
+    func testReaderAdapterProgrammaticMotionIsTheOnlyAcceptedPath() {
+        let clipView = ReaderClipView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 360)
+        )
+        clipView.documentView = NSView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 2_000)
+        )
+
+        clipView.setProgrammaticOriginY(200, maximumOffset: 1_640)
+
+        XCTAssertEqual(clipView.bounds.origin, NSPoint(x: 0, y: 200))
     }
 
     func testActiveBandToggleDoesNotMutateReaderText() {
