@@ -1,0 +1,74 @@
+name: Build M2 macOS app
+
+on:
+  push:
+    branches:
+      - m2-app-build
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out M2 candidate
+        uses: actions/checkout@v4
+
+      - name: Install pinned XcodeGen
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/xcodegen.zip \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.45.4/xcodegen.zip
+          ditto -x -k /tmp/xcodegen.zip /tmp/xcodegen
+          sudo install -m 0755 /tmp/xcodegen/bin/xcodegen /usr/local/bin/xcodegen
+          test "$(xcodegen --version)" = "Version: 2.45.4"
+
+      - name: Run the complete automated macOS gate
+        run: ./Scripts/verify-macos.sh
+
+      - name: Ad-hoc sign and package the arm64 app
+        run: |
+          set -euo pipefail
+          app='.build/DerivedData-Release/Build/Products/Release/Private Presenter.app'
+          test -d "$app"
+          test -x "$app/Contents/MacOS/Private Presenter"
+
+          codesign --force --deep --sign - \
+            --entitlements PrivatePresenterApp/Resources/PrivatePresenter.entitlements \
+            "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          test "$(lipo -archs "$app/Contents/MacOS/Private Presenter")" = arm64
+
+          mkdir -p dist/package
+          ditto "$app" 'dist/package/Private Presenter.app'
+          cat > dist/package/OPEN-FIRST.txt <<'TXT'
+          PRIVATE PRESENTER — M2 TEST BUILD
+
+          1. Drag “Private Presenter.app” to Applications.
+          2. The first time, right-click the app and choose Open.
+          3. If macOS still blocks it, run:
+
+             xattr -dr com.apple.quarantine "/Applications/Private Presenter.app"
+             open "/Applications/Private Presenter.app"
+
+          This is an ad-hoc-signed test build, not a notarized public release.
+          It still needs the physical Keynote/private-display smoke test before M2 is complete.
+          TXT
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/package 'dist/Private-Presenter-M2-macOS-arm64.zip'
+          shasum -a 256 dist/Private-Presenter-M2-macOS-arm64.zip \
+            > dist/Private-Presenter-M2-macOS-arm64.zip.sha256
+
+      - name: Upload downloadable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Private-Presenter-M2-macOS-arm64
+          path: |
+            dist/Private-Presenter-M2-macOS-arm64.zip
+            dist/Private-Presenter-M2-macOS-arm64.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
