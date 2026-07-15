@@ -245,6 +245,22 @@ final class ReaderTextSystemTests: XCTestCase {
         XCTAssertEqual(clipView.bounds.origin, NSPoint(x: 0, y: 200))
     }
 
+    func testM3ReaderResyncStillContainsNoDeferredBoundary() throws {
+        let readerSource = try String(contentsOfFile: sourcePath("ReaderTextSystem.swift"))
+        let adapterSource = try String(
+            contentsOfFile: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("PrivatePresenterApp/App/DependencyContainer.swift")
+                .path
+        )
+
+        XCTAssertFalse(readerSource.contains("Task"))
+        XCTAssertFalse(readerSource.contains("DispatchQueue"))
+        let resync = try XCTUnwrap(adapterSource.range(of: "readerResyncRequested"))
+        XCTAssertFalse(adapterSource[resync.lowerBound...].prefix(300).contains("Task.yield"))
+    }
+
     func testActiveBandToggleDoesNotMutateReaderText() {
         let reader = ReaderTextSystem(text: "immutable", revision: 0)
         reader.setActiveBandEnabled(false)

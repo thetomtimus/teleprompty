@@ -152,9 +152,11 @@ final class ControllerPresentationTests: XCTestCase {
             isClearConfirmationRequired: false
         )
 
-        XCTAssertEqual(presentation.explanation(for: .start), ControllerPresentation.m3Explanation)
-        XCTAssertEqual(presentation.explanation(for: .speed), ControllerPresentation.m3Explanation)
-        XCTAssertFalse(presentation.isEnabled(.start))
+        // M3 converts the former milestone placeholder into product controls.
+        XCTAssertNil(presentation.explanation(for: .start))
+        XCTAssertNil(presentation.explanation(for: .speed))
+        XCTAssertTrue(presentation.isEnabled(.start))
+        XCTAssertTrue(presentation.isEnabled(.speed))
     }
 
     func testM2StartPauseRestartDoNotDispatchPlaybackCommands() {
@@ -164,9 +166,16 @@ final class ControllerPresentationTests: XCTestCase {
             isClearConfirmationRequired: false
         )
 
-        XCTAssertNil(presentation.productCommand(for: .start))
-        XCTAssertNil(presentation.productCommand(for: .pause))
-        XCTAssertNil(presentation.productCommand(for: .restart))
+        if case .start? = presentation.productCommand(for: .start) {} else {
+            XCTFail("Start must dispatch through AppModel")
+        }
+        if case .pause? = presentation.productCommand(for: .pause) {} else {
+            XCTFail("Pause must dispatch through AppModel")
+        }
+        if case .restart? = presentation.productCommand(for: .restart) {} else {
+            XCTFail("Restart must dispatch through AppModel")
+        }
+        // Speed carries a bound value and therefore dispatches directly from the slider.
         XCTAssertNil(presentation.productCommand(for: .speed))
     }
 

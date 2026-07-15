@@ -471,6 +471,24 @@ final class OverlayPanelControllerTests: XCTestCase {
     }
     #endif
 
+    func testM3ReaderLifecycleForwardsFromTheExistingSinglePanel() throws {
+        let controller = OverlayPanelController()
+        let source = try String(
+            contentsOfFile: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "PrivatePresenterApp/Overlay/OverlayPanelController.swift"
+                )
+                .path
+        )
+
+        XCTAssertEqual(controller.configurationSnapshot.panelCount, 1)
+        XCTAssertTrue(source.contains("onReaderAttachmentChanged"))
+        XCTAssertTrue(source.contains("onReaderScreenChanged"))
+        XCTAssertFalse(source.contains("OverlayPanelController()"))
+    }
+
     private func display(id: UInt32, builtIn: Bool, x: CGFloat) -> RuntimeDisplay {
         RuntimeDisplay(
             id: id,

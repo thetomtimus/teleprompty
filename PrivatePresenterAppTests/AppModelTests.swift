@@ -321,9 +321,16 @@ final class AppModelTests: XCTestCase {
 
         model.send(.applyScriptEdit(edit))
 
-        XCTAssertEqual(effects.count, 2)
-        if case .applyReaderEdit = effects[0] {} else { XCTFail("reader dispatch must remain synchronous") }
-        if case .scheduleSnapshot = effects[1] {} else { XCTFail("autosave must be queued after reader dispatch") }
+        XCTAssertEqual(effects.count, 3)
+        if case .stopScrollSession = effects[0] {} else {
+            XCTFail("capture and invalidation must precede the reader edit")
+        }
+        if case .applyReaderEdit = effects[1] {} else {
+            XCTFail("reader dispatch must remain synchronous")
+        }
+        if case .scheduleSnapshot = effects[2] {} else {
+            XCTFail("autosave must be queued after reader dispatch")
+        }
     }
 
     func testAutosaveDiagnosticsExcludeScriptTitleAndReplacementText() {
@@ -376,10 +383,100 @@ final class AppModelTests: XCTestCase {
 
         model.send(.applyScriptEdit(edit))
 
-        XCTAssertEqual(observed.count, 2)
-        if case .applyReaderEdit = observed[0].0 {} else { XCTFail("reader edit must be first") }
-        if case .scheduleSnapshot = observed[1].0 {} else { XCTFail("snapshot must follow reader") }
-        XCTAssertTrue(observed.allSatisfy { $0.1 == "A" && $0.2 == 1 })
+        XCTAssertEqual(observed.count, 3)
+        if case .stopScrollSession = observed[0].0 {} else {
+            XCTFail("live capture must precede authoritative mutation")
+        }
+        if case .applyReaderEdit = observed[1].0 {} else {
+            XCTFail("reader edit must follow capture")
+        }
+        if case .scheduleSnapshot = observed[2].0 {} else {
+            XCTFail("snapshot must follow reader")
+        }
+        XCTAssertEqual(observed[0].1, "")
+        XCTAssertEqual(observed[0].2, 0)
+        XCTAssertTrue(observed.dropFirst().allSatisfy { $0.1 == "A" && $0.2 == 1 })
+    }
+
+    func testInvalidEditRetiresScrollingBeforeValidationAndLeavesDocumentPaused() throws {
+        let stale = try ScriptTextEdit.replacing(
+            in: "",
+            range: UTF16TextRange(location: 0, length: 0),
+            with: "stale",
+            baseRevision: 0
+        )
+        let malformed = ScriptTextEdit(
+            range: UTF16TextRange(location: -1, length: 1),
+            replacement: "malformed",
+            changeInLength: 8,
+            baseUTF16Length: 7,
+            resultUTF16Length: 15,
+            baseRevision: 1,
+            revision: 2
+        )
+
+        for edit in [stale, malformed] {
+            var effects: [AppEffect] = []
+            let model = AppModel(
+                overlayController: OverlayPanelController(),
+                document: ScriptDocument(text: "Lecture", revision: 1),
+                effectHandler: { effects.append($0) }
+            )
+            model.send(.start)
+            effects.removeAll()
+
+            model.send(.applyScriptEdit(edit))
+
+            XCTAssertEqual(model.document.text, "Lecture")
+            XCTAssertEqual(model.document.revision, 1)
+            XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+            XCTAssertEqual(effects.count, 1)
+            guard case .stopScrollSession(_, _, let reason, _, _) = effects[0] else {
+                return XCTFail("invalid edits must stop and capture before validation")
+            }
+            XCTAssertEqual(reason, .readerEdit)
+        }
+    }
+
+    func testPausedCheckpointsAreAcceptedAtMostOncePerSecond() {
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            document: ScriptDocument(text: "Private rehearsal")
+        )
+        let generation = model.currentScrollGeneration
+
+        model.send(.scrollCheckpoint(.init(
+            generation: generation,
+            anchor: ReadingAnchor(utf16Offset: 1),
+            pixelOffset: 10,
+            uptime: 10
+        )))
+        let firstRevision = model.snapshotRevision
+        model.send(.scrollCheckpoint(.init(
+            generation: generation,
+            anchor: ReadingAnchor(utf16Offset: 2),
+            pixelOffset: 20,
+            uptime: 10.2
+        )))
+        model.send(.scrollCheckpoint(.init(
+            generation: generation,
+            anchor: ReadingAnchor(utf16Offset: 3),
+            pixelOffset: 30,
+            uptime: 10.9
+        )))
+
+        XCTAssertEqual(model.snapshotRevision, firstRevision)
+        XCTAssertEqual(model.overlaySession.pixelOffset, 10)
+
+        model.send(.scrollCheckpoint(.init(
+            generation: generation,
+            anchor: ReadingAnchor(utf16Offset: 4),
+            pixelOffset: 40,
+            uptime: 11
+        )))
+        XCTAssertEqual(model.snapshotRevision, firstRevision + 1)
+        XCTAssertEqual(model.overlaySession.pixelOffset, 40)
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
     }
 
     func testCommandsChangeStateBeforeEffects() {
@@ -449,7 +546,10 @@ final class AppModelTests: XCTestCase {
         model.send(.showOverlay)
 
         XCTAssertEqual(model.overlaySession.visibility, .hidden)
-        XCTAssertEqual(effects.first, .reassessPrivacy)
+        if case .stopScrollSession? = effects.first {} else {
+            XCTFail("restore must retire scrolling before replacing restored state")
+        }
+        XCTAssertTrue(effects.contains(.reassessPrivacy))
         XCTAssertFalse(effects.contains(where: { if case .showPanel = $0 { true } else { false } }))
     }
 
