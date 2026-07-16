@@ -20,8 +20,10 @@ enum M6VisualTestSupport {
 
     enum SupportError: Error {
         case bitmapAllocation
+        case backingScale
         case imageAllocation
         case colorSpace
+        case fragmentLayout
         case missingAttribute
     }
 
@@ -66,6 +68,9 @@ enum M6VisualTestSupport {
         let image: CGImage
         let size: CGSize
         let scale: CGFloat
+        let effectiveBackingScale: CGFloat
+        let textKitBandBackingScale: CGFloat
+        let bitmapUsesNonpremultipliedAlpha: Bool
         let state: RenderState
         let localeIdentifier: String
         let layoutDirection: LayoutDirection
@@ -443,6 +448,7 @@ enum M6VisualTestSupport {
 
     private struct LiteralGeometry {
         let size: CGSize
+        let bandFragmentHeights: [CGFloat]
         let headerHeight: CGFloat
         let sideInset: CGFloat
         let topReserve: CGFloat
@@ -454,8 +460,9 @@ enum M6VisualTestSupport {
         let controlDiameter: CGFloat
         let controlSpacing: CGFloat
 
-        init(size: CGSize) {
+        init(size: CGSize, bandFragmentHeights: [CGFloat] = []) {
             self.size = size
+            self.bandFragmentHeights = bandFragmentHeights
             if size.width >= 800, size.height >= 400 {
                 headerHeight = 92
                 sideInset = max(52, (size.width - 1_050) / 2)
@@ -510,7 +517,10 @@ enum M6VisualTestSupport {
             )
         }
         var bandFrame: CGRect {
-            let height = min(readerFrame.height, 2 * (42 * 1.42) + 12)
+            precondition(bandFragmentHeights.count == 2)
+            let measuredHeight =
+                bandFragmentHeights[0] + bandFragmentHeights[1] + 12
+            let height = min(readerFrame.height, measuredHeight)
             return CGRect(
                 x: max(0, sideInset - 18),
                 y: size.height - (readerFrame.midY + height / 2),
@@ -579,6 +589,13 @@ enum M6VisualTestSupport {
         let hosting = NSHostingView(rootView: root)
         hosting.frame = CGRect(origin: .zero, size: size)
         hosting.appearance = NSAppearance(named: .darkAqua)
+        hosting.wantsLayer = true
+        hosting.layer?.contentsScale = backingScale
+        let readerTextKitView = system.textView
+        readerTextKitView.wantsLayer = true
+        readerTextKitView.layer?.contentsScale = backingScale
+        system.activeBandView.wantsLayer = true
+        system.activeBandView.layer?.contentsScale = backingScale
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0
             context.allowsImplicitAnimation = false
@@ -597,11 +614,19 @@ enum M6VisualTestSupport {
             hasAlpha: true,
             isPlanar: false,
             colorSpaceName: .sRGB,
-            bitmapFormat: [.alphaNonpremultiplied],
+            bitmapFormat: [],
             bytesPerRow: pixelsWide * 4,
             bitsPerPixel: 32
         ) else { throw SupportError.bitmapAllocation }
         bitmap.size = size
+        let effectiveBackingScale = CGFloat(bitmap.pixelsWide) / bitmap.size.width
+        guard effectiveBackingScale == backingScale else {
+            throw SupportError.backingScale
+        }
+        guard hosting.layer?.contentsScale == backingScale,
+            readerTextKitView.layer?.contentsScale == backingScale,
+            system.activeBandView.layer?.contentsScale == backingScale
+        else { throw SupportError.backingScale }
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
         guard let image = bitmap.cgImage else { throw SupportError.imageAllocation }
 
@@ -633,6 +658,9 @@ enum M6VisualTestSupport {
             image: image,
             size: size,
             scale: backingScale,
+            effectiveBackingScale: effectiveBackingScale,
+            textKitBandBackingScale: system.activeBandView.layer?.contentsScale ?? 0,
+            bitmapUsesNonpremultipliedAlpha: !bitmap.bitmapFormat.isEmpty,
             state: state,
             localeIdentifier: locale.identifier,
             layoutDirection: .leftToRight,
@@ -652,11 +680,86 @@ enum M6VisualTestSupport {
         )
     }
 
+    static func measureSyntheticTextKitFragmentHeights() throws -> [CGFloat] {
+        let textView = NSTextView(usingTextLayoutManager: true)
+        textView.frame = CGRect(x: 0, y: 0, width: 932, height: 222)
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.containerSize = NSSize(
+            width: 932, height: .greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = true
+        textView.wantsLayer = true
+        textView.layer?.contentsScale = backingScale
+        guard textView.layer?.contentsScale == backingScale else {
+            throw SupportError.backingScale
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .left
+        paragraph.lineHeightMultiple = 1.42
+        paragraph.paragraphSpacing = 0
+        paragraph.hyphenationFactor = 0
+        let text = "Independent synthetic first line.\n"
+            + "Independent synthetic second line.\n"
+            + "Independent synthetic third line."
+        textView.textStorage?.setAttributedString(
+            NSAttributedString(
+                string: text,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 42, weight: .regular),
+                    .foregroundColor: NSColor(
+                        srgbRed: 247.0 / 255,
+                        green: 248.0 / 255,
+                        blue: 252.0 / 255,
+                        alpha: 1
+                    ),
+                    .paragraphStyle: paragraph,
+                ]
+            )
+        )
+        guard let textLayoutManager = textView.textLayoutManager,
+            let textContentManager = textLayoutManager.textContentManager
+        else { throw SupportError.fragmentLayout }
+        let documentRange = textContentManager.documentRange
+        textLayoutManager.ensureLayout(for: documentRange)
+        var fragmentHeights: [CGFloat] = []
+        _ = textLayoutManager.enumerateTextLayoutFragments(
+            from: documentRange.location,
+            options: [.ensuresLayout]
+        ) { fragment in
+            for line in fragment.textLineFragments where fragmentHeights.count < 2 {
+                let height = line.typographicBounds.height
+                if height.isFinite, height > 0 {
+                    fragmentHeights.append(height)
+                }
+            }
+            return fragmentHeights.count < 2
+        }
+        guard fragmentHeights.count == 2 else {
+            throw SupportError.fragmentLayout
+        }
+        return fragmentHeights
+    }
+
     static func makeCanonicalSemanticOracle() throws -> SemanticOracle {
+        try makeCanonicalSemanticOracle(
+            fragmentHeights: measureSyntheticTextKitFragmentHeights()
+        )
+    }
+
+    static func makeCanonicalSemanticOracle(
+        fragmentHeights: [CGFloat]
+    ) throws -> SemanticOracle {
+        guard fragmentHeights.count == 2,
+            fragmentHeights.allSatisfy({ $0.isFinite && $0 > 0 })
+        else { throw SupportError.fragmentLayout }
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
             throw SupportError.colorSpace
         }
-        let geometry = LiteralGeometry(size: canonicalSize)
+        let geometry = LiteralGeometry(
+            size: canonicalSize, bandFragmentHeights: fragmentHeights
+        )
         let image = try drawLiteralSurface(geometry: geometry, colorSpace: colorSpace)
         let backgroundImage = try drawLiteralBackground(
             geometry: geometry, colorSpace: colorSpace
@@ -791,7 +894,10 @@ enum M6VisualTestSupport {
 
     static func corrupt(_ image: CGImage, corruption: Corruption) throws -> CGImage {
         var buffer = try PixelBuffer(image: image)
-        let geometry = LiteralGeometry(size: canonicalSize)
+        let geometry = LiteralGeometry(
+            size: canonicalSize,
+            bandFragmentHeights: try measureSyntheticTextKitFragmentHeights()
+        )
         let devicePixelTranslation = 4
         switch corruption {
         case .topGradientProbe:
@@ -885,14 +991,14 @@ enum M6VisualTestSupport {
         radius: CGFloat,
         style: CardMaskStyle
     ) throws -> PixelMask {
-        let bounds = CGRect(origin: .zero, size: size)
+        let literalBounds = CGRect(origin: .zero, size: size)
         let path: CGPath
         if radius == 30, style == .continuous {
-            path = RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: bounds).cgPath
+            path = RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: literalBounds).cgPath
         } else {
             let cornerStyle: RoundedCornerStyle = style == .continuous ? .continuous : .circular
             path = RoundedRectangle(cornerRadius: radius, style: cornerStyle)
-                .path(in: bounds).cgPath
+                .path(in: literalBounds).cgPath
         }
         let width = Int(size.width * backingScale)
         let height = Int(size.height * backingScale)
