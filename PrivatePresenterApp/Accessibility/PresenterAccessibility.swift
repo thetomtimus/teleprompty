@@ -37,6 +37,7 @@ enum PresenterAccessibility {
         let isReadOnly: Bool
         let requiresConfirmedPrivateOverlay: Bool
         let isIgnored: Bool
+        let isEnabled: Bool
         let minimumHitSize: CGSize
 
         init(
@@ -51,6 +52,7 @@ enum PresenterAccessibility {
             isReadOnly: Bool = false,
             requiresConfirmedPrivateOverlay: Bool = false,
             isIgnored: Bool = false,
+            isEnabled: Bool = true,
             minimumHitSize: CGSize = .zero
         ) {
             self.identifier = identifier
@@ -64,6 +66,7 @@ enum PresenterAccessibility {
             self.isReadOnly = isReadOnly
             self.requiresConfirmedPrivateOverlay = requiresConfirmedPrivateOverlay
             self.isIgnored = isIgnored
+            self.isEnabled = isEnabled
             self.minimumHitSize = minimumHitSize
         }
     }
@@ -265,29 +268,105 @@ enum PresenterAccessibility {
                 help: "Retry registration of the fixed global shortcuts",
                 isDynamic: true
             ),
-            Entry(
-                "privatePresenter.overlayPlayback",
+            overlayEntry(
+                "privatePresenter.headerPlayback",
                 label: state.isPlaying ? "Pause scrolling" : "Start scrolling",
                 value: playbackState,
-                help: state.isPlaying ? "Pause scrolling" : "Start scrolling",
-                isDynamic: true,
-                minimumHitSize: overlayTarget
+                help: state.isPlaying
+                    ? "Pause continuous teleprompter scrolling"
+                    : "Start continuous teleprompter scrolling",
+                isEnabled: !state.isLocked,
+                target: overlayTarget
             ),
-            Entry(
-                "privatePresenter.overlayVisibility",
-                label: state.isVisible ? "Hide teleprompter" : "Show teleprompter",
-                value: visibilityState,
-                help: state.isVisible ? "Hide the teleprompter" : "Show the teleprompter",
-                isDynamic: true,
-                minimumHitSize: overlayTarget
-            ),
-            Entry(
-                "privatePresenter.overlayLock",
+            overlayEntry(
+                "privatePresenter.headerLock",
                 label: state.isLocked ? "Unlock teleprompter" : "Lock teleprompter",
                 value: lockState,
-                help: state.isLocked ? "Unlock pointer interaction" : "Lock pointer interaction",
-                isDynamic: true,
-                minimumHitSize: overlayTarget
+                help: state.isLocked
+                    ? "Unlock the teleprompter from the controller or shortcut"
+                    : "Lock the teleprompter so it does not take Keynote input",
+                isEnabled: !state.isLocked,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.headerSettings",
+                label: "Show Controller",
+                value: state.isLocked ? "Unavailable while locked" : "Available",
+                help: "Show the existing controller without creating another window",
+                isEnabled: !state.isLocked,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.quickSmaller",
+                label: "Smaller text",
+                value: "\(Int(state.fontSizePoints)) points",
+                help: state.fontSizePoints <= fontSizeRange.lowerBound
+                    ? "Font size is already at the 24 point minimum"
+                    : "Decrease teleprompter font size by 2 points",
+                isEnabled: !state.isLocked && state.fontSizePoints > fontSizeRange.lowerBound,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.quickLarger",
+                label: "Larger text",
+                value: "\(Int(state.fontSizePoints)) points",
+                help: state.fontSizePoints >= fontSizeRange.upperBound
+                    ? "Font size is already at the 96 point maximum"
+                    : "Increase teleprompter font size by 2 points",
+                isEnabled: !state.isLocked && state.fontSizePoints < fontSizeRange.upperBound,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.quickAlignment",
+                label: state.alignment == .left ? "Center text" : "Left align text",
+                value: alignment,
+                help: state.alignment == .left
+                    ? "Center the teleprompter text"
+                    : "Left align the teleprompter text",
+                isEnabled: !state.isLocked,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.quickSlower",
+                label: "Slower scrolling",
+                value: "\(Int(state.speedPointsPerSecond)) points per second",
+                help: state.speedPointsPerSecond <= speedRange.lowerBound
+                    ? "Scroll speed is already at the 10 point minimum"
+                    : "Decrease teleprompter scroll speed by 5 points per second",
+                isEnabled: !state.isLocked
+                    && state.speedPointsPerSecond > speedRange.lowerBound,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.quickPlayback",
+                label: state.isPlaying ? "Pause scrolling" : "Start scrolling",
+                value: playbackState,
+                help: state.isPlaying
+                    ? "Pause continuous teleprompter scrolling"
+                    : "Start continuous teleprompter scrolling",
+                isEnabled: !state.isLocked,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.quickFaster",
+                label: "Faster scrolling",
+                value: "\(Int(state.speedPointsPerSecond)) points per second",
+                help: state.speedPointsPerSecond >= speedRange.upperBound
+                    ? "Scroll speed is already at the 240 point maximum"
+                    : "Increase teleprompter scroll speed by 5 points per second",
+                isEnabled: !state.isLocked
+                    && state.speedPointsPerSecond < speedRange.upperBound,
+                target: overlayTarget
+            ),
+            overlayEntry(
+                "privatePresenter.quickFocus",
+                label: state.isFocusModeEnabled ? "Turn off focus mode" : "Turn on focus mode",
+                value: focusState,
+                help: state.isFocusModeEnabled
+                    ? "Keep the controls visible while locked"
+                    : "Fade the controls after two seconds while locked",
+                isEnabled: !state.isLocked,
+                target: overlayTarget
             ),
             Entry(
                 "privatePresenter.statusItem",
@@ -481,6 +560,25 @@ enum PresenterAccessibility {
         )
     }
 
+    private static func overlayEntry(
+        _ identifier: String,
+        label: String,
+        value: String,
+        help: String,
+        isEnabled: Bool,
+        target: CGSize
+    ) -> Entry {
+        Entry(
+            identifier,
+            label: label,
+            value: value,
+            help: help,
+            isDynamic: true,
+            isEnabled: isEnabled,
+            minimumHitSize: target
+        )
+    }
+
     private static let ignoredEntries = [
         "privatePresenter.readerBand",
         "privatePresenter.readerBackground",
@@ -513,6 +611,7 @@ extension View {
             .accessibilityLabel(Text(entry.label))
             .accessibilityHint(Text(entry.help))
             .help(entry.toolTip)
+            .disabled(!entry.isEnabled)
         if entry.value.isEmpty {
             described
         } else {

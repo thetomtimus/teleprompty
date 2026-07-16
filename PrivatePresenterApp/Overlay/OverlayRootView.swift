@@ -1,8 +1,18 @@
 import SwiftUI
+import TeleprompterCore
 
-/// Opaque, nonactivating reader surface with its header outside the clipped document.
+/// Opaque, nonactivating reader surface. Reader and chrome are siblings so a
+/// Focus fade never inserts, removes, or resizes the TextKit viewport.
 @MainActor
 struct OverlayRootView: View {
+    struct ChromePresentation: Equatable {
+        let opacity: Double
+        let allowsInteraction: Bool
+        let isAccessibilityHidden: Bool
+        let transitionDuration: TimeInterval
+        let readerGeometryIdentity: CGFloat
+    }
+
     static let cornerRadius = OverlayVisualTokens.cardRadius
     static let readerHeaderHeight: CGFloat = 36
     static let interiorIsFullyOpaque = true
@@ -51,7 +61,30 @@ struct OverlayRootView: View {
     }
 
     var body: some View {
-        ZStack {
+        GeometryReader { geometry in
+            rootContent(size: geometry.size)
+        }
+    }
+
+    static func chromePresentation(
+        focusState: FocusChromeState,
+        isLocked: Bool,
+        transitionDuration: TimeInterval,
+        readerGeometryIdentity: CGFloat = 0
+    ) -> ChromePresentation {
+        let hidden = isLocked && focusState == .lockedFocusChromeHidden
+        return ChromePresentation(
+            opacity: hidden ? 0 : 1,
+            allowsInteraction: !isLocked,
+            isAccessibilityHidden: isLocked,
+            transitionDuration: max(transitionDuration, 0),
+            readerGeometryIdentity: readerGeometryIdentity
+        )
+    }
+
+    private func rootContent(size: CGSize) -> some View {
+        let metrics = OverlayLayoutMetrics(size: size)
+        return ZStack {
             LinearGradient(
                 stops: OverlayVisualTokens.cardGradientStops.map {
                     Gradient.Stop(
@@ -62,33 +95,20 @@ struct OverlayRootView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-                .accessibilityIdentifier("privatePresenter.readerBackground")
-                .accessibilityHidden(true)
-            VStack(spacing: 0) {
-                if isChromeVisible {
-                    if let model {
-                        OverlayChromeView(model: model)
-                            .frame(height: Self.readerHeaderHeight)
-                    } else {
-                        Text("Private Presenter")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: Self.readerHeaderHeight)
-                    }
-                }
-                if let readerSystem {
-                    ReaderTextView(
-                        system: readerSystem,
-                        viewportFraction: readerViewportFraction,
-                        onAttachmentChanged: onReaderAttachmentChanged,
-                        onScreenChanged: onReaderScreenChanged,
-                        onBoundsWillChange: onReaderBoundsWillChange,
-                        onBoundsChanged: onReaderBoundsChanged
-                    )
-                } else {
-                    Color.clear
-                }
+            .accessibilityIdentifier("privatePresenter.readerBackground")
+            .accessibilityHidden(true)
+
+            if let readerSystem {
+                ReaderTextView(
+                    system: readerSystem,
+                    viewportFraction: readerViewportFraction,
+                    onAttachmentChanged: onReaderAttachmentChanged,
+                    onScreenChanged: onReaderScreenChanged,
+                    onBoundsWillChange: onReaderBoundsWillChange,
+                    onBoundsChanged: onReaderBoundsChanged
+                )
+            } else {
+                Color.clear
             }
         }
         .clipShape(cardShape)
@@ -100,10 +120,6 @@ struct OverlayRootView: View {
                 )
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
-        }
-        .animation(chromeAnimation, value: isChromeVisible)
-        .overlay(alignment: .top) {
-            interactionZone(edge: nil).frame(height: Self.readerHeaderHeight)
         }
         .overlay(alignment: .top) {
             interactionZone(edge: .top).frame(height: 10)
@@ -129,51 +145,72 @@ struct OverlayRootView: View {
         .overlay(alignment: .bottomTrailing) {
             interactionZone(edge: .bottomRight).frame(width: 18, height: 18)
         }
-    }
+        .overlay {
+            if let model {
+                let presentation = Self.chromePresentation(
+                    focusState: model.focusChromeState,
+                    isLocked: model.isLocked,
+                    transitionDuration: model.focusChromeTransitionDuration,
+                    readerGeometryIdentity: metrics.readableLineWidth
+                )
+                ZStack {
+                    OverlayChromeView(
+                        model: model,
+                        metrics: metrics,
+                        onDragChanged: onDragChanged,
+                        onDragEnded: onDragEnded
+                    )
+                    .frame(height: metrics.headerHeight)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .opacity(presentation.opacity)
+                    .allowsHitTesting(presentation.allowsInteraction)
+                    .accessibilityHidden(presentation.isAccessibilityHidden)
 
-    private var isChromeVisible: Bool {
-        model?.focusChromeState != .lockedFocusChromeHidden
+                    OverlayQuickControlsView(model: model, metrics: metrics)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, metrics.toolbarBottomInset)
+                        .opacity(presentation.opacity)
+                        .allowsHitTesting(presentation.allowsInteraction)
+                        .accessibilityHidden(presentation.isAccessibilityHidden)
+                }
+                .animation(
+                    chromeAnimation(duration: presentation.transitionDuration),
+                    value: presentation.opacity
+                )
+            }
+        }
     }
 
     private var cardShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
     }
 
-    private var chromeAnimation: Animation? {
-        guard let model, model.focusChromeTransitionDuration > 0 else { return nil }
-        return .easeInOut(duration: model.focusChromeTransitionDuration)
+    private func chromeAnimation(duration: TimeInterval) -> Animation? {
+        duration > 0 ? .easeInOut(duration: duration) : nil
     }
 
     private func interactionZone(
-        edge: ClampedPanelInteractionController.ResizeEdge?
+        edge: ClampedPanelInteractionController.ResizeEdge
     ) -> some View {
         Color.clear
             .accessibilityIdentifier(interactionIdentifier(edge))
             .accessibilityHidden(true)
             .contentShape(Rectangle())
+            .allowsHitTesting(model?.isLocked == false)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { value in
-                        if let edge {
-                            onResizeChanged(edge, value.translation)
-                        } else {
-                            onDragChanged(value.translation)
-                        }
+                        onResizeChanged(edge, value.translation)
                     }
                     .onEnded { _ in
-                        if edge == nil {
-                            onDragEnded()
-                        } else {
-                            onResizeEnded()
-                        }
+                        onResizeEnded()
                     }
             )
     }
 
     private func interactionIdentifier(
-        _ edge: ClampedPanelInteractionController.ResizeEdge?
+        _ edge: ClampedPanelInteractionController.ResizeEdge
     ) -> String {
-        guard let edge else { return "privatePresenter.overlayDragZone" }
         switch edge {
         case .top: "privatePresenter.resizeTop"
         case .bottom: "privatePresenter.resizeBottom"

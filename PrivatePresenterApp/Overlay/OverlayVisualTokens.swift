@@ -55,6 +55,7 @@ enum OverlayVisualTokens {
         red: 247.0 / 255, green: 248.0 / 255, blue: 252.0 / 255, opacity: 1
     )
     static let cardBorder = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.24)
+    static let headerDivider = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.08)
     static let activeBandLeading = NamedSRGBColor(
         red: 130.0 / 255, green: 160.0 / 255, blue: 213.0 / 255, opacity: 0.28
     )
@@ -66,6 +67,26 @@ enum OverlayVisualTokens {
     )
     static let activeBandAccent = NamedSRGBColor(
         red: 190.0 / 255, green: 211.0 / 255, blue: 248.0 / 255, opacity: 0.62
+    )
+    static let toolbarTop = NamedSRGBColor(
+        red: 90.0 / 255, green: 113.0 / 255, blue: 165.0 / 255, opacity: 0.98
+    )
+    static let toolbarBottom = NamedSRGBColor(
+        red: 70.0 / 255, green: 92.0 / 255, blue: 145.0 / 255, opacity: 0.98
+    )
+    static let toolbarBorder = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.13)
+    static let toolbarDivider = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.18)
+    static let toolbarShadow = NamedSRGBColor(
+        red: 7.0 / 255, green: 12.0 / 255, blue: 30.0 / 255, opacity: 0.34
+    )
+    static let controlHover = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.09)
+    static let controlPressed = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.14)
+    static let primaryControlFill = readingText
+    static let primaryControlForeground = NamedSRGBColor(
+        red: 38.0 / 255, green: 54.0 / 255, blue: 84.0 / 255, opacity: 1
+    )
+    static let controlFocus = NamedSRGBColor(
+        red: 190.0 / 255, green: 211.0 / 255, blue: 248.0 / 255, opacity: 0.88
     )
     static let cardRadius: CGFloat = 30
     static let cardBorderWidth: CGFloat = 1
@@ -89,6 +110,16 @@ struct OverlayLayoutMetrics: Equatable {
     let toolbarHeight: CGFloat
     let toolbarBottomInset: CGFloat
     let toolbarWidth: CGFloat
+    let headerHorizontalPadding: CGFloat
+    let headerActionSpacing: CGFloat
+    let headerDocumentSymbolSize: CGFloat
+    let headerTitleSize: CGFloat
+    let controlIconSize: CGFloat
+    let controlDiameter: CGFloat
+    let toolbarActionSpacing: CGFloat
+    let toolbarHorizontalPadding: CGFloat
+    let toolbarHasDividers: Bool
+    let toolbarHasShadow: Bool
 
     init(size: CGSize) {
         self.size = size
@@ -101,6 +132,16 @@ struct OverlayLayoutMetrics: Equatable {
             toolbarHeight = 65
             toolbarBottomInset = 24
             toolbarWidth = 387
+            headerHorizontalPadding = 46
+            headerActionSpacing = 4
+            headerDocumentSymbolSize = 23
+            headerTitleSize = 23
+            controlIconSize = 20
+            controlDiameter = 49
+            toolbarActionSpacing = 4
+            toolbarHorizontalPadding = 10
+            toolbarHasDividers = true
+            toolbarHasShadow = true
         } else if size.width >= 520, size.height >= 280 {
             tier = .standard
             headerHeight = 72
@@ -110,6 +151,16 @@ struct OverlayLayoutMetrics: Equatable {
             toolbarHeight = 56
             toolbarBottomInset = 18
             toolbarWidth = 348
+            headerHorizontalPadding = 32
+            headerActionSpacing = 4
+            headerDocumentSymbolSize = 20
+            headerTitleSize = 18
+            controlIconSize = 18
+            controlDiameter = 44
+            toolbarActionSpacing = 4
+            toolbarHorizontalPadding = 8
+            toolbarHasDividers = true
+            toolbarHasShadow = true
         } else {
             tier = .compact
             headerHeight = 52
@@ -119,6 +170,16 @@ struct OverlayLayoutMetrics: Equatable {
             toolbarHeight = 52
             toolbarBottomInset = 30
             toolbarWidth = 316
+            headerHorizontalPadding = 20
+            headerActionSpacing = 4
+            headerDocumentSymbolSize = 18
+            headerTitleSize = 16
+            controlIconSize = 16
+            controlDiameter = 44
+            toolbarActionSpacing = 0
+            toolbarHorizontalPadding = 4
+            toolbarHasDividers = false
+            toolbarHasShadow = false
         }
     }
 
