@@ -24,8 +24,10 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         let pristine = try await harness.preparePristineSnapshot()
 
         assertPristineSnapshot(pristine)
-        XCTAssertTrue(pristine.usedDisposableBaselineAccount)
-        XCTAssertTrue(pristine.normalApplicationSupportWasEmpty)
+        XCTAssertFalse(pristine.usedDisposableBaselineAccount)
+        XCTAssertFalse(pristine.normalApplicationSupportWasEmpty)
+        let externalRecord = try M5AbsolutePerformanceEvidenceGate
+            .loadValidatedExternalRecord(expected: pristine)
 
         try await harness.resetToPristineSnapshot()
         let warmup = try await harness.runLoadTrial(measured: false)
@@ -38,9 +40,9 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
             let trial = try await harness.runLoadTrial(measured: true)
             trials.append(trial)
             assertCompleteLoadEndpoint(trial)
-            XCTAssertLessThanOrEqual(trial.duration, Self.maximumLoadDuration)
             XCTAssertEqual(trial.snapshotIdentity, pristine.snapshotIdentity)
             XCTAssertEqual(trial.executableIdentity, pristine.executableIdentity)
+            XCTAssertEqual(trial.evidenceScope, .inProcessSemanticOnly)
         }
 
         XCTAssertEqual(trials.count, 3)
@@ -48,6 +50,11 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(harness.unrecordedWarmupCount, 1)
         XCTAssertEqual(harness.recordedCleanLoadCount, 3)
         XCTAssertEqual(harness.pristineResetCount, 4)
+        XCTAssertTrue(
+            externalRecord.loadDurationsSeconds.allSatisfy {
+                $0 <= Self.maximumLoadDuration
+            }
+        )
     }
 
     func testRepeatedEditDoesNotRebuildWholeReader() async throws {
@@ -195,28 +202,27 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
     func testEveryEditAndMainThreadStallUsesOneHundredMillisecondCeiling() async throws {
         try requireAbsoluteBaseline()
         let fixture = try swiftFixture()
-        let result = try await makeHarness(fixture: fixture).runEditSequence(
+        let harness = try makeHarness(fixture: fixture)
+        let receipt = try await harness.preparePristineSnapshot()
+        let externalRecord = try M5AbsolutePerformanceEvidenceGate
+            .loadValidatedExternalRecord(expected: receipt)
+        let result = try await harness.runEditSequence(
             actions: exactEditActions(for: fixture),
             cadence: Self.actionCadence,
-            measuresWallClock: true
+            measuresWallClock: false
         )
-        let sortedDurations = result.editDurations.sorted()
+        let sortedDurations = externalRecord.editDurationsSeconds.sorted()
 
         XCTAssertEqual(result.scheduledCadence, 0.100, accuracy: 0.000_001)
         XCTAssertEqual(sortedDurations.count, 300)
         XCTAssertEqual(result.editToVisibleIntervalCount, 300)
-        XCTAssertTrue(result.mainThreadStallProbeWasActive)
-        XCTAssertEqual(
-            result.reportedNearestRankP95,
-            nearestRankP95(sortedDurations),
-            accuracy: 0.000_001
-        )
+        XCTAssertFalse(result.mainThreadStallProbeWasActive)
         XCTAssertLessThan(nearestRankP95(sortedDurations), Self.maximumP95EditDuration)
         XCTAssertTrue(
             sortedDurations.allSatisfy { $0 <= Self.maximumEditOrStallDuration }
         )
         XCTAssertTrue(
-            result.mainThreadStallDurations.allSatisfy {
+            externalRecord.mainThreadStallDurationsSeconds.allSatisfy {
                 $0 <= Self.maximumEditOrStallDuration
             }
         )
@@ -229,7 +235,11 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
     func testScrollMemoryUsesFivePointOrdinaryLeastSquares() async throws {
         try requireAbsoluteBaseline()
         let fixture = try swiftFixture()
-        let result = try await makeHarness(fixture: fixture).runSixMinuteScrollSession(
+        let harness = try makeHarness(fixture: fixture)
+        let receipt = try await harness.preparePristineSnapshot()
+        let externalRecord = try M5AbsolutePerformanceEvidenceGate
+            .loadValidatedExternalRecord(expected: receipt)
+        let result = try await harness.runSixMinuteScrollSession(
             warmupDuration: 60,
             measuredDuration: 300,
             totalSampleTimes: [120, 180, 240, 300, 360]
@@ -240,22 +250,35 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(result.measuredDuration, 300, accuracy: 0.000_001)
         XCTAssertEqual(result.totalSampleTimes, [120, 180, 240, 300, 360])
         XCTAssertEqual(result.measuredSampleTimes, [60, 120, 180, 240, 300])
-        XCTAssertEqual(result.liveBytes.count, 5)
+        XCTAssertEqual(result.processFootprintBytes.count, 5)
+        XCTAssertEqual(result.memoryEvidenceScope, .processFootprintSemanticOnly)
+        XCTAssertFalse(result.provesInstrumentsAllocationSamples)
+        XCTAssertEqual(externalRecord.allocationsLiveBytes.count, 5)
         XCTAssertEqual(result.sessionCount, 1)
         XCTAssertTrue(result.usedActualDisplayLink)
-        XCTAssertEqual(result.allocationBaselineTotalTime, 60, accuracy: 0.100)
+        XCTAssertEqual(result.processFootprintBaselineTotalTime, 60, accuracy: 0.100)
         XCTAssertGreaterThan(result.tickCount, 0)
         XCTAssertTrue(result.mainThreadStallProbeWasActive)
 
-        let liveMiB = result.liveBytes.map { Double($0) / 1_048_576 }
+        let provisionalProcessMiB = result.processFootprintBytes.map {
+            Double($0) / 1_048_576
+        }
+        XCTAssertEqual(
+            result.provisionalProcessFootprintSlopeMiBPerMinute,
+            ordinaryLeastSquaresSlope(x: [1, 2, 3, 4, 5], y: provisionalProcessMiB),
+            accuracy: 0.000_001
+        )
+
+        let liveMiB = externalRecord.allocationsLiveBytes.map { Double($0) / 1_048_576 }
         let slope = ordinaryLeastSquaresSlope(
             x: [1, 2, 3, 4, 5],
             y: liveMiB
         )
-        XCTAssertEqual(result.reportedSlopeMiBPerMinute, slope, accuracy: 0.000_001)
         XCTAssertLessThanOrEqual(slope, 1.0)
         XCTAssertLessThanOrEqual(liveMiB[4] - liveMiB[0], 5.0)
-        XCTAssertTrue(result.mainThreadStallDurations.allSatisfy { $0 <= 0.100 })
+        XCTAssertTrue(
+            externalRecord.scrollMainThreadStallDurationsSeconds.allSatisfy { $0 <= 0.100 }
+        )
         XCTAssertEqual(result.textMutationDelta, 0)
         XCTAssertEqual(result.persistenceEnqueueDelta, 0)
         XCTAssertEqual(result.attributedRebuildDelta, 0)
@@ -298,12 +321,6 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(result.snapshotWriteCount, 1)
         XCTAssertTrue(result.flushCompleted)
         XCTAssertEqual(result.openIntervalCount, 0)
-        if Self.baselineOptedIn(environment: ProcessInfo.processInfo.environment) {
-            XCTAssertLessThanOrEqual(
-                result.editToVisibleDuration,
-                Self.maximumEditOrStallDuration
-            )
-        }
     }
 
     // Independent-review contract: this in-process AppRuntime exercise proves semantic
@@ -332,7 +349,7 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         )
     }
 
-    // Process phys_footprint is useful semantic instrumentation, but it is not the
+    // processFootprintBytes is useful semantic instrumentation, but it is not the
     // Allocations live-bytes series required by the absolute five-point OLS gate.
     func testProcessFootprintCannotSubstituteForInstrumentsAllocationSamples() async throws {
         let fixture = try swiftFixture()
@@ -350,6 +367,68 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         )
     }
 
+    func testExternalInstrumentsRecordIsRequiredAndRejectsProcessFootprintSubstitution() throws {
+        let receipt = M5PristineSnapshotReceipt(
+            schemaVersion: 1,
+            fixtureWordCount: 50_000,
+            fixtureByteCount: 499_999,
+            fixtureUTF16Count: 499_999,
+            fixtureDigest: String(repeating: "a", count: 64),
+            isPaused: true,
+            isHidden: true,
+            runtimeDisplayWasCleared: true,
+            requiresDisplayConfirmation: true,
+            usedProductionSnapshotStoreImplementation: true,
+            seedAndFlushCount: 1,
+            usedPasteOrImportPath: false,
+            usedDebugUITestStoreOverride: false,
+            evidenceScope: .inProcessSemanticOnly,
+            usedDisposableBaselineAccount: false,
+            normalApplicationSupportWasEmpty: false,
+            sourceIdentity: String(repeating: "d", count: 40),
+            snapshotIdentity: String(repeating: "b", count: 64),
+            executableIdentity: String(repeating: "c", count: 64)
+        )
+        XCTAssertThrowsError(
+            try M5AbsolutePerformanceEvidenceGate.loadValidatedExternalRecord(
+                expected: receipt,
+                environment: [:]
+            )
+        )
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "private-presenter-m5-external-record-\(UUID().uuidString).json"
+        )
+        defer { try? FileManager.default.removeItem(at: url) }
+        var record = externalRecordDictionary(receipt: receipt)
+        try JSONSerialization.data(withJSONObject: record).write(to: url)
+        let environment = [
+            M5AbsolutePerformanceEvidenceGate.recordEnvironmentKey: url.path,
+            M5AbsolutePerformanceEvidenceGate.sourceSHAEnvironmentKey:
+                String(repeating: "d", count: 40),
+        ]
+        let validated = try M5AbsolutePerformanceEvidenceGate.loadValidatedExternalRecord(
+            expected: receipt,
+            environment: environment
+        )
+        XCTAssertEqual(validated.allocationsLiveBytes, [1, 2, 3, 4, 5])
+
+        record["processFootprintBytes"] = [1, 2, 3, 4, 5]
+        try JSONSerialization.data(withJSONObject: record).write(to: url)
+
+        XCTAssertThrowsError(
+            try M5AbsolutePerformanceEvidenceGate.loadValidatedExternalRecord(
+                expected: receipt,
+                environment: environment
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? M5AbsolutePerformanceEvidenceError,
+                .externalRecordShapeMismatch
+            )
+        }
+    }
+
     private func assertPristineSnapshot(
         _ receipt: M5PristineSnapshotReceipt,
         file: StaticString = #filePath,
@@ -364,10 +443,43 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertTrue(receipt.isHidden, file: file, line: line)
         XCTAssertTrue(receipt.runtimeDisplayWasCleared, file: file, line: line)
         XCTAssertTrue(receipt.requiresDisplayConfirmation, file: file, line: line)
-        XCTAssertTrue(receipt.usedProductionSnapshotStore, file: file, line: line)
+        XCTAssertTrue(
+            receipt.usedProductionSnapshotStoreImplementation,
+            file: file,
+            line: line
+        )
         XCTAssertEqual(receipt.seedAndFlushCount, 1, file: file, line: line)
         XCTAssertFalse(receipt.usedPasteOrImportPath, file: file, line: line)
         XCTAssertFalse(receipt.usedDebugUITestStoreOverride, file: file, line: line)
+    }
+
+    private func externalRecordDictionary(
+        receipt: M5PristineSnapshotReceipt
+    ) -> [String: Any] {
+        [
+            "schemaVersion": 1,
+            "recordKind": "private-presenter-m5-external-instruments",
+            "sourceSHA": String(repeating: "d", count: 40),
+            "executableSHA256": receipt.executableIdentity,
+            "pristineSnapshotSHA256": receipt.snapshotIdentity,
+            "fixtureSHA256": receipt.fixtureDigest,
+            "fixtureWordCount": receipt.fixtureWordCount,
+            "fixtureByteCount": receipt.fixtureByteCount,
+            "contentNeutral": true,
+            "sameExecutableForAllTrials": true,
+            "priorProcessTerminatedBeforeEachTrial": true,
+            "freshProcessRelaunchedForEachTrial": true,
+            "normalDisposableAccountStore": true,
+            "pristineSnapshotResetBeforeEachTrial": true,
+            "instrumentsTimeProfileCaptured": true,
+            "instrumentsAllocationsCaptured": true,
+            "loadDurationsSeconds": [1.0, 1.1, 1.2],
+            "editDurationsSeconds": Array(repeating: 0.01, count: 300),
+            "mainThreadStallDurationsSeconds": [0.01],
+            "scrollMainThreadStallDurationsSeconds": [0.01],
+            "allocationSampleMinutes": [1, 2, 3, 4, 5],
+            "allocationsLiveBytes": [1, 2, 3, 4, 5],
+        ]
     }
 
     private func assertCompleteLoadEndpoint(
@@ -389,7 +501,8 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
             file: file,
             line: line
         )
-        XCTAssertTrue(trial.priorProcessTerminated, file: file, line: line)
+        XCTAssertTrue(trial.inProcessRuntimeStopped, file: file, line: line)
+        XCTAssertFalse(trial.provesPriorProcessTermination, file: file, line: line)
         XCTAssertEqual(trial.syntheticEditCount, 1, file: file, line: line)
         XCTAssertEqual(trial.openIntervalCount, 0, file: file, line: line)
         XCTAssertFalse(trial.snapshotIdentity.isEmpty, file: file, line: line)
@@ -518,6 +631,12 @@ enum M5LoadEndpointEvent: Equatable, Sendable {
     case measurementEnded
 }
 
+enum M5PerformanceEvidenceScope: Equatable, Sendable {
+    case inProcessSemanticOnly
+    case processFootprintSemanticOnly
+    case externalInstruments
+}
+
 struct M5PristineSnapshotReceipt: Equatable, Sendable {
     let schemaVersion: Int
     let fixtureWordCount: Int
@@ -528,12 +647,14 @@ struct M5PristineSnapshotReceipt: Equatable, Sendable {
     let isHidden: Bool
     let runtimeDisplayWasCleared: Bool
     let requiresDisplayConfirmation: Bool
-    let usedProductionSnapshotStore: Bool
+    let usedProductionSnapshotStoreImplementation: Bool
     let seedAndFlushCount: Int
     let usedPasteOrImportPath: Bool
     let usedDebugUITestStoreOverride: Bool
+    let evidenceScope: M5PerformanceEvidenceScope
     let usedDisposableBaselineAccount: Bool
     let normalApplicationSupportWasEmpty: Bool
+    let sourceIdentity: String
     let snapshotIdentity: String
     let executableIdentity: String
 }
@@ -552,11 +673,19 @@ struct M5LoadTrialResult: Equatable, Sendable {
     let controllerInteractive: Bool
     let measurementEndedAfterSentinel: Bool
     let restoreIntervalCompletedBeforeMeasurementEnd: Bool
-    let priorProcessTerminated: Bool
+    let inProcessRuntimeStopped: Bool
     let syntheticEditCount: Int
     let openIntervalCount: Int
     let snapshotIdentity: String
     let executableIdentity: String
+
+    var evidenceScope: M5PerformanceEvidenceScope { .inProcessSemanticOnly }
+    var provesPriorProcessTermination: Bool { false }
+    var provesNormalStoreDisposableAccountReset: Bool { false }
+    var provesSameExecutableFreshProcess: Bool { false }
+    var provesInstrumentsTimeProfile: Bool { false }
+    var provesTwoSecondAbsoluteThreshold: Bool { false }
+    var provesAbsoluteLoadBaseline: Bool { false }
 }
 
 struct M5EditRunResult: Equatable, Sendable {
@@ -595,13 +724,13 @@ struct M5ScrollMemoryResult: Equatable, Sendable {
     let measuredDuration: TimeInterval
     let totalSampleTimes: [TimeInterval]
     let measuredSampleTimes: [TimeInterval]
-    let liveBytes: [UInt64]
-    let reportedSlopeMiBPerMinute: Double
+    let processFootprintBytes: [UInt64]
+    let provisionalProcessFootprintSlopeMiBPerMinute: Double
     let mainThreadStallDurations: [TimeInterval]
     let mainThreadStallProbeWasActive: Bool
     let sessionCount: Int
     let usedActualDisplayLink: Bool
-    let allocationBaselineTotalTime: TimeInterval
+    let processFootprintBaselineTotalTime: TimeInterval
     let tickCount: Int
     let textMutationDelta: Int
     let persistenceEnqueueDelta: Int
@@ -609,6 +738,18 @@ struct M5ScrollMemoryResult: Equatable, Sendable {
     let swiftUIPublishDelta: Int
     let openTickIntervalCount: Int
     let sessionLeaked: Bool
+
+    var memoryEvidenceScope: M5PerformanceEvidenceScope { .processFootprintSemanticOnly }
+    var provesInstrumentsAllocationSamples: Bool { false }
+    var provesAllocationsLiveBytes: Bool { false }
+}
+
+struct M5ProcessFootprintDiagnosticResult: Equatable, Sendable {
+    let processFootprintBytes: [UInt64]
+
+    var memoryEvidenceScope: M5PerformanceEvidenceScope { .processFootprintSemanticOnly }
+    var provesInstrumentsAllocationSamples: Bool { false }
+    var provesAllocationsLiveBytes: Bool { false }
 }
 
 struct M5DelayedFilesystemResult: Equatable, Sendable {
@@ -646,9 +787,208 @@ protocol M5PerformanceHarnessing: AnyObject {
         measuredDuration: TimeInterval,
         totalSampleTimes: [TimeInterval]
     ) async throws -> M5ScrollMemoryResult
+    func runProcessFootprintSemanticProbe(
+        sampleCount: Int
+    ) async throws -> M5ProcessFootprintDiagnosticResult
     func runDelayedFilesystemEdit(
         delay: TimeInterval
     ) async throws -> M5DelayedFilesystemResult
+}
+
+struct M5ExternalInstrumentsRecord: Decodable, Equatable, Sendable {
+    let schemaVersion: Int
+    let recordKind: String
+    let sourceSHA: String
+    let executableSHA256: String
+    let pristineSnapshotSHA256: String
+    let fixtureSHA256: String
+    let fixtureWordCount: Int
+    let fixtureByteCount: Int
+    let contentNeutral: Bool
+    let sameExecutableForAllTrials: Bool
+    let priorProcessTerminatedBeforeEachTrial: Bool
+    let freshProcessRelaunchedForEachTrial: Bool
+    let normalDisposableAccountStore: Bool
+    let pristineSnapshotResetBeforeEachTrial: Bool
+    let instrumentsTimeProfileCaptured: Bool
+    let instrumentsAllocationsCaptured: Bool
+    let loadDurationsSeconds: [Double]
+    let editDurationsSeconds: [Double]
+    let mainThreadStallDurationsSeconds: [Double]
+    let scrollMainThreadStallDurationsSeconds: [Double]
+    let allocationSampleMinutes: [Int]
+    let allocationsLiveBytes: [UInt64]
+}
+
+enum M5AbsolutePerformanceEvidenceError: Error, Equatable, CustomStringConvertible {
+    case semanticLoadTrialCannotProveAbsoluteBaseline
+    case processFootprintCannotProveAllocations
+    case externalRecordPathMissing
+    case sourceSHAMissing
+    case externalRecordUnreadable
+    case externalRecordShapeMismatch
+    case externalRecordIdentityMismatch
+    case externalRecordProtocolMismatch
+    case externalRecordSamplesInvalid
+
+    var description: String {
+        switch self {
+        case .semanticLoadTrialCannotProveAbsoluteBaseline:
+            "An in-process temporary-store AppRuntime trial is semantic-only. Supply the "
+                + "external same-executable fresh-process Instruments record."
+        case .processFootprintCannotProveAllocations:
+            "processFootprintBytes is a provisional diagnostic, not Instruments "
+                + "Allocations live bytes."
+        case .externalRecordPathMissing:
+            "PRIVATE_PRESENTER_M5_EXTERNAL_INSTRUMENTS_RECORD must name the content-neutral "
+                + "controlled-Mac JSON record."
+        case .sourceSHAMissing:
+            "PRIVATE_PRESENTER_M5_SOURCE_SHA must be the exact 40-character source SHA."
+        case .externalRecordUnreadable:
+            "The external Instruments JSON record could not be read or decoded."
+        case .externalRecordShapeMismatch:
+            "The external record has missing or extra fields; private/raw trace fields are "
+                + "not accepted."
+        case .externalRecordIdentityMismatch:
+            "The external record does not match the exact source, executable, fixture, and "
+                + "pristine snapshot identities."
+        case .externalRecordProtocolMismatch:
+            "The external record does not attest the approved fresh-process, normal-store, "
+                + "same-executable Time Profiler and Allocations protocol."
+        case .externalRecordSamplesInvalid:
+            "The external record lacks the required real load/edit/stall/Allocations samples."
+        }
+    }
+}
+
+enum M5AbsolutePerformanceEvidenceGate {
+    static let recordEnvironmentKey = "PRIVATE_PRESENTER_M5_EXTERNAL_INSTRUMENTS_RECORD"
+    static let sourceSHAEnvironmentKey = "PRIVATE_PRESENTER_M5_SOURCE_SHA"
+
+    private static let exactRecordKeys: Set<String> = [
+        "schemaVersion", "recordKind", "sourceSHA", "executableSHA256",
+        "pristineSnapshotSHA256", "fixtureSHA256", "fixtureWordCount",
+        "fixtureByteCount", "contentNeutral", "sameExecutableForAllTrials",
+        "priorProcessTerminatedBeforeEachTrial", "freshProcessRelaunchedForEachTrial",
+        "normalDisposableAccountStore", "pristineSnapshotResetBeforeEachTrial",
+        "instrumentsTimeProfileCaptured", "instrumentsAllocationsCaptured",
+        "loadDurationsSeconds", "editDurationsSeconds",
+        "mainThreadStallDurationsSeconds", "scrollMainThreadStallDurationsSeconds",
+        "allocationSampleMinutes", "allocationsLiveBytes",
+    ]
+
+    static func requireExternalFreshProcessInstrumentsLoadRecord(
+        for trial: M5LoadTrialResult
+    ) throws {
+        guard trial.evidenceScope == .externalInstruments else {
+            throw M5AbsolutePerformanceEvidenceError
+                .semanticLoadTrialCannotProveAbsoluteBaseline
+        }
+    }
+
+    static func requireExternalInstrumentsAllocationsRecord(
+        for result: M5ProcessFootprintDiagnosticResult
+    ) throws {
+        guard result.memoryEvidenceScope == .externalInstruments else {
+            throw M5AbsolutePerformanceEvidenceError.processFootprintCannotProveAllocations
+        }
+    }
+
+    static func loadValidatedExternalRecord(
+        expected receipt: M5PristineSnapshotReceipt,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws -> M5ExternalInstrumentsRecord {
+        guard let path = environment[recordEnvironmentKey], path.hasPrefix("/") else {
+            throw M5AbsolutePerformanceEvidenceError.externalRecordPathMissing
+        }
+        guard let sourceSHA = environment[sourceSHAEnvironmentKey],
+            isLowercaseHex(sourceSHA, count: 40)
+        else {
+            throw M5AbsolutePerformanceEvidenceError.sourceSHAMissing
+        }
+
+        let data: Data
+        do {
+            data = try Data(contentsOf: URL(fileURLWithPath: path))
+        } catch {
+            throw M5AbsolutePerformanceEvidenceError.externalRecordUnreadable
+        }
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data),
+            let dictionary = object as? [String: Any],
+            Set(dictionary.keys) == exactRecordKeys,
+            dictionary["phys_footprint"] == nil,
+            dictionary["processFootprintBytes"] == nil
+        else {
+            throw M5AbsolutePerformanceEvidenceError.externalRecordShapeMismatch
+        }
+        let record: M5ExternalInstrumentsRecord
+        do {
+            record = try JSONDecoder().decode(M5ExternalInstrumentsRecord.self, from: data)
+        } catch {
+            throw M5AbsolutePerformanceEvidenceError.externalRecordUnreadable
+        }
+
+        guard
+            record.sourceSHA == sourceSHA,
+            record.sourceSHA == receipt.sourceIdentity,
+            record.executableSHA256 == receipt.executableIdentity,
+            record.pristineSnapshotSHA256 == receipt.snapshotIdentity,
+            record.fixtureSHA256 == receipt.fixtureDigest,
+            record.fixtureWordCount == receipt.fixtureWordCount,
+            record.fixtureByteCount == receipt.fixtureByteCount,
+            isLowercaseHex(record.executableSHA256, count: 64),
+            isLowercaseHex(record.pristineSnapshotSHA256, count: 64),
+            isLowercaseHex(record.fixtureSHA256, count: 64)
+        else {
+            throw M5AbsolutePerformanceEvidenceError.externalRecordIdentityMismatch
+        }
+        guard
+            record.schemaVersion == 1,
+            record.recordKind == "private-presenter-m5-external-instruments",
+            record.contentNeutral,
+            record.sameExecutableForAllTrials,
+            record.priorProcessTerminatedBeforeEachTrial,
+            record.freshProcessRelaunchedForEachTrial,
+            record.normalDisposableAccountStore,
+            record.pristineSnapshotResetBeforeEachTrial,
+            record.instrumentsTimeProfileCaptured,
+            record.instrumentsAllocationsCaptured
+        else {
+            throw M5AbsolutePerformanceEvidenceError.externalRecordProtocolMismatch
+        }
+        guard
+            record.loadDurationsSeconds.count == 3,
+            record.editDurationsSeconds.count == 300,
+            !record.mainThreadStallDurationsSeconds.isEmpty,
+            !record.scrollMainThreadStallDurationsSeconds.isEmpty,
+            record.allocationSampleMinutes == [1, 2, 3, 4, 5],
+            record.allocationsLiveBytes.count == 5,
+            record.allocationsLiveBytes.allSatisfy({ $0 > 0 }),
+            allPositiveFinite(record.loadDurationsSeconds),
+            allNonnegativeFinite(record.editDurationsSeconds),
+            allNonnegativeFinite(record.mainThreadStallDurationsSeconds),
+            allNonnegativeFinite(record.scrollMainThreadStallDurationsSeconds)
+        else {
+            throw M5AbsolutePerformanceEvidenceError.externalRecordSamplesInvalid
+        }
+        return record
+    }
+
+    private static func isLowercaseHex(_ value: String, count: Int) -> Bool {
+        value.count == count
+            && value.unicodeScalars.allSatisfy { scalar in
+                (48...57).contains(scalar.value) || (97...102).contains(scalar.value)
+            }
+    }
+
+    private static func allPositiveFinite(_ samples: [Double]) -> Bool {
+        samples.allSatisfy { $0.isFinite && $0 > 0 }
+    }
+
+    private static func allNonnegativeFinite(_ samples: [Double]) -> Bool {
+        samples.allSatisfy { $0.isFinite && $0 >= 0 }
+    }
 }
 
 private enum M5PerformanceContractError: Error {

@@ -8,6 +8,7 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
     private var authoritativeRevision: UInt64
     private var suppressesCallbacks = false
     private let performanceRegistry: PerformanceIntervalRegistry
+    private weak var restorePerformanceGate: RestoreInteractivePerformanceGate?
     private let onEdit: @MainActor (ScriptTextEdit) -> Void
 
     init(
@@ -16,6 +17,7 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
         performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
             signposter: DisabledPerformanceSignposter()
         ),
+        restorePerformanceGate: RestoreInteractivePerformanceGate? = nil,
         onEdit: @escaping @MainActor (ScriptTextEdit) -> Void
     ) {
         let textView = NSTextView(usingTextLayoutManager: true)
@@ -27,6 +29,7 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
         authoritativeText = text
         authoritativeRevision = revision
         self.performanceRegistry = performanceRegistry
+        self.restorePerformanceGate = restorePerformanceGate
         self.onEdit = onEdit
         super.init()
 
@@ -48,6 +51,7 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
         configureViewport(NSSize(width: 720, height: 300))
         textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
         textStorage.delegate = self
+        restorePerformanceGate?.editorReady()
     }
 
     func configureViewport(_ size: NSSize) {

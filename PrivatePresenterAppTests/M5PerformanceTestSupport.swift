@@ -61,7 +61,9 @@ enum M5PerformanceHarnessError: Error, CustomStringConvertible {
     case persistenceFlushFailed
     case baselineRequiresRelease
     case baselineRequiresVisibleScreen
-    case liveBytesUnavailable(kern_return_t)
+    case processFootprintUnavailable(kern_return_t)
+    case invalidProcessFootprintSampleCount
+    case sourceIdentityUnavailable
 
     var description: String {
         switch self {
@@ -83,8 +85,12 @@ enum M5PerformanceHarnessError: Error, CustomStringConvertible {
             "Absolute M5 timings require the Release test configuration."
         case .baselineRequiresVisibleScreen:
             "The actual display-link baseline requires a visible Mac screen."
-        case .liveBytesUnavailable(let result):
-            "task_info(TASK_VM_INFO) failed with \(result)."
+        case .processFootprintUnavailable(let result):
+            "The provisional processFootprintBytes diagnostic failed with \(result)."
+        case .invalidProcessFootprintSampleCount:
+            "The provisional process footprint diagnostic requires at least one sample."
+        case .sourceIdentityUnavailable:
+            "The exact Git source SHA could not be resolved for the external evidence gate."
         }
     }
 }
@@ -135,10 +141,6 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             throw M5PerformanceHarnessError.pristineSnapshotLoadFailed
         }
         let session = restored.overlaySession
-        let normalApplicationSupportWasEmpty = normalApplicationSupportIsEmpty()
-        let baselineOptedIn = ProcessInfo.processInfo.environment[
-            "PRIVATE_PRESENTER_M5_BASELINE"
-        ] == "1"
         return M5PristineSnapshotReceipt(
             schemaVersion: restored.snapshot.schemaVersion,
             fixtureWordCount: fixtureString.split(whereSeparator: { $0.isWhitespace }).count,
@@ -149,14 +151,15 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             isHidden: session.visibility == .hidden,
             runtimeDisplayWasCleared: session.currentSessionDisplayID == nil,
             requiresDisplayConfirmation: session.recoveryConfirmationState == .required,
-            usedProductionSnapshotStore: store.snapshotURL
+            usedProductionSnapshotStoreImplementation: store.snapshotURL
                 == rootURL.appendingPathComponent(SnapshotStore.snapshotFilename),
             seedAndFlushCount: status.persistedRevision == 1 ? 1 : 0,
             usedPasteOrImportPath: false,
             usedDebugUITestStoreOverride: false,
-            usedDisposableBaselineAccount: baselineOptedIn
-                && normalApplicationSupportWasEmpty,
-            normalApplicationSupportWasEmpty: normalApplicationSupportWasEmpty,
+            evidenceScope: .inProcessSemanticOnly,
+            usedDisposableBaselineAccount: false,
+            normalApplicationSupportWasEmpty: false,
+            sourceIdentity: try sourceIdentity(),
             snapshotIdentity: identity,
             executableIdentity: try executableIdentity()
         )
@@ -210,6 +213,7 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             proofLevel: .statusBar,
             dependencies: dependencies,
             hotKeyStartupMode: .legacyDiagnostic,
+            restorePerformanceMode: .benchmark,
             startupSeams: seams
         )
         let layoutCountBeforeLoad = recorder.completedCount(for: .readerLayout)
@@ -228,7 +232,8 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             let editor = EditorTextSystem(
                 text: runtime.model.document.text,
                 revision: runtime.model.document.revision,
-                performanceRegistry: dependencies.performanceRegistry
+                performanceRegistry: dependencies.performanceRegistry,
+                restorePerformanceGate: dependencies.restorePerformanceGate
             ) { edit in
                 runtime.model.send(.applyScriptEdit(edit))
             }
@@ -273,7 +278,7 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             }
         }
 
-        await Task.yield()
+        await dependencies.restorePerformanceGate.completeAfterMainActorSentinel()
         endpointEvents.append(.mainActorSentinelCompleted)
         for _ in 0..<4 where recorder.completedCount(for: .restoreToInteractive) == 0 {
             await Task.yield()
@@ -309,7 +314,7 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             measurementEndedAfterSentinel: Array(endpointEvents.suffix(2))
                 == [.mainActorSentinelCompleted, .measurementEnded],
             restoreIntervalCompletedBeforeMeasurementEnd: restoreIntervalCompleted,
-            priorProcessTerminated: didTerminate,
+            inProcessRuntimeStopped: didTerminate,
             syntheticEditCount: syntheticEditCount,
             openIntervalCount: dependencies.performanceRegistry.openIntervalCount,
             snapshotIdentity: snapshotIdentity,
@@ -477,13 +482,13 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
         }
 
         try await Task.sleep(for: .seconds(warmupDuration))
-        let allocationBaselineTotalTime = ProcessInfo.processInfo.systemUptime - start
+        let processFootprintBaselineTotalTime = ProcessInfo.processInfo.systemUptime - start
         let measuredTickStart = recorder.tickBeginTimes.count
-        var liveBytes: [UInt64] = []
+        var processFootprintBytes: [UInt64] = []
         var previousTotal = warmupDuration
         for total in totalSampleTimes {
             try await Task.sleep(for: .seconds(total - previousTotal))
-            liveBytes.append(try M5LiveBytesSampler.sample())
+            processFootprintBytes.append(try M5ProcessFootprintSampler.sample())
             previousTotal = total
         }
         let totalDuration = ProcessInfo.processInfo.systemUptime - start
@@ -491,9 +496,9 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
         let stalls = zip(tickTimes, tickTimes.dropFirst()).map { pair in
             pair.1 - pair.0
         }
-        let slope = M5Statistics.ordinaryLeastSquaresSlope(
+        let provisionalSlope = M5Statistics.ordinaryLeastSquaresSlope(
             x: [1, 2, 3, 4, 5],
-            y: liveBytes.map { Double($0) / 1_048_576 }
+            y: processFootprintBytes.map { Double($0) / 1_048_576 }
         )
         session?.teardown(generation: generation)
         session = nil
@@ -504,13 +509,13 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             measuredDuration: measuredDuration,
             totalSampleTimes: totalSampleTimes,
             measuredSampleTimes: totalSampleTimes.map { $0 - warmupDuration },
-            liveBytes: liveBytes,
-            reportedSlopeMiBPerMinute: slope,
+            processFootprintBytes: processFootprintBytes,
+            provisionalProcessFootprintSlopeMiBPerMinute: provisionalSlope,
             mainThreadStallDurations: stalls,
             mainThreadStallProbeWasActive: true,
             sessionCount: 1,
             usedActualDisplayLink: true,
-            allocationBaselineTotalTime: allocationBaselineTotalTime,
+            processFootprintBaselineTotalTime: processFootprintBaselineTotalTime,
             tickCount: tickTimes.count,
             textMutationDelta: system.textMutationCount - initialMutationCount,
             persistenceEnqueueDelta: 0,
@@ -520,6 +525,21 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             sessionLeaked: weakSession != nil
         )
         #endif
+    }
+
+    func runProcessFootprintSemanticProbe(
+        sampleCount: Int
+    ) async throws -> M5ProcessFootprintDiagnosticResult {
+        guard sampleCount > 0 else {
+            throw M5PerformanceHarnessError.invalidProcessFootprintSampleCount
+        }
+        var samples: [UInt64] = []
+        samples.reserveCapacity(sampleCount)
+        for _ in 0..<sampleCount {
+            samples.append(try M5ProcessFootprintSampler.sample())
+            await Task.yield()
+        }
+        return M5ProcessFootprintDiagnosticResult(processFootprintBytes: samples)
     }
 
     func runDelayedFilesystemEdit(
@@ -595,6 +615,28 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
         return M5FiftyThousandWordFixture.sha256(try Data(contentsOf: executableURL))
     }
 
+    private func sourceIdentity() throws -> String {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-C", root.path, "rev-parse", "HEAD"]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        let sha = String(
+            decoding: output.fileHandleForReading.readDataToEndOfFile(),
+            as: UTF8.self
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard process.terminationStatus == 0, sha.count == 40 else {
+            throw M5PerformanceHarnessError.sourceIdentityUnavailable
+        }
+        return sha
+    }
+
     private func issuedScrollGeneration() -> ScrollSessionGeneration {
         AppModel(
             overlayController: OverlayPanelController(),
@@ -602,19 +644,6 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
         ).currentScrollGeneration
     }
 
-    private func normalApplicationSupportIsEmpty() -> Bool {
-        guard let directory = try? FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: false
-        ) else { return false }
-        guard FileManager.default.fileExists(atPath: directory.path) else { return true }
-        return (try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        ).isEmpty) ?? false
-    }
 }
 
 private struct M5SyntheticTopologyError: Error {}
@@ -907,7 +936,7 @@ private final class M5DelayedSnapshotFileSystem: SnapshotFileSystem, @unchecked 
     }
 }
 
-private enum M5LiveBytesSampler {
+private enum M5ProcessFootprintSampler {
     static func sample() throws -> UInt64 {
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(
@@ -927,7 +956,7 @@ private enum M5LiveBytesSampler {
             }
         }
         guard result == KERN_SUCCESS else {
-            throw M5PerformanceHarnessError.liveBytesUnavailable(result)
+            throw M5PerformanceHarnessError.processFootprintUnavailable(result)
         }
         return UInt64(info.phys_footprint)
     }

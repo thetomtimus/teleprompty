@@ -325,6 +325,38 @@ final class SystemDisplayServiceTests: XCTestCase {
         XCTAssertEqual(source.removeCount, 1)
     }
 
+    func testNativeCallbackContextRetainsUntilRemovalAndDrainOrLeaksOnFailure() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "PrivatePresenterApp/Services/SystemDisplayService.swift"
+                ),
+            encoding: .utf8
+        )
+
+        for marker in [
+            "Unmanaged.passRetained(context).toOpaque()",
+            "pendingDeliveries += 1",
+            "pendingDeliveries -= 1",
+            "registrationRemovalSucceeded()",
+            "removalSucceeded && pendingDeliveries == 0",
+            "registrationRemovalFailed()",
+            "keep the passRetained ownership forever",
+        ] {
+            XCTAssertTrue(source.contains(marker), marker)
+        }
+        XCTAssertFalse(
+            source.contains(
+                "CGDisplayRemoveReconfigurationCallback(\n"
+                    + "                displayReconfigurationCallback,\n"
+                    + "                Unmanaged.passUnretained(callbackContext).toOpaque()\n"
+                    + "            )\n        }\n        callbackContext = nil"
+            )
+        )
+    }
+
     private func inventory(
         drawable: [RuntimeDisplay],
         online: [UInt32],

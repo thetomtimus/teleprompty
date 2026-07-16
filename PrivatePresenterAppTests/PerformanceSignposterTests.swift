@@ -7,30 +7,24 @@ import XCTest
 
 @MainActor
 final class PerformanceSignposterTests: XCTestCase {
-    func testSignpostIntervalsBalanceForEveryTerminalPath() throws {
+    func testSignpostIntervalsBalanceForEveryTerminalPath() async throws {
+        let rejectedEdit = try M5ProductPerformanceTerminalRig()
+        try await rejectedEdit.driveRejectedEditorEditThroughProduct()
+        let readerResync = try M5ProductPerformanceTerminalRig()
+        try await readerResync.driveReaderRevisionGapAndProductResync()
+        let supersededSave = try M5ProductPerformanceTerminalRig()
+        try await supersededSave.driveTwoProductSavesThatSupersedeDebounce()
+        let teardown = try M5ProductPerformanceTerminalRig()
+        try await teardown.startProductRuntimeThenTeardown()
+        for rig in [rejectedEdit, readerResync, supersededSave, teardown] {
+            XCTAssertEqual(rig.registry.openIntervalCount, 0)
+            XCTAssertTrue(rig.recorder.openTokens.isEmpty)
+            XCTAssertEqual(rig.recorder.beginCount, rig.recorder.endCount)
+            XCTAssertFalse(rig.usedManufacturedBeginEnd)
+        }
+
         let recorder = M5PerformanceRecorder()
         let registry = PerformanceIntervalRegistry(signposter: recorder)
-        let terminals: [(
-            operation: PerformanceSignpostOperation,
-            reason: PerformanceSignpostReason?,
-            outcome: PerformanceSignpostOutcome
-        )] = [
-            (.restoreToInteractive, .initial, .success),
-            (.readerLayout, .restore, .failure),
-            (.editToVisible, nil, .cancelled),
-            (.editToVisible, nil, .failure),       // rejected edit
-            (.readerLayout, .resync, .success),   // resync completion
-            (.snapshotWrite, .debounced, .cancelled), // superseded save
-        ]
-
-        for terminal in terminals {
-            let handle = try XCTUnwrap(
-                registry.begin(terminal.operation, reason: terminal.reason)
-            )
-            registry.end(handle, outcome: terminal.outcome)
-        }
-        _ = registry.begin(.scrollSession, reason: nil)
-        registry.cancelAll() // teardown owns the final cancellation edge
         let persistenceCompletionCount = recorder.completedOperations.filter {
             $0 == .snapshotEncode || $0 == .snapshotWrite || $0 == .snapshotFlush
         }.count
@@ -390,22 +384,28 @@ final class PerformanceSignposterTests: XCTestCase {
         XCTAssertFalse(productRig.usedManufacturedBeginEnd)
     }
 
-    func testRejectedProductEditEndsRealInterval() throws {
+    func testRejectedProductEditEndsRealInterval() async throws {
         let rig = try M5ProductPerformanceTerminalRig()
 
-        try rig.driveRejectedEditorEditThroughProduct()
+        try await rig.driveRejectedEditorEditThroughProduct()
 
         XCTAssertEqual(rig.recorder.outcomes(for: .editToVisible), [.failure])
         XCTAssertEqual(rig.registry.openIntervalCount, 0)
         XCTAssertFalse(rig.usedManufacturedBeginEnd)
     }
 
-    func testReaderResyncEndsRealInterval() throws {
+    func testReaderResyncEndsRealInterval() async throws {
         let rig = try M5ProductPerformanceTerminalRig()
 
-        try rig.driveReaderRevisionGapAndProductResync()
+        try await rig.driveReaderRevisionGapAndProductResync()
 
-        XCTAssertTrue(rig.recorder.completedOperations.contains(.readerLayout))
+        XCTAssertTrue(
+            rig.recorder.events.contains {
+                $0.edge == .end(.readerLayout)
+                    && $0.reason == .resync
+                    && $0.outcome == .success
+            }
+        )
         XCTAssertEqual(rig.registry.openIntervalCount, 0)
         XCTAssertFalse(rig.usedManufacturedBeginEnd)
     }
@@ -415,9 +415,8 @@ final class PerformanceSignposterTests: XCTestCase {
 
         try await rig.driveTwoProductSavesThatSupersedeDebounce()
 
-        XCTAssertTrue(
-            rig.recorder.outcomes(for: .snapshotWrite).contains(.cancelled)
-        )
+        XCTAssertEqual(rig.recorder.outcomes(for: .snapshotEncode), [.success, .success])
+        XCTAssertEqual(rig.recorder.outcomes(for: .snapshotWrite), [.success])
         XCTAssertEqual(rig.registry.openIntervalCount, 0)
         XCTAssertFalse(rig.usedManufacturedBeginEnd)
     }
@@ -430,6 +429,9 @@ final class PerformanceSignposterTests: XCTestCase {
         XCTAssertTrue(rig.recorder.openTokens.isEmpty)
         XCTAssertEqual(rig.registry.openIntervalCount, 0)
         XCTAssertEqual(rig.recorder.beginCount, rig.recorder.endCount)
+        XCTAssertTrue(
+            rig.recorder.outcomes(for: .restoreToInteractive).contains(.cancelled)
+        )
         XCTAssertFalse(rig.usedManufacturedBeginEnd)
     }
 
@@ -471,6 +473,207 @@ final class PerformanceSignposterTests: XCTestCase {
             .deletingLastPathComponent()
     }
 }
+
+@MainActor
+private final class M5ProductPerformanceTerminalRig {
+    let recorder: M5PerformanceRecorder
+    let registry: PerformanceIntervalRegistry
+    private let rootURL: URL
+    private let loadGate: M5ProductLoadGate
+    private let dependencies: DependencyContainer
+    private let runtime: AppRuntime
+    private var editor: EditorTextSystem?
+    private var directRegistryMutationCount = 0
+
+    var restoreMilestones: [RestoreInteractiveMilestone] {
+        dependencies.restorePerformanceGate.recordedMilestones
+    }
+
+    var restoreOpenCountsAfterEachMilestone: [Int] {
+        dependencies.restorePerformanceGate.openCountsAfterMilestones
+    }
+
+    var usedManufacturedBeginEnd: Bool { directRegistryMutationCount != 0 }
+
+    init() throws {
+        let recorder = M5PerformanceRecorder()
+        let registry = PerformanceIntervalRegistry(signposter: recorder)
+        let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "private-presenter-m5-product-terminal-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        let fileSystem = PerformanceSnapshotFileSystem(
+            base: M5PerformanceSnapshotFileSystem(),
+            registry: registry
+        )
+        let store = SnapshotStore(rootURL: rootURL, fileSystem: fileSystem)
+        let loadGate = M5ProductLoadGate(
+            result: .loaded(
+                RestoredState(
+                    snapshot: PersistedSnapshot(
+                        revision: 1,
+                        document: ScriptDocument(
+                            text: "synthetic product signpost fixture",
+                            revision: 1
+                        ),
+                        readingAnchor: ReadingAnchor(),
+                        preferences: TeleprompterPreferences()
+                    )
+                )
+            )
+        )
+        let dependencies = DependencyContainer(
+            proofLevel: .statusBar,
+            performanceSignposter: recorder,
+            performanceRegistry: registry,
+            snapshotStore: store
+        )
+        let runtime = AppRuntime(
+            proofLevel: .statusBar,
+            dependencies: dependencies,
+            hotKeyStartupMode: .legacyDiagnostic,
+            startupSeams: AppRuntimeStartupSeams(
+                load: { await loadGate.load() },
+                observeAndQuery: { .failure(M5ProductTopologyError()) },
+                registerDiagnosticHotKey: { 0 }
+            )
+        )
+        self.recorder = recorder
+        self.registry = registry
+        self.rootURL = rootURL
+        self.loadGate = loadGate
+        self.dependencies = dependencies
+        self.runtime = runtime
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: rootURL)
+    }
+
+    func driveBenchmarkRestoreThroughProduct() async throws {
+        await runtime.startForTesting(restorePerformanceMode: .benchmark) { [self] in
+            dependencies.overlayController.readerTextSystem.viewportAdapter?.ensureLayout()
+            let editor = makeEditor()
+            self.editor = editor
+            editor.replaceCharactersForTesting(
+                in: NSRange(location: runtime.model.document.text.utf16.count, length: 0),
+                with: "x"
+            )
+        }
+        await dependencies.restorePerformanceGate.completeAfterMainActorSentinel()
+        for _ in 0..<4 where registry.openIntervalCount != 0 { await Task.yield() }
+        _ = await runtime.stopAndFlush()
+    }
+
+    func driveRejectedEditorEditThroughProduct() async throws {
+        await startNormally()
+        runtime.model.send(.beginTerminationAttempt)
+        let editor = makeEditor()
+        self.editor = editor
+        editor.replaceCharactersForTesting(
+            in: NSRange(location: runtime.model.document.text.utf16.count, length: 0),
+            with: "x"
+        )
+        _ = await runtime.stopAndFlush()
+    }
+
+    func driveReaderRevisionGapAndProductResync() async throws {
+        await startNormally()
+        dependencies.overlayController.readerTextSystem.replaceStorageForTesting("drift")
+        let editor = makeEditor()
+        self.editor = editor
+        editor.replaceCharactersForTesting(
+            in: NSRange(location: runtime.model.document.text.utf16.count, length: 0),
+            with: "x"
+        )
+        _ = await runtime.stopAndFlush()
+    }
+
+    func driveTwoProductSavesThatSupersedeDebounce() async throws {
+        await startNormally()
+        let editor = makeEditor()
+        self.editor = editor
+        let end = runtime.model.document.text.utf16.count
+        editor.replaceCharactersForTesting(
+            in: NSRange(location: end, length: 0),
+            with: "x"
+        )
+        editor.replaceCharactersForTesting(
+            in: NSRange(location: end + 1, length: 0),
+            with: "y"
+        )
+        _ = await runtime.stopAndFlush()
+    }
+
+    func startProductRuntimeThenTeardown() async throws {
+        await loadGate.blockNextLoad()
+        runtime.start()
+        await loadGate.waitUntilEntered()
+        let stop = Task { @MainActor in await runtime.stopAndFlush() }
+        for _ in 0..<4 { await Task.yield() }
+        await loadGate.release()
+        _ = await stop.value
+    }
+
+    private func startNormally() async {
+        await runtime.startForTesting(restorePerformanceMode: .normal) { [self] in
+            dependencies.overlayController.readerTextSystem.viewportAdapter?.ensureLayout()
+        }
+        await dependencies.restorePerformanceGate.completeAfterMainActorSentinel()
+    }
+
+    private func makeEditor() -> EditorTextSystem {
+        EditorTextSystem(
+            text: runtime.model.document.text,
+            revision: runtime.model.document.revision,
+            performanceRegistry: registry,
+            restorePerformanceGate: dependencies.restorePerformanceGate,
+            onEdit: { [weak model = runtime.model] edit in
+                model?.send(.applyScriptEdit(edit))
+            }
+        )
+    }
+}
+
+private actor M5ProductLoadGate {
+    private let result: SnapshotLoadResult
+    private var shouldBlock = false
+    private var didEnter = false
+    private var loadContinuation: CheckedContinuation<Void, Never>?
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+
+    init(result: SnapshotLoadResult) {
+        self.result = result
+    }
+
+    func blockNextLoad() {
+        shouldBlock = true
+        didEnter = false
+    }
+
+    func load() async -> SnapshotLoadResult {
+        didEnter = true
+        enteredContinuation?.resume()
+        enteredContinuation = nil
+        if shouldBlock {
+            await withCheckedContinuation { loadContinuation = $0 }
+        }
+        return result
+    }
+
+    func waitUntilEntered() async {
+        guard !didEnter else { return }
+        await withCheckedContinuation { enteredContinuation = $0 }
+    }
+
+    func release() {
+        shouldBlock = false
+        loadContinuation?.resume()
+        loadContinuation = nil
+    }
+}
+
+private struct M5ProductTopologyError: Error {}
 
 private final class M5PerformanceRecorder: PerformanceSignposting, @unchecked Sendable {
     struct Event: Equatable, Sendable {

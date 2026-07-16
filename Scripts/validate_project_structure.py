@@ -781,6 +781,18 @@ M5_PERFORMANCE_NAMED_TESTS = (
     "testDelayedFilesystemDoesNotBlockEditAndFinalRevisionFlushes",
 )
 
+M5_INDEPENDENT_REVIEW_NAMED_TESTS = (
+    "testInProcessLoadTrialIsSemanticOnlyAndCannotProveAbsoluteBaseline",
+    "testProcessFootprintCannotSubstituteForInstrumentsAllocationSamples",
+    "testBenchmarkRestoreRequiresProductEditorEditReaderAndSentinelBeforeEnd",
+    "testRejectedProductEditEndsRealInterval",
+    "testReaderResyncEndsRealInterval",
+    "testDebouncedSaveSupersessionEndsRealIntervals",
+    "testProductTeardownCancelsEveryOpenInterval",
+    "testTerminationDuringDelayedStartupAwaitsLoadedRevisionBeforeExactFlushAndRetry",
+    "testHostedOverlayChromeBridgesHelpAndActualFortyFourPointFrames",
+)
+
 M5_PROTECTED_PATHS = (
     "HANDOFF.md",
     "IMPLEMENTATION_PLAN.md",
@@ -1043,17 +1055,17 @@ M5_PERFORMANCE_CONTRACT_MARKERS = (
     (
         "five-memory-samples",
         "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
-        "XCTAssertEqual(result.liveBytes.count, 5)",
+        "XCTAssertEqual(externalRecord.allocationsLiveBytes.count, 5)",
     ),
     (
         "mib-divisor",
         "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
-        "Double($0) / 1_048_576",
+        "let liveMiB = externalRecord.allocationsLiveBytes.map { Double($0) / 1_048_576 }",
     ),
     (
         "five-point-ols-x",
         "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
-        "x: [1, 2, 3, 4, 5]",
+        "y: liveMiB",
     ),
     (
         "ols-slope-one-mib-per-minute",
@@ -1254,6 +1266,10 @@ M5_PENDING_TEMPLATE_MARKERS = (
     "Promotion gate: external exact source/app SHA only",
 )
 
+M5_REVIEW_PENDING_TEMPLATE_MARKERS = (
+    "Native SystemDisplay callback lifetime stress: PENDING",
+)
+
 M5_LEDGER_TITLES = (
     "Keep M5 claims inside the WSL and native evidence boundary",
     "Make every presenter control operable without sight or pointer",
@@ -1261,6 +1277,7 @@ M5_LEDGER_TITLES = (
     "Measure hot paths without recording lecture identity",
     "Hold 50,000-word lectures to recorded responsiveness limits",
     "Keep M5 evidence reproducible without rewriting prior proof",
+    "Prevent replay evidence from outrunning the measured product path",
 )
 
 M5_PRIOR_RED_GREEN_COMMITS = (
@@ -2111,6 +2128,7 @@ def validate_m5_source() -> list[str]:
         *M5_LIFECYCLE_NAMED_TESTS,
         *M5_SIGNPOST_NAMED_TESTS,
         *M5_PERFORMANCE_NAMED_TESTS,
+        *M5_INDEPENDENT_REVIEW_NAMED_TESTS,
     )
     for name in required_test_names:
         if re.search(rf"\bfunc\s+{re.escape(name)}\b", swift_test_sources) is None:
@@ -2178,6 +2196,17 @@ def validate_m5_source() -> list[str]:
         if path.startswith("PrivatePresenterApp/")
     }
     joined_app_sources = "\n".join(app_sources.values())
+
+    accessibility_source = app_sources.get(
+        "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", ""
+    )
+    if accessibility_source.count(".accessibilityHint(Text(entry.help))") != 1:
+        violations.append("accessibility:missing-help-bridge")
+    overlay_chrome_source = app_sources.get(
+        "PrivatePresenterApp/Overlay/OverlayChromeView.swift", ""
+    )
+    if overlay_chrome_source.count(".frame(minWidth: 44, minHeight: 44)") != 3:
+        violations.append("accessibility:missing-44-point-frame")
 
     m6_markers = {"LinearGradient(", "#34466F", "#202B4B", "#F7F8FC"}
     found_m6_surface = (ROOT / "docs/validation/visual-result.md").exists()
@@ -2308,6 +2337,15 @@ def validate_m5_source() -> list[str]:
         if "Status: PENDING" not in lines:
             violations.append(f"evidence:status-not-pending:{path}")
 
+    callback_evidence_path = "docs/validation/m5-display-crash-quit-result.md"
+    if (ROOT / callback_evidence_path).is_file():
+        callback_evidence_lines = read(callback_evidence_path).splitlines()
+        for marker in M5_REVIEW_PENDING_TEMPLATE_MARKERS:
+            if marker not in callback_evidence_lines:
+                violations.append(
+                    f"evidence:missing-marker:{callback_evidence_path}:{marker}"
+                )
+
     history_result = git("log", "--format=%H%x09%P%x09%s", f"{M5_BASELINE}..HEAD")
     history_lines = history_result.stdout.splitlines() if history_result.returncode == 0 else []
     history_titles = [
@@ -2369,6 +2407,30 @@ def validate_m5_source() -> list[str]:
             if hashlib.sha256(target.read_bytes()).hexdigest() != match.group(1):
                 return False
         return True
+
+    source_manifest_path = M5_CONTINUATION_REQUIRED_PATHS[2]
+    if (ROOT / source_manifest_path).is_file():
+        source_manifest_lines = read(source_manifest_path).splitlines()
+        source_manifest_paths: list[str] = []
+        for line in source_manifest_lines:
+            match = re.fullmatch(r"[0-9a-f]{64}  ([^\r\n]+)", line)
+            if match is not None:
+                source_manifest_paths.append(match.group(1))
+        if len(source_manifest_paths) != len(set(source_manifest_paths)):
+            violations.append("continuation:source-manifest-duplicate")
+        expected_result = git(
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            f"{M5_BASELINE}..HEAD",
+        )
+        expected_source_paths = (
+            sorted(filter(None, expected_result.stdout.splitlines()))
+            if expected_result.returncode == 0
+            else []
+        )
+        if source_manifest_paths != expected_source_paths:
+            violations.append("continuation:source-manifest-path-set")
 
     for path in M5_CONTINUATION_REQUIRED_PATHS[1:3]:
         if not checksum_manifest_is_valid(path):

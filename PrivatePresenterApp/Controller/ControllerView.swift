@@ -6,6 +6,7 @@ import TeleprompterCore
 struct ControllerView: View {
     @Bindable var model: AppModel
     let performanceRegistry: PerformanceIntervalRegistry
+    let restorePerformanceGate: RestoreInteractivePerformanceGate?
     @State private var clearToken: ClearToken?
 
     var body: some View {
@@ -85,6 +86,7 @@ struct ControllerView: View {
                     text: model.document.text,
                     revision: model.document.revision,
                     performanceRegistry: performanceRegistry,
+                    restorePerformanceGate: restorePerformanceGate,
                     onEdit: { model.send(.applyScriptEdit($0)) }
                 )
                 .frame(minHeight: 300)

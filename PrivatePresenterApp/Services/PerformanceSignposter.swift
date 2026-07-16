@@ -200,39 +200,96 @@ final class PerformanceIntervalRegistry: @unchecked Sendable {
     }
 }
 
+enum RestoreInteractivePerformanceMode: Equatable, Sendable {
+    case normal
+    case benchmark
+}
+
+enum RestoreInteractiveMilestone: Equatable, Sendable {
+    case restoreCompleted
+    case readerAttached
+    case readerFirstLayoutCompleted
+    case editorReady
+    case syntheticEditAccepted
+    case syntheticEditReflectedInReader
+    case mainActorSentinelCompleted
+}
+
 @MainActor
 final class RestoreInteractivePerformanceGate {
     private let registry: PerformanceIntervalRegistry
     private var handle: PerformanceIntervalHandle?
+    private var mode: RestoreInteractivePerformanceMode = .normal
     private var didRestore = false
     private var isReaderAttached = false
     private var didCompleteFirstLayout = false
+    private var isEditorReady = false
+    private var didAcceptSyntheticEdit = false
+    private var didReflectSyntheticEdit = false
     private var sentinelGeneration: UInt64 = 0
+    private(set) var recordedMilestones: [RestoreInteractiveMilestone] = []
+    private(set) var openCountsAfterMilestones: [Int] = []
 
     init(registry: PerformanceIntervalRegistry) {
         self.registry = registry
     }
 
-    func begin(reason: PerformanceSignpostReason) {
+    func begin(
+        reason: PerformanceSignpostReason,
+        mode: RestoreInteractivePerformanceMode = .normal
+    ) {
         cancel()
+        self.mode = mode
         didRestore = false
         isReaderAttached = false
         didCompleteFirstLayout = false
+        isEditorReady = false
+        didAcceptSyntheticEdit = false
+        didReflectSyntheticEdit = false
+        recordedMilestones.removeAll(keepingCapacity: true)
+        openCountsAfterMilestones.removeAll(keepingCapacity: true)
         handle = registry.begin(.restoreToInteractive, reason: reason)
     }
 
     func restoreCompleted() {
+        guard handle != nil, !didRestore else { return }
         didRestore = true
+        record(.restoreCompleted)
         scheduleCompletionIfReady()
     }
 
     func readerAttached() {
+        guard handle != nil, didRestore, !isReaderAttached else { return }
         isReaderAttached = true
+        record(.readerAttached)
         scheduleCompletionIfReady()
     }
 
     func readerFirstLayoutCompleted() {
+        guard handle != nil, didRestore, !didCompleteFirstLayout else { return }
         didCompleteFirstLayout = true
+        record(.readerFirstLayoutCompleted)
+        scheduleCompletionIfReady()
+    }
+
+    func editorReady() {
+        guard handle != nil, didRestore, !isEditorReady else { return }
+        isEditorReady = true
+        record(.editorReady)
+        scheduleCompletionIfReady()
+    }
+
+    func syntheticEditAccepted() {
+        guard mode == .benchmark, !didAcceptSyntheticEdit else { return }
+        didAcceptSyntheticEdit = true
+        record(.syntheticEditAccepted)
+        scheduleCompletionIfReady()
+    }
+
+    func syntheticEditReflectedInReader() {
+        guard mode == .benchmark, !didReflectSyntheticEdit else { return }
+        didReflectSyntheticEdit = true
+        record(.syntheticEditReflectedInReader)
         scheduleCompletionIfReady()
     }
 
@@ -242,13 +299,15 @@ final class RestoreInteractivePerformanceGate {
         sentinelGeneration = next
         await Task.yield()
         guard
+            handle != nil,
             sentinelGeneration == next,
             didRestore,
             isReaderAttached,
-            didCompleteFirstLayout
+            isReadyForSentinel
         else { return }
         registry.end(handle, outcome: .success)
         handle = nil
+        record(.mainActorSentinelCompleted)
     }
 
     func fail() {
@@ -263,7 +322,7 @@ final class RestoreInteractivePerformanceGate {
     }
 
     private func scheduleCompletionIfReady() {
-        guard handle != nil, didRestore, isReaderAttached, didCompleteFirstLayout else {
+        guard handle != nil, isReadyForSentinel else {
             return
         }
         let generation = nextSentinelGeneration()
@@ -272,7 +331,19 @@ final class RestoreInteractivePerformanceGate {
             guard let self, self.sentinelGeneration == generation else { return }
             self.registry.end(self.handle, outcome: .success)
             self.handle = nil
+            self.record(.mainActorSentinelCompleted)
         }
+    }
+
+    private var isReadyForSentinel: Bool {
+        guard didRestore, isReaderAttached, didCompleteFirstLayout else { return false }
+        guard mode == .benchmark else { return true }
+        return isEditorReady && didAcceptSyntheticEdit && didReflectSyntheticEdit
+    }
+
+    private func record(_ milestone: RestoreInteractiveMilestone) {
+        recordedMilestones.append(milestone)
+        openCountsAfterMilestones.append(registry.openIntervalCount)
     }
 
     private func nextSentinelGeneration() -> UInt64 {

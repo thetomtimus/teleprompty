@@ -178,6 +178,7 @@ enum DisplayQueryError: Error, Equatable {
 
 enum DisplayObservationError: Error {
     case registrationFailed(CGError)
+    case priorRemovalFailed
 }
 
 @MainActor
@@ -190,24 +191,86 @@ struct DisplayObservationSeams {
 
 private final class DisplayReconfigurationCallbackContext: @unchecked Sendable {
     let lifetimeRawValue: UInt64
-    let enqueue: @Sendable (UInt32) -> Void
+    private weak var service: SystemDisplayService?
+    private let lock = NSLock()
+    private var registrationPointer: UnsafeMutableRawPointer?
+    private var pendingDeliveries = 0
+    private var removalSucceeded = false
+    private var registrationRetainReleased = false
 
     @MainActor
     init(service: SystemDisplayService, generation: RuntimeDisplayGeneration) {
         let lifetimeRawValue = generation.rawValue
         self.lifetimeRawValue = lifetimeRawValue
-        enqueue = { [weak service] rawFlags in
-            DispatchQueue.main.async { [weak service] in
-                MainActor.assumeIsolated {
-                    service?.receiveReconfiguration(
-                        flags: CGDisplayChangeSummaryFlags(rawValue: rawFlags),
-                        observationGeneration: RuntimeDisplayGeneration(
-                            rawValue: lifetimeRawValue
-                        )
+        self.service = service
+    }
+
+    func enqueue(_ rawFlags: UInt32) {
+        beginDelivery()
+        DispatchQueue.main.async { [self] in
+            MainActor.assumeIsolated {
+                service?.receiveReconfiguration(
+                    flags: CGDisplayChangeSummaryFlags(rawValue: rawFlags),
+                    observationGeneration: RuntimeDisplayGeneration(
+                        rawValue: lifetimeRawValue
                     )
-                }
+                )
             }
+            finishDelivery()
         }
+    }
+
+    func bindRegistrationPointer(_ pointer: UnsafeMutableRawPointer) {
+        lock.lock()
+        precondition(registrationPointer == nil)
+        registrationPointer = pointer
+        lock.unlock()
+    }
+
+    func registrationFailed() {
+        releaseRegistrationRetainIfReady(force: true)
+    }
+
+    func registrationRemovalSucceeded() {
+        lock.lock()
+        removalSucceeded = true
+        lock.unlock()
+        releaseRegistrationRetainIfReady(force: false)
+    }
+
+    func registrationRemovalFailed() {
+        // CoreGraphics may still call the registered pointer. Intentionally keep
+        // the passRetained ownership forever rather than risk a use-after-free.
+    }
+
+    private func beginDelivery() {
+        lock.lock()
+        pendingDeliveries += 1
+        lock.unlock()
+    }
+
+    private func finishDelivery() {
+        lock.lock()
+        precondition(pendingDeliveries > 0)
+        pendingDeliveries -= 1
+        lock.unlock()
+        releaseRegistrationRetainIfReady(force: false)
+    }
+
+    private func releaseRegistrationRetainIfReady(force: Bool) {
+        lock.lock()
+        guard
+            !registrationRetainReleased,
+            let pointer = registrationPointer,
+            force || (removalSucceeded && pendingDeliveries == 0)
+        else {
+            lock.unlock()
+            return
+        }
+        registrationRetainReleased = true
+        registrationPointer = nil
+        lock.unlock()
+        Unmanaged<DisplayReconfigurationCallbackContext>.fromOpaque(pointer).release()
     }
 }
 
@@ -228,6 +291,7 @@ final class SystemDisplayService {
     private let hardwareFactsQuery: HardwareFactsQuery
     private let observationSeams: DisplayObservationSeams?
     private var callbackContext: DisplayReconfigurationCallbackContext?
+    private(set) var callbackRemovalFailed = false
     private(set) var observationGeneration: RuntimeDisplayGeneration?
     private(set) var topologyGeneration: RuntimeDisplayGeneration?
 
@@ -309,6 +373,9 @@ final class SystemDisplayService {
 
     func startObserving(generation: RuntimeDisplayGeneration) throws {
         guard !isObserving else { return }
+        guard !callbackRemovalFailed else {
+            throw DisplayObservationError.priorRemovalFailed
+        }
         if let observationSeams {
             try observationSeams.install { [weak self] flags in
                 self?.receiveReconfiguration(
@@ -321,11 +388,14 @@ final class SystemDisplayService {
                 service: self,
                 generation: generation
             )
+            let pointer = Unmanaged.passRetained(context).toOpaque()
+            context.bindRegistrationPointer(pointer)
             let status = CGDisplayRegisterReconfigurationCallback(
                 displayReconfigurationCallback,
-                Unmanaged.passUnretained(context).toOpaque()
+                pointer
             )
             guard status == .success else {
+                context.registrationFailed()
                 throw DisplayObservationError.registrationFailed(status)
             }
             callbackContext = context
@@ -343,10 +413,16 @@ final class SystemDisplayService {
         if let observationSeams {
             observationSeams.remove()
         } else if let callbackContext {
-            CGDisplayRemoveReconfigurationCallback(
+            let status = CGDisplayRemoveReconfigurationCallback(
                 displayReconfigurationCallback,
                 Unmanaged.passUnretained(callbackContext).toOpaque()
             )
+            if status == .success {
+                callbackContext.registrationRemovalSucceeded()
+            } else {
+                callbackRemovalFailed = true
+                callbackContext.registrationRemovalFailed()
+            }
         }
         callbackContext = nil
     }

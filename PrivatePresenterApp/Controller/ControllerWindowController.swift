@@ -34,12 +34,14 @@ final class ControllerWindowController: NSWindowController {
         performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
             signposter: DisabledPerformanceSignposter()
         ),
+        restorePerformanceGate: RestoreInteractivePerformanceGate? = nil,
         operationRecorder: @escaping (ControllerWindowOperation) -> Void = { _ in }
     ) {
         self.init(
             model: model,
             untrustedInitialFrame: untrustedInitialFrame,
             performanceRegistry: performanceRegistry,
+            restorePerformanceGate: restorePerformanceGate,
             operationRecorderObject: operationRecorder
         )
     }
@@ -49,12 +51,14 @@ final class ControllerWindowController: NSWindowController {
         untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame(),
         performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
             signposter: DisabledPerformanceSignposter()
-        )
+        ),
+        restorePerformanceGate: RestoreInteractivePerformanceGate? = nil
     ) {
         self.init(
             model: model,
             untrustedInitialFrame: untrustedInitialFrame,
             performanceRegistry: performanceRegistry,
+            restorePerformanceGate: restorePerformanceGate,
             operationRecorderObject: nil
         )
     }
@@ -64,6 +68,7 @@ final class ControllerWindowController: NSWindowController {
         model: AppModel,
         untrustedInitialFrame: NSRect?,
         performanceRegistry: PerformanceIntervalRegistry,
+        restorePerformanceGate: RestoreInteractivePerformanceGate?,
         operationRecorderObject: Any?
     ) {
         self.model = model
@@ -86,7 +91,8 @@ final class ControllerWindowController: NSWindowController {
         window.contentViewController = NSHostingController(
             rootView: ControllerView(
                 model: model,
-                performanceRegistry: performanceRegistry
+                performanceRegistry: performanceRegistry,
+                restorePerformanceGate: restorePerformanceGate
             )
         )
         window.setFrame(initialFrame, display: false)

@@ -94,6 +94,7 @@ final class AppRuntime {
     let statusItemController: StatusItemController
     let displayService: SystemDisplayService
     let hotKeyStartupMode: HotKeyStartupMode
+    let restorePerformanceMode: RestoreInteractivePerformanceMode
     #if DEBUG
     let diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder?
     let diagnosticConfiguration: DiagnosticProofConfiguration?
@@ -160,6 +161,7 @@ final class AppRuntime {
         enforcesDiagnosticControllerCohort: Bool = true,
         dependencies: DependencyContainer? = nil,
         hotKeyStartupMode: HotKeyStartupMode? = nil,
+        restorePerformanceMode: RestoreInteractivePerformanceMode = .normal,
         startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
     ) {
         self.init(
@@ -169,6 +171,7 @@ final class AppRuntime {
             enforcesDiagnosticControllerCohort: enforcesDiagnosticControllerCohort,
             dependencies: dependencies,
             hotKeyStartupModeObject: hotKeyStartupMode,
+            restorePerformanceMode: restorePerformanceMode,
             startupSeams: startupSeams
         )
     }
@@ -177,6 +180,7 @@ final class AppRuntime {
         proofLevel: OverlayPanelLevel = .statusBar,
         dependencies: DependencyContainer? = nil,
         hotKeyStartupMode: HotKeyStartupMode = .product,
+        restorePerformanceMode: RestoreInteractivePerformanceMode = .normal,
         startupSeams: AppRuntimeStartupSeams = AppRuntimeStartupSeams()
     ) {
         self.init(
@@ -186,6 +190,7 @@ final class AppRuntime {
             enforcesDiagnosticControllerCohort: true,
             dependencies: dependencies,
             hotKeyStartupModeObject: hotKeyStartupMode,
+            restorePerformanceMode: restorePerformanceMode,
             startupSeams: startupSeams
         )
     }
@@ -198,6 +203,7 @@ final class AppRuntime {
         enforcesDiagnosticControllerCohort: Bool,
         dependencies suppliedDependencies: DependencyContainer?,
         hotKeyStartupModeObject: Any?,
+        restorePerformanceMode: RestoreInteractivePerformanceMode,
         startupSeams: AppRuntimeStartupSeams
     ) {
         #if DEBUG
@@ -227,6 +233,7 @@ final class AppRuntime {
         let controllerWindowController = ControllerWindowController(
             model: model,
             performanceRegistry: dependencies.performanceRegistry,
+            restorePerformanceGate: dependencies.restorePerformanceGate,
             operationRecorder: { [weak diagnosticEvidenceRecorder, weak model] operation in
                 diagnosticEvidenceRecorder?.record(
                     kind: .controllerOperation,
@@ -238,7 +245,8 @@ final class AppRuntime {
         #else
         let controllerWindowController = ControllerWindowController(
             model: model,
-            performanceRegistry: dependencies.performanceRegistry
+            performanceRegistry: dependencies.performanceRegistry,
+            restorePerformanceGate: dependencies.restorePerformanceGate
         )
         #endif
 
@@ -258,6 +266,7 @@ final class AppRuntime {
         #else
         hotKeyStartupMode = hotKeyStartupModeObject as? HotKeyStartupMode ?? .product
         #endif
+        self.restorePerformanceMode = restorePerformanceMode
         self.startupSeams = startupSeams
         #if DEBUG
         self.diagnosticConfiguration = diagnosticConfiguration
@@ -288,12 +297,20 @@ final class AppRuntime {
         }
     }
 
-    func startForTesting(afterRestore: @MainActor () -> Void = {}) async {
-        await runStartup(afterRestore: afterRestore)
+    func startForTesting(
+        restorePerformanceMode: RestoreInteractivePerformanceMode? = nil,
+        afterRestore: @MainActor () -> Void = {}
+    ) async {
+        await runStartup(
+            restorePerformanceMode: restorePerformanceMode,
+            afterRestore: afterRestore
+        )
     }
 
     func stopAndFlush() async -> Bool {
-        startupTask?.cancel()
+        let task = startupTask
+        task?.cancel()
+        _ = await task?.value
         startupTask = nil
         dependencies.restorePerformanceGate.cancel()
         return await lifecycleCoordinator.stopAndFlush()
@@ -321,7 +338,10 @@ final class AppRuntime {
         }
     }
 
-    private func runStartup(afterRestore: @MainActor () -> Void = {}) async {
+    private func runStartup(
+        restorePerformanceMode overrideMode: RestoreInteractivePerformanceMode? = nil,
+        afterRestore: @MainActor () -> Void = {}
+    ) async {
         #if DEBUG
         if hotKeyStartupMode == .legacyDiagnostic {
             diagnosticObserverSet?.install(
@@ -335,18 +355,16 @@ final class AppRuntime {
         controllerWindowController.presentShieldedControllerAtStartup(on: nil)
 
         startupSeams.record(.load)
-        dependencies.restorePerformanceGate.begin(reason: .restore)
+        dependencies.restorePerformanceGate.begin(
+            reason: .restore,
+            mode: overrideMode ?? restorePerformanceMode
+        )
         let loadResult: SnapshotLoadResult
         if let load = startupSeams.load {
             loadResult = await load()
         } else {
             loadResult = await dependencies.snapshotStore.load()
         }
-        guard !Task.isCancelled else {
-            dependencies.restorePerformanceGate.cancel()
-            return
-        }
-
         switch loadResult {
         case .loaded(let restored):
             model.send(.restore(restored.snapshot))
@@ -357,8 +375,15 @@ final class AppRuntime {
         }
         startupSeams.record(.restore)
         dependencies.restorePerformanceGate.restoreCompleted()
-        if overlayController.readerTextSystem.viewportAdapter?.attachmentView?.window != nil {
+        if let viewport = overlayController.readerTextSystem.viewportAdapter,
+            viewport.attachmentView?.window != nil
+        {
             dependencies.restorePerformanceGate.readerAttached()
+            viewport.ensureLayout()
+        }
+        guard !Task.isCancelled else {
+            dependencies.restorePerformanceGate.cancel()
+            return
         }
         afterRestore()
 

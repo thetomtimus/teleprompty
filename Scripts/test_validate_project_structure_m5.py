@@ -366,17 +366,17 @@ EXPECTED_PERFORMANCE_CONTRACT_MARKERS = (
     (
         "five-memory-samples",
         "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
-        "XCTAssertEqual(result.liveBytes.count, 5)",
+        "XCTAssertEqual(externalRecord.allocationsLiveBytes.count, 5)",
     ),
     (
         "mib-divisor",
         "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
-        "Double($0) / 1_048_576",
+        "let liveMiB = externalRecord.allocationsLiveBytes.map { Double($0) / 1_048_576 }",
     ),
     (
         "five-point-ols-x",
         "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
-        "x: [1, 2, 3, 4, 5]",
+        "y: liveMiB",
     ),
     (
         "ols-slope-one-mib-per-minute",
@@ -585,6 +585,7 @@ EXPECTED_LEDGER_TITLES = (
     "Measure hot paths without recording lecture identity",
     "Hold 50,000-word lectures to recorded responsiveness limits",
     "Keep M5 evidence reproducible without rewriting prior proof",
+    "Prevent replay evidence from outrunning the measured product path",
 )
 
 EXPECTED_PRIOR_RED_GREEN_COMMITS = (
@@ -1026,7 +1027,7 @@ class Milestone5ValidatorContractTests(unittest.TestCase):
         path = "docs/validation/m5-display-crash-quit-result.md"
         marker = EXPECTED_REVIEW_PENDING_TEMPLATE_MARKERS[0]
         source = VALIDATOR.read(path)
-        canonical = source + f"\n{marker}\n"
+        canonical = source if marker in source.splitlines() else source + f"\n{marker}\n"
         violations = self.violations_with(
             {path: canonical.replace(marker, "removed-native-callback-stress", 1)}
         )

@@ -6,6 +6,7 @@ struct ScriptEditorTextView: NSViewRepresentable {
     let text: String
     let revision: UInt64
     let performanceRegistry: PerformanceIntervalRegistry
+    let restorePerformanceGate: RestoreInteractivePerformanceGate?
     let onEdit: @MainActor (ScriptTextEdit) -> Void
 
     @MainActor
@@ -16,12 +17,14 @@ struct ScriptEditorTextView: NSViewRepresentable {
             text: String,
             revision: UInt64,
             performanceRegistry: PerformanceIntervalRegistry,
+            restorePerformanceGate: RestoreInteractivePerformanceGate?,
             onEdit: @escaping @MainActor (ScriptTextEdit) -> Void
         ) {
             system = EditorTextSystem(
                 text: text,
                 revision: revision,
                 performanceRegistry: performanceRegistry,
+                restorePerformanceGate: restorePerformanceGate,
                 onEdit: onEdit
             )
         }
@@ -33,6 +36,7 @@ struct ScriptEditorTextView: NSViewRepresentable {
             text: text,
             revision: revision,
             performanceRegistry: performanceRegistry,
+            restorePerformanceGate: restorePerformanceGate,
             onEdit: onEdit
         )
     }

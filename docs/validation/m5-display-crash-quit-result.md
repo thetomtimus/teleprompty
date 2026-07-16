@@ -17,6 +17,7 @@ Ordinary quit: PENDING
 Callback and Carbon teardown order: PENDING
 M3 native evidence: PENDING
 M4 native evidence: PENDING
+Native SystemDisplay callback lifetime stress: PENDING
 Promotion gate: external exact source/app SHA only
 
 This additive record contains no native, AppKit, Carbon, Keynote, crash, quit, or physical-display

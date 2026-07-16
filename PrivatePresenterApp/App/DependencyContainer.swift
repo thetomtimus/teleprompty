@@ -297,6 +297,7 @@ final class AppEffectAdapter {
             let generation,
             let wasPlaying
         ):
+            restorePerformanceGate?.syntheticEditAccepted()
             let result: ScrollMutationResult
             if let session = session() {
                 if !session.isBound(to: generation) {
@@ -351,6 +352,12 @@ final class AppEffectAdapter {
                 for: edit.revision,
                 outcome: result.outcome == .failed ? .failure : .success
             )
+            if result.outcome != .failed,
+                overlayController.readerTextSystem.appliedRevision == edit.revision,
+                overlayController.readerTextSystem.textStorage.string == postEditDocument
+            {
+                restorePerformanceGate?.syntheticEditReflectedInReader()
+            }
             model?.send(.scrollMutationCompleted(result))
         case .replaceReader(let text, let revision, let reason, let generation, let anchor):
             overlayController.readerTextSystem.replaceAuthoritatively(
@@ -757,6 +764,7 @@ final class DependencyContainer {
         orderingMode: OverlayPanelOrderingMode = .frontRegardless,
         diagnosticRecorder: DiagnosticEvidenceRecorder? = nil,
         performanceSignposter: any PerformanceSignposting = PerformanceSignposter(),
+        performanceRegistry: PerformanceIntervalRegistry? = nil,
         snapshotStore: SnapshotStore? = nil,
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil
     ) {
@@ -765,6 +773,7 @@ final class DependencyContainer {
             orderingModeObject: orderingMode,
             diagnosticRecorderObject: diagnosticRecorder,
             performanceSignposter: performanceSignposter,
+            performanceRegistry: performanceRegistry,
             snapshotStore: snapshotStore,
             terminationFlushOverride: terminationFlushOverride
         )
@@ -773,6 +782,7 @@ final class DependencyContainer {
     convenience init(
         proofLevel: OverlayPanelLevel,
         performanceSignposter: any PerformanceSignposting = PerformanceSignposter(),
+        performanceRegistry: PerformanceIntervalRegistry? = nil,
         snapshotStore: SnapshotStore? = nil,
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil
     ) {
@@ -781,6 +791,7 @@ final class DependencyContainer {
             orderingModeObject: nil,
             diagnosticRecorderObject: nil,
             performanceSignposter: performanceSignposter,
+            performanceRegistry: performanceRegistry,
             snapshotStore: snapshotStore,
             terminationFlushOverride: terminationFlushOverride
         )
@@ -792,6 +803,7 @@ final class DependencyContainer {
         orderingModeObject: Any?,
         diagnosticRecorderObject: AnyObject?,
         performanceSignposter: any PerformanceSignposting,
+        performanceRegistry suppliedPerformanceRegistry: PerformanceIntervalRegistry?,
         snapshotStore: SnapshotStore?,
         terminationFlushOverride: (@Sendable () async -> Bool)?
     ) {
@@ -801,9 +813,8 @@ final class DependencyContainer {
             ?? .frontRegardless
         let diagnosticRecorder = diagnosticRecorderObject as? DiagnosticEvidenceRecorder
         #endif
-        let performanceRegistry = PerformanceIntervalRegistry(
-            signposter: performanceSignposter
-        )
+        let performanceRegistry = suppliedPerformanceRegistry
+            ?? PerformanceIntervalRegistry(signposter: performanceSignposter)
         let restorePerformanceGate = RestoreInteractivePerformanceGate(
             registry: performanceRegistry
         )
