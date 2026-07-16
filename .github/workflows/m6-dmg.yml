@@ -19,13 +19,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Preserve the checksummed ignored M6 handoff
+        run: |
+          set -euo pipefail
+          handoff='.omx/handoff/private-presenter-m6'
+          test -d "$handoff"
+          (cd "$handoff" && shasum -a 256 -c m6-artifacts.sha256)
+          mkdir -p /tmp/private-presenter-handoff
+          ditto "$handoff" /tmp/private-presenter-handoff/private-presenter-m6
+
       - name: Pin the exact verified M6 source candidate
         run: |
           set -euo pipefail
           expected='e96a09782d14b9fb6f7e334431713da5079dac67'
           git checkout --detach "$expected"
+          mkdir -p .omx/handoff
+          ditto /tmp/private-presenter-handoff/private-presenter-m6 \
+            .omx/handoff/private-presenter-m6
           test "$(git rev-parse HEAD)" = "$expected"
           test -z "$(git status --porcelain=v1)"
+          (cd .omx/handoff/private-presenter-m6 && \
+            shasum -a 256 -c m6-artifacts.sha256 && \
+            git bundle verify private-presenter-m6-wsl.bundle)
 
       - name: Install pinned XcodeGen
         run: |
