@@ -689,6 +689,7 @@ final class AppModel {
         effectHandler(
             .updateReaderAttributes(
                 fontSize: preferences.fontSizePoints,
+                fontWeight: preferences.fontWeight,
                 alignment: preferences.textAlignment,
                 activeBandEnabled: preferences.isActiveBandEnabled,
                 generation: generation,
@@ -1010,6 +1011,7 @@ final class AppModel {
             ),
             .updateReaderAttributes(
                 fontSize: preferences.fontSizePoints,
+                fontWeight: preferences.fontWeight,
                 alignment: preferences.textAlignment,
                 activeBandEnabled: preferences.isActiveBandEnabled,
                 generation: generation,

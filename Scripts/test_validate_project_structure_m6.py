@@ -173,7 +173,7 @@ EXPECTED_M2_SOURCE_MARKERS = (
     (
         "reader-weight-parameter",
         "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
-        "fontWeight: TeleprompterFontWeight,",
+        "fontWeight: TeleprompterFontWeight = .regular,",
         1,
     ),
     (
@@ -201,6 +201,36 @@ EXPECTED_M2_SOURCE_MARKERS = (
         1,
     ),
     (
+        "band-leading-token",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 130.0 / 255, green: 160.0 / 255, blue: 213.0 / 255, opacity: 0.28",
+        1,
+    ),
+    (
+        "band-middle-token",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 113.0 / 255, green: 145.0 / 255, blue: 202.0 / 255, opacity: 0.35",
+        1,
+    ),
+    (
+        "band-trailing-token",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 130.0 / 255, green: 160.0 / 255, blue: 213.0 / 255, opacity: 0.20",
+        1,
+    ),
+    (
+        "band-accent-token",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 190.0 / 255, green: 211.0 / 255, blue: 248.0 / 255, opacity: 0.62",
+        1,
+    ),
+    (
+        "band-radius",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "static let activeBandRadius: CGFloat = 8",
+        1,
+    ),
+    (
         "line-measure-cap",
         "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
         "min(1_050, max(0, size.width - 2 * effectiveReadingSideInset))",
@@ -209,7 +239,7 @@ EXPECTED_M2_SOURCE_MARKERS = (
     (
         "cached-band-query",
         "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
-        "func cachedActiveBandLineFragments(viewportFraction: Double)",
+        "func cachedActiveBandLineFragments(\n        viewportFraction: Double",
         1,
     ),
     (
@@ -221,7 +251,7 @@ EXPECTED_M2_SOURCE_MARKERS = (
     (
         "layout-before-band-query",
         "PrivatePresenterApp/Overlay/ReaderTextView.swift",
-        "viewportAdapter.ensureLayout()\n            resolvedBandFragments = viewportAdapter.cachedActiveBandLineFragments(",
+        "viewportAdapter.ensureLayout()\n        resolvedBandFragments = viewportAdapter.cachedActiveBandLineFragments(",
         1,
     ),
     (

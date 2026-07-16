@@ -200,7 +200,10 @@ final class ReaderTextSystemTests: XCTestCase {
 
         let attributes = reader.textStorage.attributes(at: 0, effectiveRange: nil)
         XCTAssertEqual((attributes[.font] as? NSFont)?.pointSize, 72)
-        XCTAssertEqual(attributes[.foregroundColor] as? NSColor, NSColor.white)
+        XCTAssertEqual(
+            attributes[.foregroundColor] as? NSColor,
+            OverlayVisualTokens.readingText.appKitColor
+        )
         XCTAssertEqual(
             (attributes[.paragraphStyle] as? NSParagraphStyle)?.alignment,
             .center

@@ -21,6 +21,7 @@ final class ReaderTextSystem {
     private(set) var textMutationCount = 0
     private(set) var isActiveBandEnabled = true
     private var readerAttributes: [NSAttributedString.Key: Any] = [:]
+    private(set) var effectiveFont = NSFont.systemFont(ofSize: 42, weight: .regular)
     private var pendingLayoutReason: PerformanceSignpostReason? = .initial
     private(set) weak var viewportAdapter: ReaderViewportAdapter?
     var onResyncRequested: (@MainActor (UInt64) -> Void)?
@@ -48,6 +49,9 @@ final class ReaderTextSystem {
 
         textView.isEditable = false
         textView.isSelectable = false
+        textView.isRichText = false
+        textView.isAutomaticLinkDetectionEnabled = false
+        textView.isAutomaticTextReplacementEnabled = false
         textView.drawsBackground = false
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
@@ -61,10 +65,9 @@ final class ReaderTextSystem {
         textView.setAccessibilityLabel(accessibility.label)
         textView.setAccessibilityHelp(accessibility.help)
         configureViewport(NSSize(width: 640, height: 360))
-        activeBandView.wantsLayer = true
-        activeBandView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
         textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
         textMutationCount += 1
+        updateAttributes(fontSize: 42, fontWeight: .regular, alignment: .left)
     }
 
     func apply(_ edit: ScriptTextEdit) {
@@ -147,12 +150,22 @@ final class ReaderTextSystem {
         isAwaitingResync = false
     }
 
-    func updateAttributes(fontSize: Double, alignment: TeleprompterTextAlignment) {
+    func updateAttributes(
+        fontSize: Double,
+        fontWeight: TeleprompterFontWeight = .regular,
+        alignment: TeleprompterTextAlignment
+    ) {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment == .center ? .center : .left
+        paragraph.lineHeightMultiple = 1.42
+        paragraph.paragraphSpacing = 0
+        paragraph.hyphenationFactor = 0
+        effectiveFont = NSFont.systemFont(
+            ofSize: CGFloat(fontSize), weight: Self.appKitWeight(for: fontWeight)
+        )
         readerAttributes = [
-            .font: NSFont.systemFont(ofSize: CGFloat(fontSize)),
-            .foregroundColor: NSColor.white,
+            .font: effectiveFont,
+            .foregroundColor: OverlayVisualTokens.readingText.appKitColor,
             .paragraphStyle: paragraph,
         ]
         if textStorage.length > 0 {
@@ -166,7 +179,12 @@ final class ReaderTextSystem {
     func configureViewport(_ size: NSSize, documentHeight: CGFloat? = nil) {
         let width = max(size.width, 1)
         let height = max(size.height, 1)
+        let metrics = OverlayLayoutMetrics(size: NSSize(width: width, height: height))
         let contentHeight = max(height, documentHeight ?? height)
+        textView.textContainerInset = NSSize(
+            width: metrics.effectiveReadingSideInset,
+            height: 24
+        )
         textView.frame = NSRect(x: 0, y: 0, width: width, height: contentHeight)
         textView.minSize = NSSize(width: 0, height: height)
         textView.maxSize = NSSize(
@@ -178,6 +196,22 @@ final class ReaderTextSystem {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = true
+    }
+
+    static func appKitWeight(for weight: TeleprompterFontWeight) -> NSFont.Weight {
+        switch weight {
+        case .regular: .regular
+        case .medium: .medium
+        case .semibold: .semibold
+        }
+    }
+
+    func fallbackLineHeight(backingScaleFactor: CGFloat) -> CGFloat {
+        let scale = backingScaleFactor.isFinite && backingScaleFactor > 0
+            ? backingScaleFactor : 1
+        let rawHeight =
+            (effectiveFont.ascender - effectiveFont.descender + effectiveFont.leading) * 1.42
+        return ceil(rawHeight * scale) / scale
     }
 
     #if DEBUG

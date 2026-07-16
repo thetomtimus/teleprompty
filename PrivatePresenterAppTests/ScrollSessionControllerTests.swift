@@ -116,8 +116,12 @@ final class ScrollSessionControllerTests: XCTestCase {
 
     func testBandUsesPersistedViewportFractionAndFixedHeight() {
         let viewport = makeViewport(text: "Band", viewportFraction: 0.3)
+        let measuredHeight = viewport.container.resolvedActiveBandHeight
 
-        XCTAssertEqual(viewport.system.activeBandView.frame.height, 84, accuracy: 1e-9)
+        XCTAssertGreaterThan(measuredHeight, 0)
+        XCTAssertEqual(
+            viewport.system.activeBandView.frame.height, measuredHeight, accuracy: 1e-9
+        )
         XCTAssertEqual(
             viewport.system.activeBandView.frame.midY,
             viewport.container.bounds.height * 0.3,
@@ -126,7 +130,9 @@ final class ScrollSessionControllerTests: XCTestCase {
 
         viewport.adapter.setClipOriginY(min(20, viewport.adapter.maximumOffset))
 
-        XCTAssertEqual(viewport.system.activeBandView.frame.height, 84, accuracy: 1e-9)
+        XCTAssertEqual(
+            viewport.system.activeBandView.frame.height, measuredHeight, accuracy: 1e-9
+        )
         XCTAssertEqual(
             viewport.system.activeBandView.frame.midY,
             viewport.container.bounds.height * 0.3,

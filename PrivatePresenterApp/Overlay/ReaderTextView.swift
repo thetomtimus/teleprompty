@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -32,12 +33,30 @@ final class ReaderClipView: NSClipView {
 
 @MainActor
 final class ReaderActiveBandView: NSView {
+    private let gradientLayer = CAGradientLayer()
+    private let accentLayer = CALayer()
+
     convenience init() {
         self.init(frame: .zero)
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.cornerRadius = OverlayVisualTokens.activeBandRadius
+        layer?.cornerCurve = .continuous
+        gradientLayer.colors = [
+            OverlayVisualTokens.activeBandLeading.appKitColor.cgColor,
+            OverlayVisualTokens.activeBandMiddle.appKitColor.cgColor,
+            OverlayVisualTokens.activeBandTrailing.appKitColor.cgColor,
+        ]
+        gradientLayer.locations = [0, 0.5, 1]
+        gradientLayer.startPoint = CGPoint(x: 0, y: 0.5)
+        gradientLayer.endPoint = CGPoint(x: 1, y: 0.5)
+        accentLayer.backgroundColor = OverlayVisualTokens.activeBandAccent.appKitColor.cgColor
+        layer?.addSublayer(gradientLayer)
+        layer?.addSublayer(accentLayer)
         setAccessibilityElement(false)
     }
 
@@ -49,12 +68,21 @@ final class ReaderActiveBandView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         nil
     }
+
+    override func layout() {
+        super.layout()
+        gradientLayer.frame = bounds
+        accentLayer.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: min(OverlayVisualTokens.activeBandAccentWidth, bounds.width),
+            height: bounds.height
+        )
+    }
 }
 
 @MainActor
 final class ReaderViewportContainerView: NSView {
-    static let activeBandHeight = 84.0
-
     let backgroundView = NSView()
     let scrollView = ReaderScrollView()
     private let system: ReaderTextSystem
@@ -64,6 +92,9 @@ final class ReaderViewportContainerView: NSView {
     private let onBoundsWillChange: @MainActor () -> Void
     private let onBoundsChanged: @MainActor () -> Void
     private(set) var viewportAdapter: ReaderViewportAdapter!
+    private(set) var resolvedBandFragments: [ReaderViewportAdapter.LineFragmentEvidence] = []
+    private(set) var resolvedActiveBandHeight: CGFloat = 0
+    private(set) var maximumActiveBandHeight: CGFloat = 0
 
     override var isFlipped: Bool { true }
 
@@ -135,16 +166,69 @@ final class ReaderViewportContainerView: NSView {
         super.layout()
         backgroundView.frame = bounds
         scrollView.frame = bounds
-        let bandHeight = CGFloat(Self.activeBandHeight)
-        system.activeBandView.frame = NSRect(
-            x: bounds.minX,
-            y: bounds.height * CGFloat(viewportFraction) - bandHeight / 2,
-            width: bounds.width,
-            height: bandHeight
-        )
-        if bounds.width > 1, bounds.height > 1 {
-            viewportAdapter.ensureLayout()
+        guard bounds.width > 1, bounds.height > 1 else {
+            resolvedBandFragments = []
+            resolvedActiveBandHeight = 0
+            maximumActiveBandHeight = 0
+            system.activeBandView.frame = .zero
+            return
         }
+
+        viewportAdapter.ensureLayout()
+        resolvedBandFragments = viewportAdapter.cachedActiveBandLineFragments(
+            viewportFraction: viewportFraction
+        )
+        let metrics = OverlayLayoutMetrics(size: bounds.size)
+        maximumActiveBandHeight = metrics.maximumActiveBandHeight
+        let backingScale = window?.backingScaleFactor
+            ?? NSScreen.main?.backingScaleFactor ?? 1
+        let fallbackLineHeight = system.fallbackLineHeight(
+            backingScaleFactor: backingScale
+        )
+        resolvedActiveBandHeight = Self.resolvedActiveBandHeight(
+            fragments: resolvedBandFragments,
+            fallbackLineHeight: fallbackLineHeight,
+            maximumHeight: maximumActiveBandHeight
+        )
+
+        let bandMinX = max(0, metrics.effectiveReadingSideInset - 18)
+        let bandMaxX = min(
+            bounds.width,
+            metrics.effectiveReadingSideInset + metrics.readableLineWidth + 18
+        )
+        let targetMidY = bounds.height * CGFloat(viewportFraction)
+        let bandY = min(
+            max(0, targetMidY - resolvedActiveBandHeight / 2),
+            max(0, bounds.height - resolvedActiveBandHeight)
+        )
+        system.activeBandView.frame = NSRect(
+            x: bandMinX,
+            y: bandY,
+            width: max(0, bandMaxX - bandMinX),
+            height: resolvedActiveBandHeight
+        )
+        system.activeBandView.needsLayout = true
+        system.activeBandView.layoutSubtreeIfNeeded()
+    }
+
+    static func resolvedActiveBandHeight(
+        fragments: [ReaderViewportAdapter.LineFragmentEvidence],
+        fallbackLineHeight: CGFloat,
+        maximumHeight: CGFloat
+    ) -> CGFloat {
+        let unconstrained: CGFloat
+        if fragments.count >= 2 {
+            unconstrained = fragments.prefix(2).reduce(12) { partial, fragment in
+                partial + fragment.frame.height
+            }
+        } else if let fragment = fragments.first {
+            unconstrained = 2 * fragment.frame.height + 12
+        } else {
+            unconstrained = 2 * fallbackLineHeight + 12
+        }
+        let acceptedMaximum = maximumHeight.isFinite ? max(0, maximumHeight) : 0
+        let acceptedHeight = unconstrained.isFinite ? max(0, unconstrained) : 0
+        return min(acceptedHeight, acceptedMaximum)
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {

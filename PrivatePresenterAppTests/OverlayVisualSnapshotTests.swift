@@ -100,11 +100,27 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertEqual(compact.tier, .compact)
         XCTAssertEqual(standard.tier, .standard)
         XCTAssertEqual(spacious.tier, .spacious)
-        XCTAssertEqual((compact.headerHeight, compact.readingSideInset), (52, 20))
-        XCTAssertEqual((standard.headerHeight, standard.readingSideInset), (72, 48))
-        XCTAssertEqual((spacious.headerHeight, spacious.readingSideInset), (92, 52))
+        XCTAssertEqual(compact.headerHeight, 52)
+        XCTAssertEqual(compact.readingSideInset, 20)
+        XCTAssertEqual(compact.readingTopReserve, 58)
+        XCTAssertEqual(compact.readingBottomReserve, 88)
+        XCTAssertEqual(standard.headerHeight, 72)
+        XCTAssertEqual(standard.readingSideInset, 48)
+        XCTAssertEqual(standard.readingTopReserve, 96)
+        XCTAssertEqual(standard.readingBottomReserve, 90)
+        XCTAssertEqual(spacious.headerHeight, 92)
+        XCTAssertEqual(spacious.readingSideInset, 52)
+        XCTAssertEqual(spacious.readingTopReserve, 124)
+        XCTAssertEqual(spacious.readingBottomReserve, 114)
         XCTAssertEqual(wide.effectiveReadingSideInset, 195)
         XCTAssertLessThanOrEqual(wide.readableLineWidth, 1_050)
+
+        system.configureViewport(NSSize(width: 1_440, height: 460))
+        XCTAssertEqual(system.textView.textContainerInset.width, 195)
+        XCTAssertLessThanOrEqual(
+            system.textView.frame.width - 2 * system.textView.textContainerInset.width,
+            1_050
+        )
     }
 
     func testPersistedWeightMapsWithoutReplacingText() {
@@ -166,7 +182,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         let nearestTie = ReaderViewportAdapter.selectActiveBandLineFragments(
             from: lines, targetY: 25
         )
-        XCTAssertEqual(nearestTie.map(\.utf16Range), [1..<2, 2..<3])
+        XCTAssertEqual(nearestTie.map(\.utf16Range), [0..<1, 1..<2])
     }
 
     func testActiveBandOneAndZeroFragmentFallbacksAndCompactClampDoNotClipGlyphs() {
@@ -209,7 +225,25 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertFalse(querySource.prefix(1_200).contains("NSTextLayoutManager("))
     }
 
-    func testLiteralTextAndBandContrastThresholds() {
+    func testLiteralTextAndBandContrastThresholds() throws {
+        try assertColor(
+            OverlayVisualTokens.activeBandLeading.appKitColor,
+            red: 130, green: 160, blue: 213, alpha: 0.28
+        )
+        try assertColor(
+            OverlayVisualTokens.activeBandMiddle.appKitColor,
+            red: 113, green: 145, blue: 202, alpha: 0.35
+        )
+        try assertColor(
+            OverlayVisualTokens.activeBandTrailing.appKitColor,
+            red: 130, green: 160, blue: 213, alpha: 0.20
+        )
+        try assertColor(
+            OverlayVisualTokens.activeBandAccent.appKitColor,
+            red: 190, green: 211, blue: 248, alpha: 0.62
+        )
+        XCTAssertEqual(OverlayVisualTokens.activeBandRadius, 8)
+        XCTAssertEqual(OverlayVisualTokens.activeBandAccentWidth, 3)
         let text = (247.0 / 255, 248.0 / 255, 252.0 / 255)
         let cardStops = [
             (52.0 / 255, 70.0 / 255, 111.0 / 255),

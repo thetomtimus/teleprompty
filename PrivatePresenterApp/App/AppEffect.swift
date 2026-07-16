@@ -37,6 +37,7 @@ enum AppEffect: Equatable {
     )
     case updateReaderAttributes(
         fontSize: Double,
+        fontWeight: TeleprompterFontWeight,
         alignment: TeleprompterTextAlignment,
         activeBandEnabled: Bool,
         generation: ScrollSessionGeneration,

@@ -154,6 +154,52 @@ final class ReaderViewportAdapter: ReaderViewport {
         system.layoutCompleted()
     }
 
+    func cachedActiveBandLineFragments(
+        viewportFraction: Double
+    ) -> [LineFragmentEvidence] {
+        let fraction = Self.clampedFraction(viewportFraction)
+        let targetY = clipOriginY + Double(clipSize.height) * fraction
+        return Self.selectActiveBandLineFragments(from: lineMetrics, targetY: targetY)
+    }
+
+    static func selectActiveBandLineFragments(
+        from fragments: [LineFragmentEvidence],
+        targetY: Double
+    ) -> [LineFragmentEvidence] {
+        let candidates = fragments
+            .filter {
+                $0.frame.minY.isFinite && $0.frame.midY.isFinite
+                    && $0.frame.width.isFinite && $0.frame.height.isFinite
+                    && $0.frame.width > 0 && $0.frame.height > 0
+                    && !$0.utf16Range.isEmpty
+            }
+            .sorted { $0.frame.minY < $1.frame.minY }
+        guard !candidates.isEmpty else { return [] }
+
+        let target = targetY.isFinite ? targetY : 0
+        let nearestIndex = candidates.indices.min { lhs, rhs in
+            let leftDistance = abs(Double(candidates[lhs].frame.midY) - target)
+            let rightDistance = abs(Double(candidates[rhs].frame.midY) - target)
+            if leftDistance == rightDistance {
+                return candidates[lhs].frame.midY > candidates[rhs].frame.midY
+            }
+            return leftDistance < rightDistance
+        } ?? candidates.startIndex
+        guard candidates.count > 1 else { return [candidates[nearestIndex]] }
+
+        let adjacentIndices = [nearestIndex - 1, nearestIndex + 1]
+            .filter { candidates.indices.contains($0) }
+        let adjacentIndex = adjacentIndices.min { lhs, rhs in
+            let leftDistance = abs(Double(candidates[lhs].frame.midY) - target)
+            let rightDistance = abs(Double(candidates[rhs].frame.midY) - target)
+            if leftDistance == rightDistance { return lhs > rhs }
+            return leftDistance < rightDistance
+        }
+        guard let adjacentIndex else { return [candidates[nearestIndex]] }
+        return [candidates[nearestIndex], candidates[adjacentIndex]]
+            .sorted { $0.frame.minY < $1.frame.minY }
+    }
+
     func captureAnchor(viewportFraction: Double) -> ReadingAnchor {
         ensureLayout()
         let fraction = Self.clampedFraction(viewportFraction)

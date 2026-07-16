@@ -189,6 +189,7 @@ final class AppEffectAdapter {
         )
         overlayController.readerTextSystem.updateAttributes(
             fontSize: model.preferences.fontSizePoints,
+            fontWeight: model.preferences.fontWeight,
             alignment: model.preferences.textAlignment
         )
         overlayController.readerTextSystem.setActiveBandEnabled(
@@ -396,6 +397,7 @@ final class AppEffectAdapter {
             }
         case .updateReaderAttributes(
             let fontSize,
+            let fontWeight,
             let alignment,
             let activeBandEnabled,
             let generation,
@@ -403,6 +405,7 @@ final class AppEffectAdapter {
         ):
             overlayController.readerTextSystem.updateAttributes(
                 fontSize: fontSize,
+                fontWeight: fontWeight,
                 alignment: alignment
             )
             overlayController.readerTextSystem.setActiveBandEnabled(activeBandEnabled)
