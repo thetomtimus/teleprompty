@@ -114,8 +114,12 @@ final class ScrollSessionControllerTests: XCTestCase {
         XCTAssertNotEqual(viewport.adapter.maximumOffset, expected + 36, accuracy: 1e-9)
     }
 
-    func testBandUsesPersistedViewportFractionAndFixedHeight() {
+    func testBandUsesPersistedViewportFractionInsideReservedReadingRect() {
         let viewport = makeViewport(text: "Band", viewportFraction: 0.3)
+        let metrics = OverlayLayoutMetrics(size: viewport.container.bounds.size)
+        XCTAssertEqual(metrics.tier, .compact)
+        let expectedMidpoint = metrics.readerViewportFrame.minY
+            + metrics.readerViewportFrame.height * 0.3
         let measuredHeight = viewport.container.resolvedActiveBandHeight
 
         XCTAssertGreaterThan(measuredHeight, 0)
@@ -124,7 +128,7 @@ final class ScrollSessionControllerTests: XCTestCase {
         )
         XCTAssertEqual(
             viewport.system.activeBandView.frame.midY,
-            viewport.container.bounds.height * 0.3,
+            expectedMidpoint,
             accuracy: 1e-9
         )
 
@@ -135,7 +139,7 @@ final class ScrollSessionControllerTests: XCTestCase {
         )
         XCTAssertEqual(
             viewport.system.activeBandView.frame.midY,
-            viewport.container.bounds.height * 0.3,
+            expectedMidpoint,
             accuracy: 1e-9
         )
     }

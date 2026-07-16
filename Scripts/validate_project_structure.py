@@ -520,7 +520,7 @@ M3_ADDED_NAMED_TESTS = (
     "testReaderLayerOrderIsBackgroundBandThenTransparentClip",
     "testBottomDocumentPaddingIsExactlySixtyFourPoints",
     "testExistingHeaderIsNotDoubleCountedInMaximumOffset",
-    "testBandUsesPersistedViewportFractionAndFixedHeight",
+    "testBandUsesPersistedViewportFractionInsideReservedReadingRect",
     "testBandIsNonHitTestingAndAccessibilityIgnored",
     "testIncrementalEditRestoresMappedAnchor",
     "testInsertionAtAnchorPausesAndRestoresBoundary",
@@ -1870,6 +1870,7 @@ M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "Scripts/test_validate_project_structure_m3.py",
     "Scripts/test_validate_project_structure_m6.py",
     "Scripts/validate_project_structure.py",
     "Scripts/verify-wsl.sh",
@@ -3478,7 +3479,7 @@ def validate_m6_source() -> list[str]:
     if ".sorted" in selection_source:
         violations.append("visual:band-repair-selection-resort")
     clip_source = adapter_source.split("func setClipOriginY", 1)[-1].split(
-        "func threeCompleteLineStep", 1
+        "func invalidateActiveBandLineMetrics", 1
     )[0]
     if any(marker in clip_source for marker in ("ensureLayout(", "model", ".send(")):
         violations.append("visual:band-repair-clip-owner-creep")

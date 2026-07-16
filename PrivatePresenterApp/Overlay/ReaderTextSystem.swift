@@ -174,6 +174,11 @@ final class ReaderTextSystem {
                 range: NSRange(location: 0, length: textStorage.length)
             )
         }
+        viewportAdapter?.invalidateActiveBandLineMetrics()
+    }
+
+    func refreshActiveBandAfterAttributeChange() {
+        viewportAdapter?.refreshActiveBandAfterAttributeChange()
     }
 
     func configureViewport(

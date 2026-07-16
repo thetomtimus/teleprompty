@@ -449,6 +449,7 @@ final class AppEffectAdapter {
                     )
                 )
             }
+            overlayController.readerTextSystem.refreshActiveBandAfterAttributeChange()
         case .scheduleSnapshot(let snapshot):
             let performancePersistence = performancePersistence
             enqueuePersistence { store in

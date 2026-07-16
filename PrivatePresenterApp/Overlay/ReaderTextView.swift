@@ -95,6 +95,7 @@ final class ReaderViewportContainerView: NSView {
     private(set) var resolvedBandFragments: [ReaderViewportAdapter.LineFragmentEvidence] = []
     private(set) var resolvedActiveBandHeight: CGFloat = 0
     private(set) var maximumActiveBandHeight: CGFloat = 0
+    private var resolvedBandSignature: [Range<Int>] = []
 
     override var isFlipped: Bool { true }
 
@@ -168,6 +169,7 @@ final class ReaderViewportContainerView: NSView {
         guard bounds.width > 1, bounds.height > 1 else {
             scrollView.frame = .zero
             resolvedBandFragments = []
+            resolvedBandSignature = []
             resolvedActiveBandHeight = 0
             maximumActiveBandHeight = 0
             system.activeBandView.frame = .zero
@@ -175,10 +177,12 @@ final class ReaderViewportContainerView: NSView {
         }
 
         let metrics = OverlayLayoutMetrics(size: bounds.size)
-        let readingFrame = metrics.readerViewportFrame
-        scrollView.frame = readingFrame
-        guard readingFrame.width > 1, readingFrame.height > 1 else {
+        scrollView.frame = metrics.readerViewportFrame
+        guard metrics.readerViewportFrame.width > 1,
+            metrics.readerViewportFrame.height > 1
+        else {
             resolvedBandFragments = []
+            resolvedBandSignature = []
             resolvedActiveBandHeight = 0
             maximumActiveBandHeight = 0
             system.activeBandView.frame = .zero
@@ -189,6 +193,22 @@ final class ReaderViewportContainerView: NSView {
         resolvedBandFragments = viewportAdapter.cachedActiveBandLineFragments(
             viewportFraction: viewportFraction
         )
+        refreshActiveBandLayoutFromCachedMetrics(force: true)
+    }
+
+    func refreshActiveBandLayoutFromCachedMetrics(force: Bool = false) {
+        guard bounds.width > 1, bounds.height > 1 else { return }
+        let metrics = OverlayLayoutMetrics(size: bounds.size)
+        let readingFrame = metrics.readerViewportFrame
+        guard readingFrame.width > 1, readingFrame.height > 1 else { return }
+
+        let fragments = viewportAdapter.cachedActiveBandLineFragments(
+            viewportFraction: viewportFraction
+        )
+        let signature = fragments.map(\.utf16Range)
+        guard force || signature != resolvedBandSignature else { return }
+        resolvedBandSignature = signature
+        resolvedBandFragments = fragments
         maximumActiveBandHeight = metrics.maximumActiveBandHeight
         let backingScale = window?.backingScaleFactor
             ?? NSScreen.main?.backingScaleFactor ?? 1
@@ -196,7 +216,7 @@ final class ReaderViewportContainerView: NSView {
             backingScaleFactor: backingScale
         )
         resolvedActiveBandHeight = Self.resolvedActiveBandHeight(
-            fragments: resolvedBandFragments,
+            fragments: fragments,
             fallbackLineHeight: fallbackLineHeight,
             maximumHeight: maximumActiveBandHeight
         )

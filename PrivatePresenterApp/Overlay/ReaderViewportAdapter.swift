@@ -14,6 +14,7 @@ final class ReaderViewportAdapter: ReaderViewport {
     private weak var hostedView: NSView?
     private weak var scrollView: ReaderScrollView?
     private var lineMetrics: [LineFragmentEvidence] = []
+    private var activeBandLineMetricsAreCurrent = false
     private var viewportFraction: Double
 
     private(set) var laidOutTextBottom = 0.0
@@ -52,10 +53,15 @@ final class ReaderViewportAdapter: ReaderViewport {
         system.textMutationCount
     }
 
+    var cachedLineFragmentEvidence: [LineFragmentEvidence] {
+        lineMetrics
+    }
+
     func ensureLayout() {
         guard clipSize.width > 0, clipSize.height > 0 else {
             laidOutTextBottom = 0
             lineMetrics = []
+            activeBandLineMetricsAreCurrent = true
             return
         }
 
@@ -73,6 +79,7 @@ final class ReaderViewportAdapter: ReaderViewport {
         else {
             laidOutTextBottom = 0
             lineMetrics = []
+            activeBandLineMetricsAreCurrent = true
             return
         }
 
@@ -134,6 +141,12 @@ final class ReaderViewportAdapter: ReaderViewport {
                 }
 
                 let bounds = line.typographicBounds
+                guard bounds.minY.isFinite, bounds.midY.isFinite,
+                    bounds.width.isFinite, bounds.height.isFinite,
+                    bounds.width > 0, bounds.height > 0
+                else {
+                    continue
+                }
                 metrics.append(
                     LineFragmentEvidence(
                         utf16Range: lowerBound..<upperBound,
@@ -148,13 +161,14 @@ final class ReaderViewportAdapter: ReaderViewport {
         }
 
         lineMetrics = metrics.sorted { $0.frame.minY < $1.frame.minY }
+        activeBandLineMetricsAreCurrent = true
         laidOutTextBottom = textBottom
         system.configureViewport(
             clipSize,
             documentHeight: CGFloat(laidOutTextBottom + Self.documentBottomPadding),
             layoutSize: hostedView?.bounds.size
         )
-        setClipOriginY(clipOriginY)
+        applyClipOriginY(clipOriginY)
         system.performanceRegistry.end(layoutInterval, outcome: .success)
         system.layoutCompleted()
     }
@@ -172,13 +186,6 @@ final class ReaderViewportAdapter: ReaderViewport {
         targetY: Double
     ) -> [LineFragmentEvidence] {
         let candidates = fragments
-            .filter {
-                $0.frame.minY.isFinite && $0.frame.midY.isFinite
-                    && $0.frame.width.isFinite && $0.frame.height.isFinite
-                    && $0.frame.width > 0 && $0.frame.height > 0
-                    && !$0.utf16Range.isEmpty
-            }
-            .sorted { $0.frame.minY < $1.frame.minY }
         guard !candidates.isEmpty else { return [] }
 
         let target = targetY.isFinite ? targetY : 0
@@ -201,8 +208,9 @@ final class ReaderViewportAdapter: ReaderViewport {
             return leftDistance < rightDistance
         }
         guard let adjacentIndex else { return [candidates[nearestIndex]] }
-        return [candidates[nearestIndex], candidates[adjacentIndex]]
-            .sorted { $0.frame.minY < $1.frame.minY }
+        let firstIndex = min(nearestIndex, adjacentIndex)
+        let secondIndex = max(nearestIndex, adjacentIndex)
+        return [candidates[firstIndex], candidates[secondIndex]]
     }
 
     func captureAnchor(viewportFraction: Double) -> ReadingAnchor {
@@ -244,6 +252,24 @@ final class ReaderViewportAdapter: ReaderViewport {
     }
 
     func setClipOriginY(_ offset: Double) {
+        applyClipOriginY(offset)
+        (hostedView as? ReaderViewportContainerView)?
+            .refreshActiveBandLayoutFromCachedMetrics()
+    }
+
+    func invalidateActiveBandLineMetrics() {
+        activeBandLineMetricsAreCurrent = false
+    }
+
+    func refreshActiveBandAfterAttributeChange() {
+        if !activeBandLineMetricsAreCurrent {
+            ensureLayout()
+        }
+        (hostedView as? ReaderViewportContainerView)?
+            .refreshActiveBandLayoutFromCachedMetrics(force: true)
+    }
+
+    private func applyClipOriginY(_ offset: Double) {
         guard let clipView = scrollView?.contentView as? ReaderClipView else { return }
         clipView.setProgrammaticOriginY(offset, maximumOffset: maximumOffset)
     }

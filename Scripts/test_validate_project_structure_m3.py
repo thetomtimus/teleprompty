@@ -95,7 +95,7 @@ ADDED_NAMES = (
     "testReaderLayerOrderIsBackgroundBandThenTransparentClip",
     "testBottomDocumentPaddingIsExactlySixtyFourPoints",
     "testExistingHeaderIsNotDoubleCountedInMaximumOffset",
-    "testBandUsesPersistedViewportFractionAndFixedHeight",
+    "testBandUsesPersistedViewportFractionInsideReservedReadingRect",
     "testBandIsNonHitTestingAndAccessibilityIgnored",
     "testIncrementalEditRestoresMappedAnchor",
     "testInsertionAtAnchorPausesAndRestoresBoundary",

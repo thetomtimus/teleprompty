@@ -567,6 +567,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "Scripts/test_validate_project_structure_m3.py",
     "Scripts/test_validate_project_structure_m6.py",
     "Scripts/validate_project_structure.py",
     "Scripts/verify-wsl.sh",
@@ -1131,7 +1132,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                     any(item.startswith("evidence:private-surface:") for item in violations)
                 )
 
-    def testM6HistoryIsExactlyEightImmediateRedGreenPairs(self) -> None:
+    def testM6HistoryIsExactlyNineImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
         self.assertEqual(VALIDATOR.validate_m6_history_rows(rows), [])
         self.assertEqual(len(rows), len(EXPECTED_LEDGER_TITLES) * 2)
