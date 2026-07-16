@@ -139,6 +139,7 @@ EXPECTED_LEDGER_TITLES = (
     "Make hosted evidence prove the real private presenter",
     "Keep every review repair auditable on the Mac",
     "Accept only the verified reconstructed M5 handoff",
+    "Make the recovered source compile before packaging",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -664,6 +665,7 @@ EXPECTED_M5_MANIFEST_ENTRIES = (
     "private-presenter-m5-wsl.bundle",
 )
 EXPECTED_FINAL_CHANGED_PATHS = (
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Scrolling/ReadingPositionMapper.swift",
     "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
     "PrivatePresenterApp/App/AppEffect.swift",
     "PrivatePresenterApp/App/AppModel.swift",
@@ -1373,7 +1375,27 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                     any(item.startswith("evidence:private-surface:") for item in violations)
                 )
 
-    def testM6HistoryIsExactlyTwelveImmediateRedGreenPairs(self) -> None:
+    def testM6NativeCompileRepairUsesParserSafeOptionalAndExplicitReturn(self) -> None:
+        source = VALIDATOR.read(
+            "Packages/TeleprompterCore/Sources/TeleprompterCore/Scrolling/ReadingPositionMapper.swift"
+        )
+        self.assertIn(
+            "let minimumDistance = bestCandidates.map { distance($0.offset, fallbackOffset) }.min()",
+            source,
+        )
+        self.assertIn("guard let minimumDistance else {", source)
+        self.assertNotIn(
+            "guard let minimumDistance = bestCandidates\n"
+            "            .map { distance($0.offset, fallbackOffset) }\n"
+            "            .min() else {",
+            source,
+        )
+        invalid_start = source.index("    private static func invalidMapping(")
+        invalid_end = source.index("    private static func mapping(", invalid_start)
+        invalid_mapping = source[invalid_start:invalid_end]
+        self.assertIn("        return mapping(\n", invalid_mapping)
+
+    def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
         self.assertEqual(VALIDATOR.validate_m6_history_rows(rows), [])
         self.assertEqual(len(rows), len(EXPECTED_LEDGER_TITLES) * 2)
