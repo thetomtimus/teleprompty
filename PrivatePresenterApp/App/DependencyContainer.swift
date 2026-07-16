@@ -17,7 +17,6 @@ final class AppEffectAdapter {
     private var persistenceGeneration: UInt64 = 0
     private var isTerminationDraining = false
     private var terminalFlushStarted = false
-    private var terminalFlushSucceeded = false
     lazy var carbonHotKeyService = CarbonHotKeyService(
         registrar: CarbonHotKeyRegistrar(),
         dispatch: { [weak self] action in
@@ -527,7 +526,6 @@ final class AppEffectAdapter {
                 didFlush = false
             }
         }
-        terminalFlushSucceeded = didFlush
         terminalFlushStarted = didFlush
         if !didFlush {
             isTerminationDraining = false

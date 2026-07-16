@@ -402,15 +402,6 @@ final class CarbonHotKeyServiceTests: XCTestCase {
         }
     }
 
-    private func XCTAssertDegradedClean(
-        _ result: HotKeyTransactionResult,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        guard case .degradedClean = result else {
-            return XCTFail("Expected degradedClean, got \(result)", file: file, line: line)
-        }
-    }
 }
 
 @MainActor
