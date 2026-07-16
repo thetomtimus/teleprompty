@@ -29,7 +29,7 @@ EXPECTED_PLAN_COMMIT = "3c1aadd9fb50ab6f335580ebd72e6609f2cfa2f0"
 EXPECTED_PLAN_PARENT = "1ac13dbbdae1c53eea06033c353d22ab0919e8a5"
 EXPECTED_PLAN_PATH = "docs/plans/2026-07-16-milestone-6-reference-faithful-visual-polish.md"
 EXPECTED_M5_TREE = "3d90bcd2c1851b36e0adc774c99a2416da7ba5b8"
-EXPECTED_M5_MANIFEST_SHA256 = "2370a865e22a9e1ea3d38b577e0078a9e2e62d0d02c8d30417621e04d976f8b9"
+EXPECTED_M5_MANIFEST_SHA256 = "29a38045cb4f01c29c5973baeb3ec57de0cda249d52e82e385481a2724f20eae"
 
 EXPECTED_PROTECTED_PATHS = (
     "HANDOFF.md",
@@ -138,6 +138,7 @@ EXPECTED_LEDGER_TITLES = (
     "Make the semantic oracle deterministic without sharing product state",
     "Make hosted evidence prove the real private presenter",
     "Keep every review repair auditable on the Mac",
+    "Accept only the verified reconstructed M5 handoff",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
