@@ -306,6 +306,50 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         }
     }
 
+    // Independent-review contract: this in-process AppRuntime exercise proves semantic
+    // endpoints only. It cannot stand in for a fresh process, the normal-store reset in a
+    // disposable account, the same executable identity, or Instruments timing.
+    func testInProcessLoadTrialIsSemanticOnlyAndCannotProveAbsoluteBaseline() async throws {
+        let fixture = try swiftFixture()
+        let harness = try makeHarness(fixture: fixture)
+        _ = try await harness.preparePristineSnapshot()
+        try await harness.resetToPristineSnapshot()
+
+        let trial = try await harness.runLoadTrial(measured: false)
+
+        XCTAssertEqual(trial.evidenceScope, .inProcessSemanticOnly)
+        XCTAssertFalse(trial.provesPriorProcessTermination)
+        XCTAssertFalse(trial.provesNormalStoreDisposableAccountReset)
+        XCTAssertFalse(trial.provesSameExecutableFreshProcess)
+        XCTAssertFalse(trial.provesInstrumentsTimeProfile)
+        XCTAssertFalse(trial.provesTwoSecondAbsoluteThreshold)
+        XCTAssertFalse(trial.provesAbsoluteLoadBaseline)
+        XCTAssertThrowsError(
+            try M5AbsolutePerformanceEvidenceGate
+                .requireExternalFreshProcessInstrumentsLoadRecord(
+                for: trial
+            )
+        )
+    }
+
+    // Process phys_footprint is useful semantic instrumentation, but it is not the
+    // Allocations live-bytes series required by the absolute five-point OLS gate.
+    func testProcessFootprintCannotSubstituteForInstrumentsAllocationSamples() async throws {
+        let fixture = try swiftFixture()
+        let result = try await makeHarness(fixture: fixture)
+            .runProcessFootprintSemanticProbe(sampleCount: 5)
+
+        XCTAssertEqual(result.memoryEvidenceScope, .processFootprintSemanticOnly)
+        XCTAssertFalse(result.provesInstrumentsAllocationSamples)
+        XCTAssertFalse(result.provesAllocationsLiveBytes)
+        XCTAssertThrowsError(
+            try M5AbsolutePerformanceEvidenceGate
+                .requireExternalInstrumentsAllocationsRecord(
+                for: result
+            )
+        )
+    }
+
     private func assertPristineSnapshot(
         _ receipt: M5PristineSnapshotReceipt,
         file: StaticString = #filePath,

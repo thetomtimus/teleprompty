@@ -107,6 +107,18 @@ EXPECTED_PERFORMANCE_TESTS = (
     "testDelayedFilesystemDoesNotBlockEditAndFinalRevisionFlushes",
 )
 
+EXPECTED_INDEPENDENT_REVIEW_NAMED_TESTS = (
+    "testInProcessLoadTrialIsSemanticOnlyAndCannotProveAbsoluteBaseline",
+    "testProcessFootprintCannotSubstituteForInstrumentsAllocationSamples",
+    "testBenchmarkRestoreRequiresProductEditorEditReaderAndSentinelBeforeEnd",
+    "testRejectedProductEditEndsRealInterval",
+    "testReaderResyncEndsRealInterval",
+    "testDebouncedSaveSupersessionEndsRealIntervals",
+    "testProductTeardownCancelsEveryOpenInterval",
+    "testTerminationDuringDelayedStartupAwaitsLoadedRevisionBeforeExactFlushAndRetry",
+    "testHostedOverlayChromeBridgesHelpAndActualFortyFourPointFrames",
+)
+
 EXPECTED_PROTECTED_PATHS = (
     "HANDOFF.md",
     "IMPLEMENTATION_PLAN.md",
@@ -562,6 +574,10 @@ EXPECTED_PENDING_TEMPLATE_MARKERS = (
     "Promotion gate: external exact source/app SHA only",
 )
 
+EXPECTED_REVIEW_PENDING_TEMPLATE_MARKERS = (
+    "Native SystemDisplay callback lifetime stress: PENDING",
+)
+
 EXPECTED_LEDGER_TITLES = (
     "Keep M5 claims inside the WSL and native evidence boundary",
     "Make every presenter control operable without sight or pointer",
@@ -707,6 +723,12 @@ class Milestone5ValidatorContractTests(unittest.TestCase):
             tuple(VALIDATOR.M5_PERFORMANCE_NAMED_TESTS), EXPECTED_PERFORMANCE_TESTS
         )
 
+    def test_m5_independent_review_test_inventory_is_exact(self) -> None:
+        self.assertEqual(
+            tuple(VALIDATOR.M5_INDEPENDENT_REVIEW_NAMED_TESTS),
+            EXPECTED_INDEPENDENT_REVIEW_NAMED_TESTS,
+        )
+
     def test_m5_protected_and_pending_evidence_inventories_are_exact(self) -> None:
         self.assertEqual(tuple(VALIDATOR.M5_PROTECTED_PATHS), EXPECTED_PROTECTED_PATHS)
         self.assertEqual(
@@ -764,6 +786,12 @@ class Milestone5ValidatorContractTests(unittest.TestCase):
         )
         self.assertEqual(tuple(VALIDATOR.M5_REPLAY_MARKERS), EXPECTED_REPLAY_MARKERS)
 
+    def test_m5_native_callback_stress_field_stays_explicitly_pending(self) -> None:
+        self.assertEqual(
+            tuple(VALIDATOR.M5_REVIEW_PENDING_TEMPLATE_MARKERS),
+            EXPECTED_REVIEW_PENDING_TEMPLATE_MARKERS,
+        )
+
     def test_each_full_required_path_is_enforced(self) -> None:
         for path in EXPECTED_FULL_REQUIRED_PATHS:
             with self.subTest(path=path):
@@ -807,6 +835,54 @@ class Milestone5ValidatorContractTests(unittest.TestCase):
                         {path: source.replace(name, f"removed_{name}", 1)}
                     )
                     self.assertIn(f"missing-test:{name}", violations)
+
+    def test_each_independent_review_named_test_is_enforced(self) -> None:
+        candidates = (
+            "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+            "PrivatePresenterAppTests/PerformanceSignposterTests.swift",
+            "PrivatePresenterAppTests/AppModelTests.swift",
+            "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
+        )
+        for name in EXPECTED_INDEPENDENT_REVIEW_NAMED_TESTS:
+            with self.subTest(name=name):
+                path = self.path_containing(name, candidates)
+                source = VALIDATOR.read(path)
+                self.assertEqual(source.count(name), 1, f"{path}:{name}")
+                violations = self.violations_with(
+                    {path: source.replace(name, f"removed_{name}", 1)}
+                )
+                self.assertIn(f"missing-test:{name}", violations)
+
+    def test_accessibility_help_bridge_and_actual_target_frames_are_enforced(self) -> None:
+        accessibility_path = (
+            "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift"
+        )
+        accessibility_source = VALIDATOR.read(accessibility_path)
+        help_bridge = ".accessibilityHint(Text(entry.help))"
+        self.assertEqual(accessibility_source.count(help_bridge), 1)
+        with self.subTest(contract="help-bridge"):
+            violations = self.violations_with(
+                {
+                    accessibility_path: accessibility_source.replace(
+                        help_bridge, "removed-accessibility-help-bridge", 1
+                    )
+                }
+            )
+            self.assertIn("accessibility:missing-help-bridge", violations)
+
+        overlay_path = "PrivatePresenterApp/Overlay/OverlayChromeView.swift"
+        overlay_source = VALIDATOR.read(overlay_path)
+        target_frame = ".frame(minWidth: 44, minHeight: 44)"
+        self.assertEqual(overlay_source.count(target_frame), 3)
+        with self.subTest(contract="actual-44-point-frame"):
+            violations = self.violations_with(
+                {
+                    overlay_path: overlay_source.replace(
+                        target_frame, "removed-accessibility-target-frame", 1
+                    )
+                }
+            )
+            self.assertIn("accessibility:missing-44-point-frame", violations)
 
     def test_each_fixture_threshold_cadence_offset_p95_ols_and_timeline_marker_is_enforced(
         self,
@@ -946,6 +1022,16 @@ class Milestone5ValidatorContractTests(unittest.TestCase):
             violations = self.violations_with({path: promoted})
             self.assertIn(f"evidence:status-not-pending:{path}", violations)
 
+    def test_native_system_display_callback_lifetime_stress_cannot_disappear(self) -> None:
+        path = "docs/validation/m5-display-crash-quit-result.md"
+        marker = EXPECTED_REVIEW_PENDING_TEMPLATE_MARKERS[0]
+        source = VALIDATOR.read(path)
+        canonical = source + f"\n{marker}\n"
+        violations = self.violations_with(
+            {path: canonical.replace(marker, "removed-native-callback-stress", 1)}
+        )
+        self.assertIn(f"evidence:missing-marker:{path}:{marker}", violations)
+
     def test_each_protected_prior_artifact_remains_byte_exact(self) -> None:
         for path in EXPECTED_PROTECTED_PATHS:
             with self.subTest(path=path):
@@ -1073,6 +1159,39 @@ class Milestone5ValidatorContractTests(unittest.TestCase):
             with self.subTest(checksum=path):
                 violations = self.violations_with({path: mutated})
                 self.assertIn(f"continuation:checksum:{path}", violations)
+
+    def test_source_manifest_is_the_exact_unique_baseline_to_head_path_set(self) -> None:
+        manifest_path = EXPECTED_CONTINUATION_PATHS[2]
+        manifest = VALIDATOR.read(manifest_path)
+        lines = manifest.splitlines()
+        self.assertTrue(lines)
+
+        paths = [line.split("  ", 1)[1] for line in lines]
+        expected_paths = tuple(
+            sorted(
+                filter(
+                    None,
+                    VALIDATOR.git(
+                        "diff",
+                        "--name-only",
+                        "--diff-filter=ACMR",
+                        f"{EXPECTED_BASELINE}..HEAD",
+                    ).stdout.splitlines(),
+                )
+            )
+        )
+        self.assertEqual(tuple(paths), expected_paths)
+        self.assertEqual(len(paths), len(set(paths)))
+
+        with self.subTest(mutation="missing-path"):
+            missing = "\n".join(lines[1:]) + "\n"
+            violations = self.violations_with({manifest_path: missing})
+            self.assertIn("continuation:source-manifest-path-set", violations)
+
+        with self.subTest(mutation="duplicate-path"):
+            duplicate = manifest + lines[0] + "\n"
+            violations = self.violations_with({manifest_path: duplicate})
+            self.assertIn("continuation:source-manifest-duplicate", violations)
 
     def test_aggregate_m2_through_m5_current_source_compatibility_stays_green(self) -> None:
         for milestone in (2, 3, 4, 5):

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import TeleprompterCore
 import XCTest
 
@@ -178,6 +179,39 @@ final class PresenterAccessibilityTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(action.minimumHitSize.height, 44, action.identifier)
             XCTAssertFalse(action.toolTip.isEmpty, action.identifier)
         }
+    }
+
+    func testHostedOverlayChromeBridgesHelpAndActualFortyFourPointFrames() {
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            document: ScriptDocument(text: "synthetic hosted accessibility fixture"),
+            restorationRequired: false
+        )
+        let hosting = NSHostingView(rootView: OverlayChromeView(model: model))
+        hosting.frame = NSRect(x: 0, y: 0, width: 640, height: 80)
+        let window = NSWindow(
+            contentRect: hosting.frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        hosting.layoutSubtreeIfNeeded()
+
+        let expectedLabels = Set(["Start", "Show", "Unlock"])
+        let controls = hostedDescendants(of: hosting).filter {
+            guard let label = $0.accessibilityLabel() else { return false }
+            return expectedLabels.contains(label)
+        }
+
+        XCTAssertEqual(Set(controls.compactMap { $0.accessibilityLabel() }), expectedLabels)
+        for control in controls {
+            let actualFrame = control.convert(control.bounds, to: hosting)
+            XCTAssertGreaterThanOrEqual(actualFrame.width, 44)
+            XCTAssertGreaterThanOrEqual(actualFrame.height, 44)
+            XCTAssertFalse(control.accessibilityHelp()?.isEmpty ?? true)
+        }
+        window.close()
     }
 
     func testReaderBandAndInteractionZonesAreIgnored() {
@@ -404,6 +438,10 @@ final class PresenterAccessibilityTests: XCTestCase {
             retryShortcutsVisible: true,
             topologyStatus: .extended
         )
+    }
+
+    private func hostedDescendants(of view: NSView) -> [NSView] {
+        [view] + view.subviews.flatMap(hostedDescendants(of:))
     }
 
     private func entry(

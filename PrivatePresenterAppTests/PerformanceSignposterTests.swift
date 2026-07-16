@@ -350,6 +350,89 @@ final class PerformanceSignposterTests: XCTestCase {
         )
     }
 
+    func testBenchmarkRestoreRequiresProductEditorEditReaderAndSentinelBeforeEnd() async throws {
+        let recorder = M5PerformanceRecorder()
+        let registry = PerformanceIntervalRegistry(signposter: recorder)
+        let gate = RestoreInteractivePerformanceGate(registry: registry)
+
+        gate.begin(reason: .restore, mode: .benchmark)
+        gate.restoreCompleted()
+        gate.readerAttached()
+        gate.readerFirstLayoutCompleted()
+        await gate.completeAfterMainActorSentinel()
+        XCTAssertEqual(registry.openIntervalCount, 1)
+
+        gate.editorReady()
+        gate.syntheticEditAccepted()
+        XCTAssertEqual(registry.openIntervalCount, 1)
+        gate.syntheticEditReflectedInReader()
+        XCTAssertEqual(registry.openIntervalCount, 1)
+
+        await gate.completeAfterMainActorSentinel()
+        XCTAssertEqual(recorder.completedOperations, [.restoreToInteractive])
+        XCTAssertEqual(registry.openIntervalCount, 0)
+
+        let productRig = try M5ProductPerformanceTerminalRig()
+        try await productRig.driveBenchmarkRestoreThroughProduct()
+        XCTAssertEqual(
+            productRig.restoreMilestones,
+            [
+                .restoreCompleted,
+                .readerAttached,
+                .readerFirstLayoutCompleted,
+                .editorReady,
+                .syntheticEditAccepted,
+                .syntheticEditReflectedInReader,
+                .mainActorSentinelCompleted,
+            ]
+        )
+        XCTAssertEqual(productRig.restoreOpenCountsAfterEachMilestone, [1, 1, 1, 1, 1, 1, 0])
+        XCTAssertFalse(productRig.usedManufacturedBeginEnd)
+    }
+
+    func testRejectedProductEditEndsRealInterval() throws {
+        let rig = try M5ProductPerformanceTerminalRig()
+
+        try rig.driveRejectedEditorEditThroughProduct()
+
+        XCTAssertEqual(rig.recorder.outcomes(for: .editToVisible), [.failure])
+        XCTAssertEqual(rig.registry.openIntervalCount, 0)
+        XCTAssertFalse(rig.usedManufacturedBeginEnd)
+    }
+
+    func testReaderResyncEndsRealInterval() throws {
+        let rig = try M5ProductPerformanceTerminalRig()
+
+        try rig.driveReaderRevisionGapAndProductResync()
+
+        XCTAssertTrue(rig.recorder.completedOperations.contains(.readerLayout))
+        XCTAssertEqual(rig.registry.openIntervalCount, 0)
+        XCTAssertFalse(rig.usedManufacturedBeginEnd)
+    }
+
+    func testDebouncedSaveSupersessionEndsRealIntervals() async throws {
+        let rig = try M5ProductPerformanceTerminalRig()
+
+        try await rig.driveTwoProductSavesThatSupersedeDebounce()
+
+        XCTAssertTrue(
+            rig.recorder.outcomes(for: .snapshotWrite).contains(.cancelled)
+        )
+        XCTAssertEqual(rig.registry.openIntervalCount, 0)
+        XCTAssertFalse(rig.usedManufacturedBeginEnd)
+    }
+
+    func testProductTeardownCancelsEveryOpenInterval() async throws {
+        let rig = try M5ProductPerformanceTerminalRig()
+
+        try await rig.startProductRuntimeThenTeardown()
+
+        XCTAssertTrue(rig.recorder.openTokens.isEmpty)
+        XCTAssertEqual(rig.registry.openIntervalCount, 0)
+        XCTAssertEqual(rig.recorder.beginCount, rig.recorder.endCount)
+        XCTAssertFalse(rig.usedManufacturedBeginEnd)
+    }
+
     private func snapshot(revision: UInt64) -> PersistedSnapshot {
         PersistedSnapshot(
             revision: revision,

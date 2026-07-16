@@ -1018,6 +1018,70 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(runtime.model.snapshotRevision, 2)
     }
 
+    func testTerminationDuringDelayedStartupAwaitsLoadedRevisionBeforeExactFlushAndRetry() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "private-presenter-m5-delayed-startup-termination-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SnapshotStore(rootURL: root)
+        let restoredSnapshot = PersistedSnapshot(
+            revision: 41,
+            document: ScriptDocument(
+                text: "synthetic delayed startup fixture",
+                revision: 41
+            ),
+            readingAnchor: ReadingAnchor(
+                utf16Offset: 9,
+                viewportFraction: 0.4,
+                document: "synthetic delayed startup fixture"
+            ),
+            preferences: TeleprompterPreferences()
+        )
+        let loadGate = DelayedStartupLoadGate(
+            result: .loaded(RestoredState(snapshot: restoredSnapshot))
+        )
+        let stopCompletion = AsyncCompletionProbe()
+        let runtime = AppRuntime(
+            proofLevel: .floating,
+            dependencies: DependencyContainer(
+                proofLevel: .floating,
+                snapshotStore: store
+            ),
+            startupSeams: AppRuntimeStartupSeams(
+                load: { await loadGate.load() },
+                observeAndQuery: { .failure(M5DelayedStartupTopologyError()) }
+            )
+        )
+
+        runtime.start()
+        await loadGate.waitUntilEntered()
+        let stop = Task { @MainActor in
+            let result = await runtime.stopAndFlush()
+            await stopCompletion.finish()
+            return result
+        }
+        for _ in 0..<5 { await Task.yield() }
+        let completedBeforeLoadWasResolved = await stopCompletion.isFinished
+        XCTAssertFalse(completedBeforeLoadWasResolved)
+
+        await loadGate.release()
+        let didStop = await stop.value
+        XCTAssertTrue(didStop)
+        XCTAssertEqual(runtime.model.document.revision, 41)
+        XCTAssertEqual(runtime.model.snapshotRevision, 41)
+        XCTAssertTrue(runtime.model.isPaused)
+        XCTAssertTrue(runtime.model.isShielded)
+        XCTAssertEqual(runtime.model.overlaySession.visibility, .hidden)
+
+        let statusAfterFirstStop = await store.status()
+        XCTAssertEqual(statusAfterFirstStop.persistedRevision, 41)
+        let didRetry = await runtime.stopAndFlush()
+        XCTAssertTrue(didRetry, "retry must not strand startup or revision")
+        let statusAfterRetry = await store.status()
+        XCTAssertEqual(statusAfterRetry.persistedRevision, 41)
+    }
+
     func testControllerStartsShielded() {
         let model = AppModel(overlayController: OverlayPanelController())
         XCTAssertTrue(model.isShielded)
@@ -1743,6 +1807,49 @@ private actor TerminationFlushGate {
         continuation = nil
     }
 }
+
+private actor DelayedStartupLoadGate {
+    private let result: SnapshotLoadResult
+    private var loadContinuation: CheckedContinuation<Void, Never>?
+    private var enteredContinuation: CheckedContinuation<Void, Never>?
+    private var didEnter = false
+    private var isReleased = false
+
+    init(result: SnapshotLoadResult) {
+        self.result = result
+    }
+
+    func load() async -> SnapshotLoadResult {
+        didEnter = true
+        enteredContinuation?.resume()
+        enteredContinuation = nil
+        if !isReleased {
+            await withCheckedContinuation { loadContinuation = $0 }
+        }
+        return result
+    }
+
+    func waitUntilEntered() async {
+        guard !didEnter else { return }
+        await withCheckedContinuation { enteredContinuation = $0 }
+    }
+
+    func release() {
+        isReleased = true
+        loadContinuation?.resume()
+        loadContinuation = nil
+    }
+}
+
+private actor AsyncCompletionProbe {
+    private(set) var isFinished = false
+
+    func finish() {
+        isFinished = true
+    }
+}
+
+private struct M5DelayedStartupTopologyError: Error {}
 
 private struct TerminationNeverSleeper: SnapshotSleeper {
     func sleep(for duration: Duration) async throws {
