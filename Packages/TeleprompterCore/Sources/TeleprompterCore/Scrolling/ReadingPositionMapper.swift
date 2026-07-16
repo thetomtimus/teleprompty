@@ -131,9 +131,8 @@ public enum ReadingPositionMapper {
             )
         }
 
-        guard let minimumDistance = bestCandidates
-            .map { distance($0.offset, fallbackOffset) }
-            .min() else {
+        let minimumDistance = bestCandidates.map { distance($0.offset, fallbackOffset) }.min()
+        guard let minimumDistance else {
             return mapping(
                 offset: fallbackOffset,
                 viewportFraction: anchor.viewportFraction,
@@ -231,7 +230,7 @@ public enum ReadingPositionMapper {
         postEditDocument: String
     ) -> ReadingPositionMapping {
         let postEditUnits = Array(postEditDocument.utf16)
-        mapping(
+        return mapping(
             offset: normalizedOffsetBackward(normalizedPreEditOffset, in: postEditUnits),
             viewportFraction: anchor.viewportFraction,
             documentUnits: postEditUnits,

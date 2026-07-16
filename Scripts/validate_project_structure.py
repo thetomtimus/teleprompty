@@ -1544,6 +1544,7 @@ M6_LEDGER_TITLES = (
     "Make hosted evidence prove the real private presenter",
     "Keep every review repair auditable on the Mac",
     "Accept only the verified reconstructed M5 handoff",
+    "Make the recovered source compile before packaging",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1967,6 +1968,7 @@ M6_M5_HANDOFF_FILES = (
 )
 
 M6_FINAL_CHANGED_PATHS = (
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Scrolling/ReadingPositionMapper.swift",
     "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
     "PrivatePresenterApp/App/AppEffect.swift",
     "PrivatePresenterApp/App/AppModel.swift",
