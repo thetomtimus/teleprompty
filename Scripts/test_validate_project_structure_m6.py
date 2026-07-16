@@ -142,6 +142,7 @@ EXPECTED_LEDGER_TITLES = (
     "Make the recovered source compile before packaging",
     "Import the native signposter module with its real name",
     "Keep teardown on the main actor under Swift 6",
+    "Record the actor teardown path in final scope",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -679,6 +680,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
     "PrivatePresenterApp/Overlay/ReaderTextView.swift",
     "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
+    "PrivatePresenterApp/Overlay/ScrollSessionController.swift",
     "PrivatePresenterApp/Services/PerformanceSignposter.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
