@@ -137,6 +137,31 @@ EXPECTED_LEDGER_TITLES = (
     "Keep the active band current without rebuilding text",
     "Make the semantic oracle deterministic without sharing product state",
     "Make hosted evidence prove the real private presenter",
+    "Keep every review repair auditable on the Mac",
+)
+EXPECTED_LORE_TRAILER_KEYS = (
+    "Constraint",
+    "Rejected",
+    "Confidence",
+    "Scope-risk",
+    "Reversibility",
+    "Directive",
+    "Tested",
+    "Not-tested",
+    "Related",
+)
+EXPECTED_NATIVE_REPLAY_PAIR_LABELS = (1, 2, 3, 4, 5, 7, 8, 9, 10)
+EXPECTED_STAGE_RECONSTRUCTION_MARKERS = (
+    "reconstruct_stage_handoff() {",
+    'cp "$FINAL_M6_HANDOFF/MAC-CONTINUATION.md" "$stage_handoff/MAC-CONTINUATION.md"',
+    'git diff --name-only --diff-filter=ACMR "$M6_PLAN_SHA..$stage_sha" | LC_ALL=C sort',
+    "--sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner",
+    'git bundle create "$stage_handoff/private-presenter-m6-wsl.bundle" HEAD',
+    'for role in red green; do',
+    'git switch --detach "$sha"',
+    'reconstruct_stage_handoff "$green_sha" "$green_tree" "$pair_index"',
+    "python3 -B Scripts/test_validate_project_structure_m6.py",
+    "-only-testing:PrivatePresenterAppTests/OverlayVisualSnapshotTests",
 )
 EXPECTED_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -680,6 +705,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_REFERENCE_HASHES": EXPECTED_REFERENCE_HASHES,
             "M6_RESULT_PENDING_FIELDS": EXPECTED_RESULT_PENDING_FIELDS,
             "M6_LEDGER_TITLES": EXPECTED_LEDGER_TITLES,
+            "M6_LORE_TRAILER_KEYS": EXPECTED_LORE_TRAILER_KEYS,
+            "M6_NATIVE_REPLAY_PAIR_LABELS": EXPECTED_NATIVE_REPLAY_PAIR_LABELS,
+            "M6_STAGE_RECONSTRUCTION_MARKERS": EXPECTED_STAGE_RECONSTRUCTION_MARKERS,
             "M6_PRIOR_LEDGER_PAIRS": EXPECTED_PRIOR_LEDGER_PAIRS,
             "M6_FINAL_CHANGED_PATHS": EXPECTED_FINAL_CHANGED_PATHS,
             "M6_PREDECESSOR_PENDING_CLAIMS": EXPECTED_PENDING_CLAIMS,
@@ -1344,7 +1372,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                     any(item.startswith("evidence:private-surface:") for item in violations)
                 )
 
-    def testM6HistoryIsExactlyElevenImmediateRedGreenPairs(self) -> None:
+    def testM6HistoryIsExactlyTwelveImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
         self.assertEqual(VALIDATOR.validate_m6_history_rows(rows), [])
         self.assertEqual(len(rows), len(EXPECTED_LEDGER_TITLES) * 2)
@@ -1361,6 +1389,57 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                 f"ledger:nonconsecutive:{index * 2 + 1}",
                 VALIDATOR.validate_m6_history_rows(mutation),
             )
+
+    def testM6EveryIntendedLoreTrailerIsGitNativeAndContiguous(self) -> None:
+        good = (
+            "Auditable decision\n\nContext.\n\n"
+            "Constraint: Exact history is locally preserved.\n"
+            "Confidence: high\n"
+            "Tested: git interpret-trailers --parse\n"
+        )
+        self.assertEqual(VALIDATOR.validate_m6_lore_message(good), [])
+        self.assertIn(
+            "noncontiguous-trailers",
+            VALIDATOR.validate_m6_lore_message(
+                good.replace("\nConfidence:", "\n\nConfidence:")
+            ),
+        )
+        self.assertIn(
+            "literal-newline",
+            VALIDATOR.validate_m6_lore_message(good + r"\nNot-tested: native host"),
+        )
+        self.assertEqual(
+            VALIDATOR.validate_m6_lore_history(VALIDATOR.m6_history_rows()), []
+        )
+
+    def testM6ContinuationReconstructsAndReplaysEveryExactStage(self) -> None:
+        guide = (ROOT / EXPECTED_CONTINUATION_DIR / "MAC-CONTINUATION.md").read_text(
+            encoding="utf-8"
+        )
+        for marker in EXPECTED_STAGE_RECONSTRUCTION_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, guide)
+        replay_rows = re.findall(
+            r"^(\d+) ([0-9a-f]{40}) ([0-9a-f]{40}) (native|static)$",
+            guide,
+            re.MULTILINE,
+        )
+        rows = VALIDATOR.m6_history_rows()
+        expected_pairs = [
+            (rows[index][0], rows[index + 1][0])
+            for index in range(0, len(rows), 2)
+        ]
+        self.assertEqual(
+            [(red, green) for _, red, green, _ in replay_rows], expected_pairs
+        )
+        self.assertEqual(
+            tuple(
+                int(label)
+                for label, _, _, replay_kind in replay_rows
+                if replay_kind == "native"
+            ),
+            EXPECTED_NATIVE_REPLAY_PAIR_LABELS,
+        )
 
     def testM6ContinuationInventoryHashesPairsSourceTreeTarAndBundleAreExact(self) -> None:
         handoff = ROOT / EXPECTED_CONTINUATION_DIR

@@ -1542,6 +1542,31 @@ M6_LEDGER_TITLES = (
     "Keep the active band current without rebuilding text",
     "Make the semantic oracle deterministic without sharing product state",
     "Make hosted evidence prove the real private presenter",
+    "Keep every review repair auditable on the Mac",
+)
+M6_LORE_TRAILER_KEYS = (
+    "Constraint",
+    "Rejected",
+    "Confidence",
+    "Scope-risk",
+    "Reversibility",
+    "Directive",
+    "Tested",
+    "Not-tested",
+    "Related",
+)
+M6_NATIVE_REPLAY_PAIR_LABELS = (1, 2, 3, 4, 5, 7, 8, 9, 10)
+M6_STAGE_RECONSTRUCTION_MARKERS = (
+    "reconstruct_stage_handoff() {",
+    'cp "$FINAL_M6_HANDOFF/MAC-CONTINUATION.md" "$stage_handoff/MAC-CONTINUATION.md"',
+    'git diff --name-only --diff-filter=ACMR "$M6_PLAN_SHA..$stage_sha" | LC_ALL=C sort',
+    "--sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner",
+    'git bundle create "$stage_handoff/private-presenter-m6-wsl.bundle" HEAD',
+    'for role in red green; do',
+    'git switch --detach "$sha"',
+    'reconstruct_stage_handoff "$green_sha" "$green_tree" "$pair_index"',
+    "python3 -B Scripts/test_validate_project_structure_m6.py",
+    "-only-testing:PrivatePresenterAppTests/OverlayVisualSnapshotTests",
 )
 M6_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -3221,6 +3246,48 @@ def validate_m6_history_rows(
     return violations
 
 
+def validate_m6_lore_message(message: str) -> list[str]:
+    violations: list[str] = []
+    if r"\n" in message:
+        violations.append("literal-newline")
+    lines = message.rstrip("\n").splitlines()
+    trailer_pattern = re.compile(
+        rf"^({'|'.join(re.escape(key) for key in M6_LORE_TRAILER_KEYS)}): .+$"
+    )
+    intended = [line for line in lines if trailer_pattern.fullmatch(line)]
+    if not intended:
+        violations.append("missing-trailers")
+        return violations
+    parsed = subprocess.run(
+        ["git", "interpret-trailers", "--parse"],
+        cwd=ROOT,
+        input=message,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if parsed.returncode != 0 or parsed.stdout.rstrip("\n").splitlines() != intended:
+        violations.append("unparsed-trailers")
+    first = next(index for index, line in enumerate(lines) if trailer_pattern.fullmatch(line))
+    if lines[first:] != intended:
+        violations.append("noncontiguous-trailers")
+    return violations
+
+
+def validate_m6_lore_history(
+    rows: list[tuple[str, list[str], str]],
+) -> list[str]:
+    violations: list[str] = []
+    for commit, _, _ in rows:
+        result = git("show", "-s", "--format=%B", commit)
+        if result.returncode != 0:
+            violations.append(f"ledger:lore-message:{commit}")
+            continue
+        for problem in validate_m6_lore_message(result.stdout):
+            violations.append(f"ledger:lore-{problem}:{commit}")
+    return violations
+
+
 def parse_sha256_manifest(path: Path) -> tuple[list[tuple[str, str]], list[str]]:
     if not path.is_file():
         return [], [f"continuation:missing-manifest:{path.name}"]
@@ -3310,6 +3377,25 @@ def validate_m6_continuation_guide(
             violations.append("continuation:pairs")
         if any(not expectation.startswith("Expected RED:") for expectation in expectations):
             violations.append("continuation:pair-expectations")
+    for marker in M6_STAGE_RECONSTRUCTION_MARKERS:
+        if marker not in text:
+            violations.append(f"continuation:stage-reconstruction-marker:{marker}")
+    replay_pattern = re.compile(
+        r"^(\d+) ([0-9a-f]{40}) ([0-9a-f]{40}) (native|static)$",
+        re.MULTILINE,
+    )
+    replay_rows = replay_pattern.findall(text)
+    replay_pairs = [(red, green) for _, red, green, _ in replay_rows]
+    if [int(label) for label, _, _, _ in replay_rows] != list(
+        range(len(M6_LEDGER_TITLES))
+    ) or replay_pairs != expected_pairs:
+        violations.append("continuation:explicit-replay-pairs")
+    native_labels = tuple(
+        int(label) for label, _, _, replay_kind in replay_rows
+        if replay_kind == "native"
+    )
+    if native_labels != M6_NATIVE_REPLAY_PAIR_LABELS:
+        violations.append("continuation:native-replay-pairs")
     for marker in (
         "Status: PASS",
         "M6 complete",
@@ -3504,7 +3590,9 @@ def validate_m6_source() -> list[str]:
         violations.extend(validate_m6_result_text(read(M6_RESULT_PATH)))
     else:
         violations.append("evidence:visual-result-missing")
-    violations.extend(validate_m6_history_rows(m6_history_rows()))
+    history_rows = m6_history_rows()
+    violations.extend(validate_m6_history_rows(history_rows))
+    violations.extend(validate_m6_lore_history(history_rows))
     violations.extend(validate_m6_continuation())
 
     production_paths = [
