@@ -1460,7 +1460,6 @@ M6_PROTECTED_PATHS = (
 )
 
 M6_PHASE_ZERO_FUTURE_PATHS = (
-    "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
@@ -1468,6 +1467,44 @@ M6_PHASE_ZERO_FUTURE_PATHS = (
     ".omx/handoff/private-presenter-m6/m6-source-files.sha256",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-source.tar",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-wsl.bundle",
+)
+
+M6_M3_REQUIRED_PATHS = (
+    "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
+)
+
+M6_M3_NAMED_TESTS = (
+    "testHeaderHasTitlePlaybackLockAndSettingsInOrder",
+    "testQuickPillHasSevenTypedActionsInOrder",
+    "testHeaderAndPillUseFrozenSymbolAndStateVariantsAtEveryTier",
+    "testEveryM6IconHasDynamicSemanticsTooltipAndFortyFourPointTarget",
+    "testHeaderDragNeverInterceptsControls",
+    "testLockedVisibleAndHiddenChromeAreNotInteractiveOrAccessibilityNavigable",
+    "testOnlyUnlockedSettingsDispatchesShowControllerWithoutActivationWorkaround",
+    "testFocusModeFadesChromeWithoutChangingReaderGeometryOrAnchor",
+    "testReduceMotionRemovesOnlyDecorativeFade",
+)
+
+M6_M3_SOURCE_MARKERS = (
+    ("header-title", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.document.title", 1),
+    ("header-playback-command", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.send(.togglePlayback)", 1),
+    ("header-lock-command", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.send(.toggleLock)", 1),
+    ("header-settings-command", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.send(.showController)", 1),
+    ("header-document-symbol", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", '"doc.text"', 1),
+    ("header-drag-region", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", '"privatePresenter.headerDragRegion"', 1),
+    ("quick-seven-actions", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", "static let actionIdentifiers = [", 1),
+    ("quick-smaller-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setFontSize(model.preferences.fontSizePoints - PresenterAccessibility.fontSizeStep)", 1),
+    ("quick-larger-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setFontSize(model.preferences.fontSizePoints + PresenterAccessibility.fontSizeStep)", 1),
+    ("quick-slower-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setSpeed(model.preferences.speedPointsPerSecond - PresenterAccessibility.speedStep)", 1),
+    ("quick-faster-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setSpeed(model.preferences.speedPointsPerSecond + PresenterAccessibility.speedStep)", 1),
+    ("quick-focus-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setFocusModeEnabled(!model.preferences.isFocusModeEnabled)", 1),
+    ("root-header-mount", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "OverlayChromeView(", 1),
+    ("root-pill-mount", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "OverlayQuickControlsView(", 1),
+    ("root-opacity-only", "PrivatePresenterApp/Overlay/OverlayRootView.swift", ".opacity(presentation.opacity)", 2),
+    ("root-hit-policy", "PrivatePresenterApp/Overlay/OverlayRootView.swift", ".allowsHitTesting(presentation.allowsInteraction)", 2),
+    ("root-ax-policy", "PrivatePresenterApp/Overlay/OverlayRootView.swift", ".accessibilityHidden(presentation.isAccessibilityHidden)", 2),
+    ("central-header-id", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", '"privatePresenter.headerPlayback"', 1),
+    ("central-pill-id", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", '"privatePresenter.quickFocus"', 1),
 )
 
 M6_M1_REQUIRED_PATHS = (
@@ -1608,15 +1645,19 @@ M6_M5_HANDOFF_FILES = (
 )
 
 M6_PHASE_ZERO_ALLOWED_CHANGES = (
+    "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
     "PrivatePresenterApp/App/AppEffect.swift",
     "PrivatePresenterApp/App/AppModel.swift",
     "PrivatePresenterApp/App/DependencyContainer.swift",
     "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+    "PrivatePresenterApp/Overlay/OverlayChromeView.swift",
+    "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
     "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
     "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
     "PrivatePresenterApp/Overlay/ReaderTextView.swift",
     "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
+    "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
     "Scripts/test_validate_project_structure_m6.py",
@@ -2767,6 +2808,7 @@ def validate_m6_source() -> list[str]:
         required_paths=(
             "Scripts/test_validate_project_structure_m6.py",
             *M6_M1_REQUIRED_PATHS,
+            *M6_M3_REQUIRED_PATHS,
         ),
         absent_paths=M6_PHASE_ZERO_FUTURE_PATHS,
     )
@@ -2818,7 +2860,11 @@ def validate_m6_source() -> list[str]:
 
     visual_tests_path = "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
     visual_tests = read(visual_tests_path) if (ROOT / visual_tests_path).is_file() else ""
-    for milestone, names in (("m1", M6_M1_NAMED_TESTS), ("m2", M6_M2_NAMED_TESTS)):
+    for milestone, names in (
+        ("m1", M6_M1_NAMED_TESTS),
+        ("m2", M6_M2_NAMED_TESTS),
+        ("m3", M6_M3_NAMED_TESTS),
+    ):
         for name in names:
             if visual_tests.count(f"func {name}()") != 1:
                 violations.append(f"visual:{milestone}-missing-test:{name}")
@@ -2828,10 +2874,19 @@ def validate_m6_source() -> list[str]:
     for label, path, marker, expected_count in M6_M2_SOURCE_MARKERS:
         if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
             violations.append(f"visual:m2-missing-marker:{label}")
+    for label, path, marker, expected_count in M6_M3_SOURCE_MARKERS:
+        if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
+            violations.append(f"visual:m3-missing-marker:{label}")
 
     root_source = production_sources.get(
         "PrivatePresenterApp/Overlay/OverlayRootView.swift", ""
     )
+    chrome_source = read("PrivatePresenterApp/Overlay/OverlayChromeView.swift")
+    if "privatePresenter.overlayVisibility" in chrome_source:
+        violations.append("visual:m3-old-visibility-control")
+    if "if isChromeVisible" in root_source:
+        violations.append("visual:m3-conditional-chrome")
+
     reader_source = production_sources.get(
         "PrivatePresenterApp/Overlay/ReaderTextView.swift", ""
     )

@@ -57,9 +57,16 @@ final class PresenterAccessibilityTests: XCTestCase {
             "privatePresenter.speed",
             "privatePresenter.focusMode",
             "privatePresenter.retryShortcuts",
-            "privatePresenter.overlayPlayback",
-            "privatePresenter.overlayVisibility",
-            "privatePresenter.overlayLock",
+            "privatePresenter.headerPlayback",
+            "privatePresenter.headerLock",
+            "privatePresenter.headerSettings",
+            "privatePresenter.quickSmaller",
+            "privatePresenter.quickLarger",
+            "privatePresenter.quickAlignment",
+            "privatePresenter.quickSlower",
+            "privatePresenter.quickPlayback",
+            "privatePresenter.quickFaster",
+            "privatePresenter.quickFocus",
             "privatePresenter.statusItem",
             "privatePresenter.menuShowController",
             "privatePresenter.menuPlayback",
@@ -166,9 +173,16 @@ final class PresenterAccessibilityTests: XCTestCase {
     func testOverlayActionTargetsAreAtLeastFortyFourPoints() {
         let manifest = PresenterAccessibility.manifest(state: accessibilityState())
         let overlayIdentifiers = Set([
-            "privatePresenter.overlayPlayback",
-            "privatePresenter.overlayVisibility",
-            "privatePresenter.overlayLock",
+            "privatePresenter.headerPlayback",
+            "privatePresenter.headerLock",
+            "privatePresenter.headerSettings",
+            "privatePresenter.quickSmaller",
+            "privatePresenter.quickLarger",
+            "privatePresenter.quickAlignment",
+            "privatePresenter.quickSlower",
+            "privatePresenter.quickPlayback",
+            "privatePresenter.quickFaster",
+            "privatePresenter.quickFocus",
         ])
         let overlayActions = manifest.filter { overlayIdentifiers.contains($0.identifier) }
 
@@ -198,7 +212,7 @@ final class PresenterAccessibilityTests: XCTestCase {
         window.contentView = hosting
         hosting.layoutSubtreeIfNeeded()
 
-        let expectedLabels = Set(["Start", "Show", "Unlock"])
+        let expectedLabels = Set(["Start scrolling", "Unlock teleprompter", "Show Controller"])
         let controls = hostedDescendants(of: hosting).filter {
             guard let label = $0.accessibilityLabel() else { return false }
             return expectedLabels.contains(label)

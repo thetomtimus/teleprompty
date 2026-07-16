@@ -267,6 +267,168 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         }
     }
 
+    func testHeaderHasTitlePlaybackLockAndSettingsInOrder() {
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            document: ScriptDocument(title: "Lecture Teleprompter", text: "Synthetic"),
+            restorationRequired: false
+        )
+        XCTAssertEqual(OverlayChromeView.title(model: model), "Lecture Teleprompter")
+        XCTAssertEqual(
+            OverlayChromeView.actionIdentifiers,
+            [
+                "privatePresenter.headerPlayback",
+                "privatePresenter.headerLock",
+                "privatePresenter.headerSettings",
+            ]
+        )
+    }
+
+    func testQuickPillHasSevenTypedActionsInOrder() {
+        XCTAssertEqual(
+            OverlayQuickControlsView.actionIdentifiers,
+            [
+                "privatePresenter.quickSmaller",
+                "privatePresenter.quickLarger",
+                "privatePresenter.quickAlignment",
+                "privatePresenter.quickSlower",
+                "privatePresenter.quickPlayback",
+                "privatePresenter.quickFaster",
+                "privatePresenter.quickFocus",
+            ]
+        )
+    }
+
+    func testHeaderAndPillUseFrozenSymbolAndStateVariantsAtEveryTier() {
+        for (tier, size) in [
+            (OverlayLayoutMetrics.Tier.compact, CGFloat(16)),
+            (.standard, 18),
+            (.spacious, 20),
+        ] {
+            XCTAssertEqual(
+                OverlayChromeView.symbols(isPlaying: false, isLocked: false),
+                ["play.fill", "lock.open.fill", "gearshape"]
+            )
+            XCTAssertEqual(
+                OverlayChromeView.symbols(isPlaying: true, isLocked: true),
+                ["pause.fill", "lock.fill", "gearshape"]
+            )
+            XCTAssertEqual(
+                OverlayQuickControlsView.symbols(
+                    isPlaying: false, alignment: .left, isFocusModeEnabled: false
+                ),
+                [
+                    "textformat.size.smaller", "textformat.size.larger",
+                    "text.alignleft", "minus", "play.fill", "plus", "eye",
+                ]
+            )
+            XCTAssertEqual(
+                OverlayQuickControlsView.symbols(
+                    isPlaying: true, alignment: .center, isFocusModeEnabled: true
+                ),
+                [
+                    "textformat.size.smaller", "textformat.size.larger",
+                    "text.aligncenter", "minus", "pause.fill", "plus", "eye.slash",
+                ]
+            )
+            XCTAssertEqual(OverlayChromeView.iconSize(for: tier), size)
+            XCTAssertEqual(OverlayQuickControlsView.iconSize(for: tier), size)
+        }
+    }
+
+    func testEveryM6IconHasDynamicSemanticsTooltipAndFortyFourPointTarget() {
+        let manifest = PresenterAccessibility.manifest(state: m6AccessibilityState())
+        let identifiers = Set(
+            OverlayChromeView.actionIdentifiers + OverlayQuickControlsView.actionIdentifiers
+        )
+        let entries = manifest.filter { identifiers.contains($0.identifier) }
+        XCTAssertEqual(Set(entries.map(\.identifier)), identifiers)
+        for entry in entries {
+            XCTAssertTrue(entry.isDynamic, entry.identifier)
+            XCTAssertFalse(entry.label.isEmpty, entry.identifier)
+            XCTAssertFalse(entry.value.isEmpty, entry.identifier)
+            XCTAssertFalse(entry.help.isEmpty, entry.identifier)
+            XCTAssertFalse(entry.toolTip.isEmpty, entry.identifier)
+            XCTAssertGreaterThanOrEqual(entry.minimumHitSize.width, 44, entry.identifier)
+            XCTAssertGreaterThanOrEqual(entry.minimumHitSize.height, 44, entry.identifier)
+        }
+    }
+
+    func testHeaderDragNeverInterceptsControls() throws {
+        let source = try String(
+            contentsOf: sourceURL("OverlayChromeView.swift"), encoding: .utf8
+        )
+        XCTAssertEqual(source.components(separatedBy: "DragGesture(").count - 1, 1)
+        XCTAssertTrue(source.contains("privatePresenter.headerDragRegion"))
+        XCTAssertFalse(source.contains(".overlay {\n            interactionZone(edge: nil)"))
+        XCTAssertTrue(source.contains(".zIndex(1)"))
+    }
+
+    func testLockedVisibleAndHiddenChromeAreNotInteractiveOrAccessibilityNavigable() {
+        let visible = OverlayRootView.chromePresentation(
+            focusState: .lockedChromeVisible,
+            isLocked: true,
+            transitionDuration: 0.18
+        )
+        let hidden = OverlayRootView.chromePresentation(
+            focusState: .lockedFocusChromeHidden,
+            isLocked: true,
+            transitionDuration: 0.18
+        )
+        XCTAssertEqual(visible.opacity, 1)
+        XCTAssertEqual(hidden.opacity, 0)
+        XCTAssertFalse(visible.allowsInteraction)
+        XCTAssertFalse(hidden.allowsInteraction)
+        XCTAssertTrue(visible.isAccessibilityHidden)
+        XCTAssertTrue(hidden.isAccessibilityHidden)
+    }
+
+    func testOnlyUnlockedSettingsDispatchesShowControllerWithoutActivationWorkaround() throws {
+        var effects: [AppEffect] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            restorationRequired: false,
+            effectHandler: { effects.append($0) }
+        )
+        model.send(.showController)
+        XCTAssertEqual(effects, [.showExistingController])
+        let source = try String(
+            contentsOf: sourceURL("OverlayChromeView.swift"), encoding: .utf8
+        )
+        XCTAssertEqual(source.components(separatedBy: "model.send(.showController)").count - 1, 1)
+        XCTAssertFalse(source.contains("NSApp.activate"))
+        XCTAssertFalse(source.contains("makeKeyAndOrderFront"))
+    }
+
+    func testFocusModeFadesChromeWithoutChangingReaderGeometryOrAnchor() {
+        let metrics = OverlayLayoutMetrics(size: CGSize(width: 700, height: 350))
+        let visible = OverlayRootView.chromePresentation(
+            focusState: .lockedFocusChromeVisible,
+            isLocked: true,
+            transitionDuration: 0.18,
+            readerGeometryIdentity: metrics.readableLineWidth
+        )
+        let hidden = OverlayRootView.chromePresentation(
+            focusState: .lockedFocusChromeHidden,
+            isLocked: true,
+            transitionDuration: 0.18,
+            readerGeometryIdentity: metrics.readableLineWidth
+        )
+        XCTAssertEqual(visible.readerGeometryIdentity, hidden.readerGeometryIdentity)
+        XCTAssertEqual(visible.readerGeometryIdentity, metrics.readableLineWidth)
+        XCTAssertEqual(visible.transitionDuration, 0.18)
+        XCTAssertEqual(hidden.transitionDuration, 0.18)
+    }
+
+    func testReduceMotionRemovesOnlyDecorativeFade() {
+        let reduced = PresenterAccessibility.motionPolicy(reduceMotion: true)
+        let ordinary = PresenterAccessibility.motionPolicy(reduceMotion: false)
+        XCTAssertEqual(reduced.decorativeFocusDuration, 0)
+        XCTAssertEqual(ordinary.decorativeFocusDuration, 0.18)
+        XCTAssertTrue(reduced.readingMotionEnabled)
+        XCTAssertTrue(ordinary.readingMotionEnabled)
+    }
+
     private func assertColor(
         _ color: NSColor,
         red: CGFloat,
@@ -313,6 +475,24 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         container.frame = NSRect(origin: .zero, size: size)
         container.layoutSubtreeIfNeeded()
         return (system, container, container.viewportAdapter)
+    }
+
+    private func m6AccessibilityState() -> PresenterAccessibility.State {
+        PresenterAccessibility.State(
+            scriptTitle: "Lecture Teleprompter",
+            scriptText: "Synthetic script",
+            displayName: "Synthetic private display",
+            fontSizePoints: 42,
+            speedPointsPerSecond: 60,
+            alignment: .left,
+            isActiveBandEnabled: true,
+            isPlaying: false,
+            isVisible: true,
+            isLocked: false,
+            isFocusModeEnabled: false,
+            retryShortcutsVisible: false,
+            topologyStatus: .extended
+        )
     }
 
     private func sourceURL(_ file: String) -> URL {

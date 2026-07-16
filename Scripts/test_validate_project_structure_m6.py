@@ -55,7 +55,6 @@ EXPECTED_PROTECTED_PATHS = (
 )
 
 EXPECTED_FUTURE_M6_PATHS = (
-    "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
@@ -63,6 +62,42 @@ EXPECTED_FUTURE_M6_PATHS = (
     ".omx/handoff/private-presenter-m6/m6-source-files.sha256",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-source.tar",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-wsl.bundle",
+)
+
+EXPECTED_M3_REQUIRED_PATHS = (
+    "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
+)
+EXPECTED_M3_NAMED_TESTS = (
+    "testHeaderHasTitlePlaybackLockAndSettingsInOrder",
+    "testQuickPillHasSevenTypedActionsInOrder",
+    "testHeaderAndPillUseFrozenSymbolAndStateVariantsAtEveryTier",
+    "testEveryM6IconHasDynamicSemanticsTooltipAndFortyFourPointTarget",
+    "testHeaderDragNeverInterceptsControls",
+    "testLockedVisibleAndHiddenChromeAreNotInteractiveOrAccessibilityNavigable",
+    "testOnlyUnlockedSettingsDispatchesShowControllerWithoutActivationWorkaround",
+    "testFocusModeFadesChromeWithoutChangingReaderGeometryOrAnchor",
+    "testReduceMotionRemovesOnlyDecorativeFade",
+)
+EXPECTED_M3_SOURCE_MARKERS = (
+    ("header-title", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.document.title", 1),
+    ("header-playback-command", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.send(.togglePlayback)", 1),
+    ("header-lock-command", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.send(.toggleLock)", 1),
+    ("header-settings-command", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "model.send(.showController)", 1),
+    ("header-document-symbol", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", '"doc.text"', 1),
+    ("header-drag-region", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", '"privatePresenter.headerDragRegion"', 1),
+    ("quick-seven-actions", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", "static let actionIdentifiers = [", 1),
+    ("quick-smaller-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setFontSize(model.preferences.fontSizePoints - PresenterAccessibility.fontSizeStep)", 1),
+    ("quick-larger-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setFontSize(model.preferences.fontSizePoints + PresenterAccessibility.fontSizeStep)", 1),
+    ("quick-slower-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setSpeed(model.preferences.speedPointsPerSecond - PresenterAccessibility.speedStep)", 1),
+    ("quick-faster-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setSpeed(model.preferences.speedPointsPerSecond + PresenterAccessibility.speedStep)", 1),
+    ("quick-focus-command", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".setFocusModeEnabled(!model.preferences.isFocusModeEnabled)", 1),
+    ("root-header-mount", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "OverlayChromeView(", 1),
+    ("root-pill-mount", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "OverlayQuickControlsView(", 1),
+    ("root-opacity-only", "PrivatePresenterApp/Overlay/OverlayRootView.swift", ".opacity(presentation.opacity)", 2),
+    ("root-hit-policy", "PrivatePresenterApp/Overlay/OverlayRootView.swift", ".allowsHitTesting(presentation.allowsInteraction)", 2),
+    ("root-ax-policy", "PrivatePresenterApp/Overlay/OverlayRootView.swift", ".accessibilityHidden(presentation.isAccessibilityHidden)", 2),
+    ("central-header-id", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", '"privatePresenter.headerPlayback"', 1),
+    ("central-pill-id", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", '"privatePresenter.quickFocus"', 1),
 )
 
 EXPECTED_M1_REQUIRED_PATHS = (
@@ -325,6 +360,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_M1_SOURCE_MARKERS": EXPECTED_M1_SOURCE_MARKERS,
             "M6_M2_NAMED_TESTS": EXPECTED_M2_NAMED_TESTS,
             "M6_M2_SOURCE_MARKERS": EXPECTED_M2_SOURCE_MARKERS,
+            "M6_M3_REQUIRED_PATHS": EXPECTED_M3_REQUIRED_PATHS,
+            "M6_M3_NAMED_TESTS": EXPECTED_M3_NAMED_TESTS,
+            "M6_M3_SOURCE_MARKERS": EXPECTED_M3_SOURCE_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -518,6 +556,37 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         query = adapter.split("func cachedActiveBandLineFragments", 1)[1][:1_200]
         self.assertNotIn("ensureLayout(", query)
         self.assertNotIn("NSTextLayoutManager(", query)
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
+    def testM3ReferenceChromeInteractionAccessibilityAndFocusContract(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_M3_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        for label, path, marker, expected_count in EXPECTED_M3_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                source = VALIDATOR.read(path)
+                self.assertEqual(source.count(marker), expected_count, f"{path}:{label}")
+                original_read = VALIDATOR.read
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == path:
+                        return source.replace(marker, f"removed-{label}")
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(f"visual:m3-missing-marker:{label}", violations)
+
+        chrome = VALIDATOR.read("PrivatePresenterApp/Overlay/OverlayChromeView.swift")
+        root = VALIDATOR.read("PrivatePresenterApp/Overlay/OverlayRootView.swift")
+        self.assertNotIn("privatePresenter.overlayVisibility", chrome)
+        self.assertNotIn("if isChromeVisible", root)
+        self.assertNotIn("NSApp.activate", chrome)
+        self.assertNotIn("makeKeyAndOrderFront", chrome)
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
 
