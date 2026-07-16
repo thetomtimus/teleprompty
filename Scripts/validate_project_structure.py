@@ -1546,6 +1546,7 @@ M6_LEDGER_TITLES = (
     "Accept only the verified reconstructed M5 handoff",
     "Make the recovered source compile before packaging",
     "Import the native signposter module with its real name",
+    "Keep teardown on the main actor under Swift 6",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",

@@ -479,7 +479,9 @@ final class ScrollSessionController {
     }
 
     deinit {
-        clock?.invalidate()
-        performanceRegistry.end(scrollSessionInterval, outcome: .cancelled)
+        MainActor.assumeIsolated {
+            clock?.invalidate()
+            performanceRegistry.end(scrollSessionInterval, outcome: .cancelled)
+        }
     }
 }
