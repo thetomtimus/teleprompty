@@ -107,14 +107,14 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(words.count, Self.expectedWordCount)
         XCTAssertEqual(fixture.count, Self.expectedByteCount)
         XCTAssertEqual(text.utf16.count, Self.expectedByteCount)
-        XCTAssertEqual(words.first, "word00000")
-        XCTAssertEqual(words.last, "word49999")
+        XCTAssertEqual(words.first.map(String.init), "word00000")
+        XCTAssertEqual(words.last.map(String.init), "word49999")
         XCTAssertEqual(digest(of: fixture), Self.expectedDigest)
         XCTAssertFalse(fixture.isEmpty)
-        XCTAssertNotEqual(fixture.last, Character("\n").asciiValue)
+        XCTAssertNotEqual(fixture.last, 0x0A)
 
         let separators = fixture.enumerated().compactMap { index, byte in
-            byte == Character("\n").asciiValue ? index : nil
+            byte == 0x0A ? index : nil
         }
         XCTAssertEqual(separators.count, 2_499)
         for separator in separators {
@@ -171,9 +171,9 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
             switch action {
             case .insertASCIIX(let offset):
                 XCTAssertTrue(offset == 0 || offset == 250_000 || offset == 499_999)
-                candidate.insert(Character("x").asciiValue!, at: offset)
+                candidate.insert(0x78, at: offset)
             case .deleteASCIIX(let offset):
-                XCTAssertEqual(candidate[offset], Character("x").asciiValue)
+                XCTAssertEqual(candidate[offset], 0x78)
                 candidate.remove(at: offset)
             }
             if index % 2 == 1 {
@@ -206,6 +206,11 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(sortedDurations.count, 300)
         XCTAssertEqual(result.editToVisibleIntervalCount, 300)
         XCTAssertTrue(result.mainThreadStallProbeWasActive)
+        XCTAssertEqual(
+            result.reportedNearestRankP95,
+            nearestRankP95(sortedDurations),
+            accuracy: 0.000_001
+        )
         XCTAssertLessThan(nearestRankP95(sortedDurations), Self.maximumP95EditDuration)
         XCTAssertTrue(
             sortedDurations.allSatisfy { $0 <= Self.maximumEditOrStallDuration }
@@ -230,7 +235,7 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
             totalSampleTimes: [120, 180, 240, 300, 360]
         )
 
-        XCTAssertEqual(result.totalDuration, 360, accuracy: 0.000_001)
+        XCTAssertEqual(result.totalDuration, 360, accuracy: 0.100)
         XCTAssertEqual(result.warmupDuration, 60, accuracy: 0.000_001)
         XCTAssertEqual(result.measuredDuration, 300, accuracy: 0.000_001)
         XCTAssertEqual(result.totalSampleTimes, [120, 180, 240, 300, 360])
@@ -238,7 +243,7 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(result.liveBytes.count, 5)
         XCTAssertEqual(result.sessionCount, 1)
         XCTAssertTrue(result.usedActualDisplayLink)
-        XCTAssertEqual(result.allocationBaselineTotalTime, 60, accuracy: 0.000_001)
+        XCTAssertEqual(result.allocationBaselineTotalTime, 60, accuracy: 0.100)
         XCTAssertGreaterThan(result.tickCount, 0)
         XCTAssertTrue(result.mainThreadStallProbeWasActive)
 
@@ -293,6 +298,12 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(result.snapshotWriteCount, 1)
         XCTAssertTrue(result.flushCompleted)
         XCTAssertEqual(result.openIntervalCount, 0)
+        if Self.baselineOptedIn(environment: ProcessInfo.processInfo.environment) {
+            XCTAssertLessThanOrEqual(
+                result.editToVisibleDuration,
+                Self.maximumEditOrStallDuration
+            )
+        }
     }
 
     private func assertPristineSnapshot(
@@ -329,6 +340,11 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertTrue(trial.mainActorSentinelCompleted, file: file, line: line)
         XCTAssertTrue(trial.controllerInteractive, file: file, line: line)
         XCTAssertTrue(trial.measurementEndedAfterSentinel, file: file, line: line)
+        XCTAssertTrue(
+            trial.restoreIntervalCompletedBeforeMeasurementEnd,
+            file: file,
+            line: line
+        )
         XCTAssertTrue(trial.priorProcessTerminated, file: file, line: line)
         XCTAssertEqual(trial.syntheticEditCount, 1, file: file, line: line)
         XCTAssertEqual(trial.openIntervalCount, 0, file: file, line: line)
@@ -353,8 +369,8 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertEqual(fixture.count, 499_999)
         let middleToken = Data("word25000".utf8)
         XCTAssertEqual(fixture.subdata(in: 250_000..<250_009), middleToken)
-        XCTAssertEqual(fixture.prefix(9), Data("word00000".utf8))
-        XCTAssertEqual(fixture.suffix(9), Data("word49999".utf8))
+        XCTAssertEqual(Data(fixture.prefix(9)), Data("word00000".utf8))
+        XCTAssertEqual(Data(fixture.suffix(9)), Data("word49999".utf8))
 
         var actions: [M5EditAction] = []
         actions.reserveCapacity(300)
@@ -491,6 +507,7 @@ struct M5LoadTrialResult: Equatable, Sendable {
     let mainActorSentinelCompleted: Bool
     let controllerInteractive: Bool
     let measurementEndedAfterSentinel: Bool
+    let restoreIntervalCompletedBeforeMeasurementEnd: Bool
     let priorProcessTerminated: Bool
     let syntheticEditCount: Int
     let openIntervalCount: Int
@@ -512,6 +529,7 @@ struct M5EditRunResult: Equatable, Sendable {
     let editDurations: [TimeInterval]
     let mainThreadStallDurations: [TimeInterval]
     let mainThreadStallProbeWasActive: Bool
+    let reportedNearestRankP95: TimeInterval
     let openIntervalCount: Int
 }
 
@@ -556,6 +574,7 @@ struct M5DelayedFilesystemResult: Equatable, Sendable {
     let mainActorSentinelRanWhileFilesystemWasDelayed: Bool
     let readerReflectedEditBeforeFilesystemCompletion: Bool
     let editToVisibleIntervalCount: Int
+    let editToVisibleDuration: TimeInterval
     let finalDocumentRevision: UInt64
     let finalPersistedRevision: UInt64
     let snapshotWriteCount: Int

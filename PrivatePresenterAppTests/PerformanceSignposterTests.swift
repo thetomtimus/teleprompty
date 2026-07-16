@@ -44,7 +44,10 @@ final class PerformanceSignposterTests: XCTestCase {
             performanceSignposter: recorder,
             onEvent: { publishedEvents.append($0) }
         )
-        let generation = ScrollSessionGeneration()
+        let generation = AppModel(
+            overlayController: OverlayPanelController(),
+            document: ScriptDocument(text: "Synthetic generation seed")
+        ).currentScrollGeneration
         _ = session.start(
             binding: ScrollSessionBinding(
                 generation: generation,
