@@ -693,6 +693,164 @@ M4_PROHIBITED_PATTERNS = (
 
 M4_BASELINE = "6aba2060c4308ea90d8973b2f606e5646e85d596"
 
+M5_BASELINE = "d7e79ba1623d76a5df07d2b482bae9ea795ea3cb"
+
+M5_PLANNED_REQUIRED_PATHS = (
+    "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
+    "PrivatePresenterApp/Interfaces/PerformanceSignposting.swift",
+    "PrivatePresenterApp/Services/PerformanceSignposter.swift",
+    "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
+    "PrivatePresenterAppTests/PerformanceSignposterTests.swift",
+    "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+    "PrivatePresenterUITests/ControllerAccessibilityUITests.swift",
+    "PrivatePresenterUITests/M5UITestSupport.swift",
+    "Scripts/generate-m5-fixture.py",
+    "Scripts/test_validate_project_structure_m5.py",
+    "docs/validation/m5-accessibility-result.md",
+    "docs/validation/m5-display-crash-quit-result.md",
+    "docs/validation/performance-result.md",
+)
+
+M5_ACCESSIBILITY_NAMED_TESTS = (
+    "testAllIconButtonsHaveLabelsAndHelp",
+    "testWarningExposesTextNotColorOnly",
+    "testControllerKeyboardTraversal",
+    "testFontRangeControlsAreReachable",
+    "testAccessibilityManifestContainsEveryActionExactlyOnce",
+    "testEveryDynamicControlExposesLabelValueHelpAndIdentifier",
+    "testControllerReverseTraversalHasNoTrap",
+    "testOverlayActionTargetsAreAtLeastFortyFourPoints",
+    "testReaderBandAndInteractionZonesAreIgnored",
+    "testWarningFocusNeverActivatesBackgroundApplication",
+    "testPublicAccessibilitySurfacesNeverContainPrivateSentinels",
+    "testReduceMotionChangeRemovesFadeButKeepsReadingMotion",
+    "testUITestStoreOverrideRequiresDebugFlagXCTestAndTemporaryDescendant",
+    "testUITestStoreOverrideRejectsDotDotTraversal",
+    "testUITestStoreOverrideRejectsSymlinkEscape",
+    "testUITestStoreOverrideRejectsPrefixOnlySibling",
+    "testUITestStoreOverrideRejectsReleaseBuild",
+    "testUITestStoreOverrideRejectsMissingXCTestConfiguration",
+)
+
+M5_LIFECYCLE_NAMED_TESTS = (
+    "testCrashRestoreIsPaused",
+    "testDisconnectDuringTickPersistsAnchorThenHides",
+    "testReconnectRequiresConfirmation",
+    "testQuitTearsDownCallbacks",
+    "testStaleTopologyResultCannotMoveRevealOrResume",
+    "testQueuedDisplayCallbackAfterStopIsIgnored",
+    "testReconnectConfirmationMustMatchCurrentGeneration",
+    "testDisconnectEnqueuesCapturedAnchorBeforeOrderOutWithoutAwaitingDisk",
+    "testCrashRestoreClearsRuntimeDisplayAndNeverShowsOrStarts",
+    "testSuccessfulQuitUsesExactLifecycleOrder",
+    "testFlushFailureTearsDownNothingAndLeavesRecoveryAvailable",
+    "testOverlappingQuitRequestsShareOneAttempt",
+    "testRepeatedSuccessfulTeardownIsIdempotent",
+    "testQuiescentTickFocusHotKeyAndDisplayCallbacksAreIgnored",
+    "testCarbonDispatchClosesBeforeUnregisterAndCleanupStatusDoesNotReopenIt",
+    "testRuntimeOwnersDeallocateAfterTeardown",
+)
+
+M5_SIGNPOST_NAMED_TESTS = (
+    "testSignpostIntervalsBalanceForEveryTerminalPath",
+    "testSignpostAPIHasNoArbitraryMetadataSurface",
+    "testSignpostNamesAndClosedMetadataAreExact",
+    "testSignpostPayloadsNeverContainPrivateSentinels",
+    "testRestoreIntervalEndsAfterReaderLayoutAndMainActorSentinel",
+    "testEditIntervalEndsAfterIncrementalReaderLayout",
+    "testDebounceWaitIsOutsidePersistenceIntervals",
+    "testSnapshotEncodeWriteAndFlushAreSeparateIntervals",
+    "testSignpostRegistryIsEmptyAfterTeardown",
+)
+
+M5_PERFORMANCE_NAMED_TESTS = (
+    "testFiftyThousandWordLoad",
+    "testRepeatedEditDoesNotRebuildWholeReader",
+    "testDebouncedSaveDoesNotBlockMainActor",
+    "testScrollTicksDoNotMutateTextOrPublishPerFrame",
+    "testFixtureIsExactlyFiftyThousandWords",
+    "testSwiftFixtureMatchesGeneratedBytesAndDigest",
+    "testLoadMeasurementEndpointRequiresEditAndMainActorSentinel",
+    "testThreeHundredEditSequenceRestoresFixtureAfterEveryPair",
+    "testNearestRankP95UsesSampleTwoHundredEightyFive",
+    "testEveryEditAndMainThreadStallUsesOneHundredMillisecondCeiling",
+    "testScrollMemoryUsesFivePointOrdinaryLeastSquares",
+    "testAbsoluteThresholdsRequireExplicitBaselineOptIn",
+    "testDelayedFilesystemDoesNotBlockEditAndFinalRevisionFlushes",
+)
+
+M5_PROTECTED_PATHS = (
+    "HANDOFF.md",
+    "IMPLEMENTATION_PLAN.md",
+    "PRD.md",
+    "design/concept.html",
+    "design/teleprompter-concept.png",
+    "references/teleprompter-ui-reference.png",
+    "docs/plans/2026-07-12-milestone-0-stabilization.md",
+    "docs/plans/2026-07-12-milestone-1-core-state-durability.md",
+    "docs/plans/2026-07-14-milestone-2-controller-editor-display-safety.md",
+    "docs/plans/2026-07-15-milestone-3-smooth-rehearsal-scrolling.md",
+    "docs/plans/2026-07-15-milestone-4-global-hotkeys-focus-menu.md",
+    "docs/plans/2026-07-15-milestone-5-accessibility-performance-hardening.md",
+    "docs/validation/m0-phase-a-causal-decision-2026-07-14.md",
+    "docs/validation/m0-phase-b-physical-selection-2026-07-14.md",
+    "docs/validation/m2-controller-editor-display-safety-result.md",
+    "docs/validation/overlay-proof-result.md",
+    "docs/validation/overlay-proof-template.md",
+    "docs/validation/source-artifact-checksums.sha256",
+)
+
+M5_PENDING_EVIDENCE_PATHS = (
+    "docs/validation/m5-accessibility-result.md",
+    "docs/validation/m5-display-crash-quit-result.md",
+    "docs/validation/performance-result.md",
+)
+
+M5_PROHIBITED_PATTERNS = (
+    "addGlobalMonitorForEvents",
+    "addLocalMonitorForEvents",
+    "CGEventTap",
+    "CGEvent.tapCreate",
+    "AXIsProcessTrusted",
+    "AXUIElement",
+    "NSEvent.pressedMouseButtons",
+    "CGEventSource.keyState",
+    "NSApp.activate(",
+    "makeKeyAndOrderFront(",
+    "URLSession",
+    "WKWebView",
+    "MenuBarExtra",
+    "Logger(",
+    "os_log(",
+    "MetricKit",
+    "Sentry",
+    "telemetry",
+    "analytics",
+    "LinearGradient(",
+    "#34466F",
+    "#202B4B",
+    "#F7F8FC",
+)
+
+M5_PHASE_ZERO_REQUIRED_PATHS = (
+    "Scripts/test_validate_project_structure_m5.py",
+    "Scripts/validate_project_structure.py",
+    "docs/plans/2026-07-15-milestone-5-accessibility-performance-hardening.md",
+)
+
+M5_PHASE_ZERO_NAMED_TESTS = (
+    "test_m5_plan_baseline_is_exact",
+    "test_m5_full_planned_path_inventory_is_exact_without_phase_zero_placeholders",
+    "test_m5_accessibility_test_inventory_is_exact",
+    "test_m5_lifecycle_test_inventory_is_exact",
+    "test_m5_signpost_and_performance_test_inventories_are_exact",
+    "test_m5_protected_and_pending_evidence_inventories_are_exact",
+    "test_m5_prohibited_permission_logging_network_and_m6_surfaces_are_exact",
+    "test_phase_zero_validator_rejects_scope_privacy_and_metadata_mutations",
+    "test_phase_zero_validator_rejects_protected_dependency_schema_and_entitlement_mutations",
+    "test_phase_zero_current_source_is_green_and_main_invokes_m5_validator",
+)
+
 
 def fail(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
@@ -1317,6 +1475,214 @@ def validate_m4_source() -> list[str]:
     return violations
 
 
+def validate_m5_source() -> list[str]:
+    """Validate the M5.0 boundary without claiming later M5 slices exist."""
+    violations: list[str] = []
+
+    missing_paths = [
+        path for path in M5_PHASE_ZERO_REQUIRED_PATHS if not (ROOT / path).is_file()
+    ]
+    violations.extend(f"missing-path:{path}" for path in missing_paths)
+
+    phase_zero_tests = read("Scripts/test_validate_project_structure_m5.py")
+    violations.extend(
+        f"missing-test:{name}"
+        for name in M5_PHASE_ZERO_NAMED_TESTS
+        if name not in phase_zero_tests
+    )
+
+    ancestry = git("merge-base", "--is-ancestor", M5_BASELINE, "HEAD")
+    if ancestry.returncode != 0:
+        violations.append("ancestry:m5-plan-baseline-not-ancestor")
+
+    binary_suffixes = {".png"}
+    for path in M5_PROTECTED_PATHS:
+        if Path(path).suffix in binary_suffixes:
+            baseline = subprocess.run(
+                ["git", "show", f"{M5_BASELINE}:{path}"],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+            )
+            current = (ROOT / path).read_bytes() if (ROOT / path).is_file() else None
+            matches = baseline.returncode == 0 and baseline.stdout == current
+        else:
+            baseline = git("show", f"{M5_BASELINE}:{path}")
+            matches = (
+                baseline.returncode == 0
+                and (ROOT / path).is_file()
+                and baseline.stdout == read(path)
+            )
+        if not matches:
+            violations.append(f"protected-byte:{path}")
+
+    production_paths = [
+        path.relative_to(ROOT).as_posix()
+        for root in (ROOT / "Packages/TeleprompterCore/Sources", ROOT / "PrivatePresenterApp")
+        for path in root.rglob("*.swift")
+    ]
+    production_sources = {path: read(path) for path in production_paths}
+    app_sources = {
+        path: source
+        for path, source in production_sources.items()
+        if path.startswith("PrivatePresenterApp/")
+    }
+    joined_app_sources = "\n".join(app_sources.values())
+
+    m6_markers = {"LinearGradient(", "#34466F", "#202B4B", "#F7F8FC"}
+    found_m6_surface = (ROOT / "docs/validation/visual-result.md").exists()
+    for path, source in production_sources.items():
+        for pattern in M5_PROHIBITED_PATTERNS:
+            if pattern in source:
+                violations.append(f"prohibited:{pattern}:{path}")
+                found_m6_surface = found_m6_surface or pattern in m6_markers
+
+        if path != "PrivatePresenterApp/Services/PerformanceSignposter.swift" and any(
+            marker in source
+            for marker in (
+                "import OS",
+                "OSSignposter",
+                "OSSignpostIntervalState",
+                "OSSignpostType",
+            )
+        ):
+            violations.append(f"signpost:OS-boundary:{path}")
+
+        for line_number, line in enumerate(source.splitlines(), start=1):
+            if "performanceSignposter" not in line:
+                continue
+            if "metadata:" in line:
+                violations.append(f"signpost:arbitrary-metadata:{path}:{line_number}")
+            if any(
+                marker in line
+                for marker in (
+                    "SENTINEL_PRIVATE_",
+                    "document.text",
+                    "document.title",
+                    "displayID",
+                    "revision=",
+                    "path=",
+                    "url=",
+                    "userID",
+                    "String(describing:",
+                )
+            ):
+                violations.append(f"signpost:private-sentinel:{path}:{line_number}")
+
+    if found_m6_surface:
+        violations.append("scope:m6-visual-polish")
+
+    if joined_app_sources.count("final class AppModel") != 1:
+        violations.append("authority:AppModel-count")
+    if joined_app_sources.count("@Observable") != 1:
+        violations.append("authority:observable-store-count")
+    if joined_app_sources.count("TeleprompterPanel(contentRect:") != 1:
+        violations.append("authority:panel-construction-count")
+    if joined_app_sources.count("EditorTextSystem(") != 1:
+        violations.append("authority:editor-construction-count")
+    if joined_app_sources.count("ReaderTextSystem(") != 1:
+        violations.append("authority:reader-construction-count")
+    if joined_app_sources.count("NSStatusBar.system.statusItem(") != 1:
+        violations.append("authority:status-item-construction-count")
+    if joined_app_sources.count("ScrollSessionController(") != 1:
+        violations.append("authority:scroll-session-construction-count")
+    product_hot_keys = app_sources.get(
+        "PrivatePresenterApp/Services/CarbonHotKeyService.swift", ""
+    )
+    if product_hot_keys.count("InstallEventHandler(") != 1:
+        violations.append("authority:product-handler-install-count")
+
+    app_model = app_sources.get("PrivatePresenterApp/App/AppModel.swift", "")
+    if "@MainActor\n@Observable\nfinal class AppModel" not in app_model:
+        violations.append("authority:AppModel-main-actor")
+
+    snapshot_path = (
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/"
+        "PersistedSnapshot.swift"
+    )
+    document_path = (
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/"
+        "ScriptDocument.swift"
+    )
+    if "static let currentSchemaVersion = 1" not in production_sources.get(
+        snapshot_path, ""
+    ):
+        violations.append("schema:persisted-snapshot-version")
+    if "static let currentSchemaVersion = 1" not in production_sources.get(
+        document_path, ""
+    ):
+        violations.append("schema:script-document-version")
+
+    protected_dependency_sources = (
+        ("project.yml", "dependency:project-yml-changed"),
+        (
+            "Packages/TeleprompterCore/Package.swift",
+            "dependency:package-swift-changed",
+        ),
+        ("PrivatePresenterApp/Info.plist", "permission:info-plist-changed"),
+        (
+            "PrivatePresenterApp/Resources/PrivatePresenter.entitlements",
+            "entitlement:changed",
+        ),
+    )
+    for path, label in protected_dependency_sources:
+        baseline = git("show", f"{M5_BASELINE}:{path}")
+        if baseline.returncode != 0 or baseline.stdout != read(path):
+            violations.append(label)
+
+    entitlements = read("PrivatePresenterApp/Resources/PrivatePresenter.entitlements")
+    if any(
+        marker in entitlements
+        for marker in (
+            "com.apple.security.network.client",
+            "com.apple.security.network.server",
+            "com.apple.security.automation.apple-events",
+            "com.apple.security.device.audio-input",
+            "com.apple.security.device.camera",
+            "com.apple.security.personal-information",
+            "com.apple.developer.icloud",
+        )
+    ):
+        violations.append("entitlement:non-sandbox-surface")
+
+    scoped_token_markers = (
+        "PerformanceSignpostToken",
+        "PerformanceIntervalToken",
+        "OSSignpostIntervalState",
+    )
+    for path, source in production_sources.items():
+        if path.startswith("Packages/TeleprompterCore/") or path in (
+            "PrivatePresenterApp/App/AppEffect.swift",
+            "PrivatePresenterApp/Services/SnapshotStore.swift",
+        ):
+            if any(marker in source for marker in scoped_token_markers):
+                violations.append(f"signpost:token-crosses-boundary:{path}")
+
+    panel = app_sources.get("PrivatePresenterApp/Overlay/TeleprompterPanel.swift", "")
+    runtime = app_sources.get("PrivatePresenterApp/App/AppRuntime.swift", "")
+    dependency_container = app_sources.get(
+        "PrivatePresenterApp/App/DependencyContainer.swift", ""
+    )
+    if "proofLevel: OverlayPanelLevel = .statusBar" not in runtime:
+        violations.append("panel:status-bar-default")
+    if "orderingMode: OverlayPanelOrderingMode = .frontRegardless" not in dependency_container:
+        violations.append("panel:front-regardless-default")
+    if "override var canBecomeMain: Bool { false }" not in panel:
+        violations.append("panel:permanent-non-main")
+    if "override var canBecomeKey: Bool { !isOverlayLocked && NSApp.isActive }" not in panel:
+        violations.append("panel:dynamic-key-eligibility")
+
+    focus_machine = production_sources.get(
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Focus/"
+        "FocusChromeStateMachine.swift",
+        "",
+    )
+    if ".scheduleHide(after: 2, token: token)" not in focus_machine:
+        violations.append("focus:two-second-deadline")
+
+    return violations
+
+
 def main() -> None:
     missing = [path for path in REQUIRED_PATHS if not (ROOT / path).is_file()]
     if missing:
@@ -1382,10 +1748,13 @@ def main() -> None:
     m4_violations = validate_m4_source()
     if m4_violations:
         fail("Milestone 4 source validation failed: " + ", ".join(m4_violations))
+    m5_violations = validate_m5_source()
+    if m5_violations:
+        fail("Milestone 5 phase-zero validation failed: " + ", ".join(m5_violations))
     validate_xcode_listing()
     print(
         "Project structure validation passed "
-        "(Milestone 0 Phase B + Milestone 4 current source)."
+        "(Milestone 0 Phase B + Milestone 4 + Milestone 5 phase-zero source)."
     )
 
 
