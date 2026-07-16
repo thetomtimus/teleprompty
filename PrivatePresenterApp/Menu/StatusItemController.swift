@@ -28,6 +28,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.target = self
             menu.addItem(item)
         }
+        let menuIdentifiers = [
+            "privatePresenter.menuShowController",
+            "privatePresenter.menuPlayback",
+            "privatePresenter.menuVisibility",
+            "privatePresenter.menuLock",
+            "privatePresenter.menuQuit",
+        ]
+        for (item, identifier) in zip(actionItems, menuIdentifiers) {
+            item.identifier = NSUserInterfaceItemIdentifier(identifier)
+        }
         menu.delegate = self
         statusItem.menu = menu
         statusItem.button?.title = "Private Presenter"
@@ -88,6 +98,32 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             ? "Hide Teleprompter" : "Show Teleprompter"
         actionItems[3].title = model.isLocked ? "Unlock" : "Lock"
         actionItems[4].title = "Quit"
-        for item in actionItems { item.isEnabled = actionsReady }
+        let state = PresenterAccessibility.publicState(model: model)
+        let menuIdentifiers = [
+            "privatePresenter.menuShowController",
+            "privatePresenter.menuPlayback",
+            "privatePresenter.menuVisibility",
+            "privatePresenter.menuLock",
+            "privatePresenter.menuQuit",
+        ]
+        for (item, identifier) in zip(actionItems, menuIdentifiers) {
+            let accessibility = PresenterAccessibility.entry(identifier, state: state)
+            item.toolTip = accessibility.toolTip
+            item.setAccessibilityLabel(accessibility.label)
+            item.setAccessibilityValue(accessibility.value)
+            item.setAccessibilityHelp(accessibility.help)
+            item.isEnabled = actionsReady
+        }
+        if let button = statusItem.button {
+            let accessibility = PresenterAccessibility.entry(
+                "privatePresenter.statusItem",
+                state: state
+            )
+            button.identifier = NSUserInterfaceItemIdentifier(accessibility.identifier)
+            button.toolTip = accessibility.toolTip
+            button.setAccessibilityLabel(accessibility.label)
+            button.setAccessibilityValue(accessibility.value)
+            button.setAccessibilityHelp(accessibility.help)
+        }
     }
 }

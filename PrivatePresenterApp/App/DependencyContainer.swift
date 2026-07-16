@@ -730,7 +730,7 @@ final class DependencyContainer {
         let resolvedStore: SnapshotStore
         if let snapshotStore {
             resolvedStore = snapshotStore
-        } else if let productionStore = try? SnapshotStore.production() {
+        } else if let productionStore = try? Self.makeProductionSnapshotStore() {
             resolvedStore = productionStore
         } else {
             // A path-resolution failure remains fail-closed: this unusable root
@@ -777,6 +777,26 @@ final class DependencyContainer {
             terminationFlushOverride: terminationFlushOverride
         )
         #endif
+    }
+
+    private static func makeProductionSnapshotStore() throws -> SnapshotStore {
+        let normalRoot = try SnapshotStore.productionSnapshotURL()
+            .deletingLastPathComponent()
+        #if DEBUG
+        let resolvedRoot = M5ApplicationSupportRootPolicy.resolve(
+            environment: ProcessInfo.processInfo.environment,
+            isDebugBuild: true,
+            normalRoot: normalRoot,
+            temporaryDirectory: URL(
+                fileURLWithPath: NSTemporaryDirectory(),
+                isDirectory: true
+            ),
+            fileManager: .default
+        )
+        #else
+        let resolvedRoot = normalRoot
+        #endif
+        return SnapshotStore(rootURL: resolvedRoot)
     }
 
     func makeAppModel(restorationRequired: Bool = true) -> AppModel {

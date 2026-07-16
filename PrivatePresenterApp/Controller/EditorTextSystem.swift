@@ -33,6 +33,13 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
+        let accessibility = PresenterAccessibility.staticEntry(
+            "privatePresenter.scriptEditor"
+        )
+        textView.identifier = NSUserInterfaceItemIdentifier(accessibility.identifier)
+        textView.setAccessibilityElement(true)
+        textView.setAccessibilityLabel(accessibility.label)
+        textView.setAccessibilityHelp(accessibility.help)
         configureViewport(NSSize(width: 720, height: 300))
         textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
         textStorage.delegate = self

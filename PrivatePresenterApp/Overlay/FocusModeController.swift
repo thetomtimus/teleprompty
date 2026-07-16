@@ -44,27 +44,45 @@ final class FocusModeController {
     private let reduceMotionProvider: @MainActor () -> Bool
     private let setChromeVisible: @MainActor (Bool, TimeInterval) -> Void
     private let stateChanged: @MainActor (FocusChromeState) -> Void
+    private let accessibilityOptionsCenter: NotificationCenter
     private var machine = FocusChromeStateMachine()
+    private var accessibilityOptionsToken: NSObjectProtocol?
+    private var lastConfiguration: FocusModeConfiguration?
 
     init(
         scheduler: FocusDeadlineScheduling,
         pointerMonitor: PointerPresenceMonitoring,
         reduceMotionProvider: @escaping @MainActor () -> Bool,
         setChromeVisible: @escaping @MainActor (Bool, TimeInterval) -> Void,
-        stateChanged: @escaping @MainActor (FocusChromeState) -> Void
+        stateChanged: @escaping @MainActor (FocusChromeState) -> Void,
+        accessibilityOptionsCenter: NotificationCenter =
+            NSWorkspace.shared.notificationCenter
     ) {
         self.scheduler = scheduler
         self.pointerMonitor = pointerMonitor
         self.reduceMotionProvider = reduceMotionProvider
         self.setChromeVisible = setChromeVisible
         self.stateChanged = stateChanged
+        self.accessibilityOptionsCenter = accessibilityOptionsCenter
+        accessibilityOptionsToken = accessibilityOptionsCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.accessibilityOptionsChanged()
+            }
+        }
     }
 
     var transitionDuration: TimeInterval {
-        reduceMotionProvider() ? 0 : 0.18
+        PresenterAccessibility.motionPolicy(
+            reduceMotion: reduceMotionProvider()
+        ).decorativeFocusDuration
     }
 
     func apply(_ configuration: FocusModeConfiguration) {
+        lastConfiguration = configuration
         execute(
             machine.update(
                 isVisible: configuration.isVisible,
@@ -79,6 +97,17 @@ final class FocusModeController {
     func teardown() {
         execute(machine.teardown())
         pointerMonitor.teardown()
+        lastConfiguration = nil
+        if let accessibilityOptionsToken {
+            accessibilityOptionsCenter.removeObserver(accessibilityOptionsToken)
+            self.accessibilityOptionsToken = nil
+        }
+    }
+
+    private func accessibilityOptionsChanged() {
+        guard lastConfiguration != nil else { return }
+        let chromeVisible = machine.state != .lockedFocusChromeHidden
+        setChromeVisible(chromeVisible, transitionDuration)
     }
 
     private func execute(_ effects: [FocusChromeEffect]) {

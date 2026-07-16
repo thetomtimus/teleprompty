@@ -92,6 +92,14 @@ final class ReaderViewportContainerView: NSView {
             blue: 0.09,
             alpha: 1
         ).cgColor
+        backgroundView.identifier = NSUserInterfaceItemIdentifier(
+            "privatePresenter.readerBackground"
+        )
+        backgroundView.setAccessibilityElement(false)
+        system.activeBandView.identifier = NSUserInterfaceItemIdentifier(
+            "privatePresenter.readerBand"
+        )
+        system.activeBandView.setAccessibilityElement(false)
 
         scrollView.contentView = ReaderClipView()
         scrollView.drawsBackground = false
@@ -105,7 +113,7 @@ final class ReaderViewportContainerView: NSView {
         scrollView.documentView = system.textView
 
         system.textView.identifier = NSUserInterfaceItemIdentifier(
-            "privatePresenter.readerViewport"
+            "privatePresenter.reader"
         )
 
         // AppKit subview order is back-to-front: opaque background, fixed band,

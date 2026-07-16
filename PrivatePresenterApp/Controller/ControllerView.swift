@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TeleprompterCore
 
@@ -17,6 +18,8 @@ struct ControllerView: View {
                     ),
                     topologyStatus: model.topologyStatus,
                     warning: model.warning,
+                    unsafeGeneration: model.pendingShowGeneration,
+                    controllerIsActive: NSApp.isActive,
                     onConfirm: model.confirmSelectedDisplay,
                     onKeepHidden: model.keepScriptHidden
                 )
@@ -33,6 +36,16 @@ struct ControllerView: View {
             isPanelVisible: model.overlaySession.visibility == .visible,
             isClearConfirmationRequired: clearToken != nil
         )
+    }
+
+    private var accessibilityState: PresenterAccessibility.State {
+        PresenterAccessibility.state(model: model)
+    }
+
+    private func accessibilityEntry(
+        _ identifier: String
+    ) -> PresenterAccessibility.Entry {
+        PresenterAccessibility.entry(identifier, state: accessibilityState)
     }
 
     private var productController: some View {
@@ -58,7 +71,9 @@ struct ControllerView: View {
                     )
                 )
                 .textFieldStyle(.roundedBorder)
-                .accessibilityIdentifier("privatePresenter.scriptTitle")
+                .presenterAccessibility(
+                    accessibilityEntry("privatePresenter.scriptTitle")
+                )
 
                 if let instruction = presentation.emptyInstruction {
                     Text(instruction)
@@ -74,16 +89,28 @@ struct ControllerView: View {
 
                 HStack {
                     Button(presentation.openCloseLabel) { dispatch(.openClose) }
+                        .presenterAccessibility(
+                            accessibilityEntry("privatePresenter.openClose")
+                        )
                     Button(presentation.hideShowLabel) { dispatch(.hideShow) }
+                        .presenterAccessibility(
+                            accessibilityEntry("privatePresenter.hideShow")
+                        )
                     Button(model.isLocked ? "Unlock" : "Lock") {
                         model.setLocked(!model.isLocked)
                     }
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.lock")
+                    )
                     Spacer()
                     Button("Clear", role: .destructive) {
                         model.send(.requestClear)
                         clearToken = model.pendingClearToken
                     }
                     .disabled(!presentation.isEnabled(.clear))
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.clear")
+                    )
                 }
 
                 Divider()
@@ -97,6 +124,9 @@ struct ControllerView: View {
                         ),
                         in: 24...96,
                         step: 2
+                    )
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.fontSize")
                     )
                     Text("\(Int(model.preferences.fontSizePoints)) pt")
                         .monospacedDigit()
@@ -113,6 +143,9 @@ struct ControllerView: View {
                     Text("Center").tag(TeleprompterTextAlignment.center)
                 }
                 .pickerStyle(.segmented)
+                .presenterAccessibility(
+                    accessibilityEntry("privatePresenter.alignment")
+                )
 
                 Toggle(
                     "Static active band",
@@ -120,6 +153,9 @@ struct ControllerView: View {
                         get: { model.preferences.isActiveBandEnabled },
                         set: { model.send(.setActiveBandEnabled($0)) }
                     )
+                )
+                .presenterAccessibility(
+                    accessibilityEntry("privatePresenter.activeBand")
                 )
 
                 rehearsalControls
@@ -158,14 +194,29 @@ struct ControllerView: View {
             HStack {
                 Button("Start") { dispatch(.start) }
                     .disabled(!presentation.isEnabled(.start))
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.start")
+                    )
                 Button("Pause") { dispatch(.pause) }
                     .disabled(!presentation.isEnabled(.pause))
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.pause")
+                    )
                 Button("Restart") { dispatch(.restart) }
                     .disabled(!presentation.isEnabled(.restart))
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.restart")
+                    )
                 Button("Back") { dispatch(.back) }
                     .disabled(!presentation.isEnabled(.back))
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.back")
+                    )
                 Button("Forward") { dispatch(.forward) }
                     .disabled(!presentation.isEnabled(.forward))
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.forward")
+                    )
             }
             HStack {
                 Text("Speed")
@@ -178,6 +229,9 @@ struct ControllerView: View {
                     step: TeleprompterPreferences.speedStep
                 )
                 .disabled(!presentation.isEnabled(.speed))
+                .presenterAccessibility(
+                    accessibilityEntry("privatePresenter.speed")
+                )
                 Text("\(Int(model.preferences.speedPointsPerSecond)) pt/s")
                     .monospacedDigit()
             }
@@ -187,6 +241,9 @@ struct ControllerView: View {
                     get: { model.preferences.isFocusModeEnabled },
                     set: { model.send(.setFocusModeEnabled($0)) }
                 )
+            )
+            .presenterAccessibility(
+                accessibilityEntry("privatePresenter.focusMode")
             )
         }
         .accessibilityElement(children: .contain)
@@ -204,6 +261,9 @@ struct ControllerView: View {
             Spacer()
             if canRetryGlobalShortcuts {
                 Button("Retry") { model.send(.retryHotKeyRegistration) }
+                    .presenterAccessibility(
+                        accessibilityEntry("privatePresenter.retryShortcuts")
+                    )
             }
         }
         .padding(.horizontal, 16)

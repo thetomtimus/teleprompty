@@ -46,6 +46,13 @@ final class ReaderTextSystem {
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
         textView.textContainerInset = NSSize(width: 28, height: 24)
+        let accessibility = PresenterAccessibility.staticEntry(
+            "privatePresenter.reader"
+        )
+        textView.identifier = NSUserInterfaceItemIdentifier(accessibility.identifier)
+        textView.setAccessibilityElement(true)
+        textView.setAccessibilityLabel(accessibility.label)
+        textView.setAccessibilityHelp(accessibility.help)
         configureViewport(NSSize(width: 640, height: 360))
         activeBandView.wantsLayer = true
         activeBandView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor

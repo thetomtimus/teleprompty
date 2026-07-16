@@ -53,6 +53,8 @@ struct OverlayRootView: View {
     var body: some View {
         ZStack {
             Color(red: 0.05, green: 0.06, blue: 0.09)
+                .accessibilityIdentifier("privatePresenter.readerBackground")
+                .accessibilityHidden(true)
             VStack(spacing: 0) {
                 if isChromeVisible {
                     if let model {
@@ -124,6 +126,8 @@ struct OverlayRootView: View {
         edge: ClampedPanelInteractionController.ResizeEdge?
     ) -> some View {
         Color.clear
+            .accessibilityIdentifier(interactionIdentifier(edge))
+            .accessibilityHidden(true)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
@@ -142,5 +146,21 @@ struct OverlayRootView: View {
                         }
                     }
             )
+    }
+
+    private func interactionIdentifier(
+        _ edge: ClampedPanelInteractionController.ResizeEdge?
+    ) -> String {
+        guard let edge else { return "privatePresenter.overlayDragZone" }
+        switch edge {
+        case .top: "privatePresenter.resizeTop"
+        case .bottom: "privatePresenter.resizeBottom"
+        case .left: "privatePresenter.resizeLeft"
+        case .right: "privatePresenter.resizeRight"
+        case .topLeft: "privatePresenter.resizeTopLeft"
+        case .topRight: "privatePresenter.resizeTopRight"
+        case .bottomLeft: "privatePresenter.resizeBottomLeft"
+        case .bottomRight: "privatePresenter.resizeBottomRight"
+        }
     }
 }
