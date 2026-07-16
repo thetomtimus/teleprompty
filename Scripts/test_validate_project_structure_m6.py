@@ -140,6 +140,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep every review repair auditable on the Mac",
     "Accept only the verified reconstructed M5 handoff",
     "Make the recovered source compile before packaging",
+    "Import the native signposter module with its real name",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -677,6 +678,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
     "PrivatePresenterApp/Overlay/ReaderTextView.swift",
     "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
+    "PrivatePresenterApp/Services/PerformanceSignposter.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
@@ -1394,6 +1396,11 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         invalid_end = source.index("    private static func mapping(", invalid_start)
         invalid_mapping = source[invalid_start:invalid_end]
         self.assertIn("        return mapping(\n", invalid_mapping)
+
+    def testM6NativeSignposterImportsTheAvailableDarwinModule(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterApp/Services/PerformanceSignposter.swift")
+        self.assertIn("import os\n", source)
+        self.assertNotIn("import OS\n", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
