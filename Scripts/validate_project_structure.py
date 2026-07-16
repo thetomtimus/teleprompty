@@ -1545,6 +1545,7 @@ M6_LEDGER_TITLES = (
     "Keep every review repair auditable on the Mac",
     "Accept only the verified reconstructed M5 handoff",
     "Make the recovered source compile before packaging",
+    "Import the native signposter module with its real name",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1980,6 +1981,7 @@ M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
     "PrivatePresenterApp/Overlay/ReaderTextView.swift",
     "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
+    "PrivatePresenterApp/Services/PerformanceSignposter.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",

@@ -1,5 +1,5 @@
 import Foundation
-import OS
+import os
 import TeleprompterCore
 
 final class PerformanceSignposter: PerformanceSignposting, @unchecked Sendable {
