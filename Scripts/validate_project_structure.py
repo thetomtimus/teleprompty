@@ -1424,6 +1424,97 @@ M5_ORDER_MARKER_COUNTS = {
     ('carbon-close-before-unregister-and-retry', 'XCTAssertEqual(registrar.registerCount, registrationCount)'): 1,
 }
 
+M6_PLAN_COMMIT = "3c1aadd9fb50ab6f335580ebd72e6609f2cfa2f0"
+M6_PLAN_PARENT = "1ac13dbbdae1c53eea06033c353d22ab0919e8a5"
+M6_PLAN_PATH = (
+    "docs/plans/2026-07-16-milestone-6-reference-faithful-visual-polish.md"
+)
+M6_M5_SOURCE_TREE = "3d90bcd2c1851b36e0adc774c99a2416da7ba5b8"
+M6_M5_HANDOFF_MANIFEST_SHA256 = (
+    "2370a865e22a9e1ea3d38b577e0078a9e2e62d0d02c8d30417621e04d976f8b9"
+)
+
+M6_PROTECTED_PATHS = (
+    "HANDOFF.md",
+    "IMPLEMENTATION_PLAN.md",
+    "PRD.md",
+    "design/concept.html",
+    "design/teleprompter-concept.png",
+    "references/teleprompter-ui-reference.png",
+    "docs/plans/2026-07-12-milestone-0-stabilization.md",
+    "docs/plans/2026-07-12-milestone-1-core-state-durability.md",
+    "docs/plans/2026-07-14-milestone-2-controller-editor-display-safety.md",
+    "docs/plans/2026-07-15-milestone-3-smooth-rehearsal-scrolling.md",
+    "docs/plans/2026-07-15-milestone-4-global-hotkeys-focus-menu.md",
+    "docs/plans/2026-07-15-milestone-5-accessibility-performance-hardening.md",
+    M6_PLAN_PATH,
+    "docs/validation/m0-phase-a-causal-decision-2026-07-14.md",
+    "docs/validation/m0-phase-b-physical-selection-2026-07-14.md",
+    "docs/validation/m2-controller-editor-display-safety-result.md",
+    "docs/validation/m5-accessibility-result.md",
+    "docs/validation/m5-display-crash-quit-result.md",
+    "docs/validation/overlay-proof-result.md",
+    "docs/validation/overlay-proof-template.md",
+    "docs/validation/performance-result.md",
+    "docs/validation/source-artifact-checksums.sha256",
+)
+
+M6_PHASE_ZERO_FUTURE_PATHS = (
+    "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+    "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
+    "PrivatePresenterAppTests/M6VisualTestSupport.swift",
+    "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
+    "docs/validation/visual-result.md",
+    ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
+    ".omx/handoff/private-presenter-m6/m6-artifacts.sha256",
+    ".omx/handoff/private-presenter-m6/m6-source-files.sha256",
+    ".omx/handoff/private-presenter-m6/private-presenter-m6-source.tar",
+    ".omx/handoff/private-presenter-m6/private-presenter-m6-wsl.bundle",
+)
+
+M6_PREDECESSOR_PENDING_CLAIMS = (
+    ("accessibility-status", "docs/validation/m5-accessibility-result.md", "Status: PENDING"),
+    ("accessibility-m3", "docs/validation/m5-accessibility-result.md", "M3 native evidence: PENDING"),
+    ("accessibility-m4", "docs/validation/m5-accessibility-result.md", "M4 native evidence: PENDING"),
+    ("accessibility-voiceover", "docs/validation/m5-accessibility-result.md", "VoiceOver: PENDING"),
+    ("lifecycle-status", "docs/validation/m5-display-crash-quit-result.md", "Status: PENDING"),
+    ("lifecycle-m3", "docs/validation/m5-display-crash-quit-result.md", "M3 native evidence: PENDING"),
+    ("lifecycle-m4", "docs/validation/m5-display-crash-quit-result.md", "M4 native evidence: PENDING"),
+    ("lifecycle-appkit", "docs/validation/m5-display-crash-quit-result.md", "AppKit/XCTest: PENDING"),
+    ("performance-status", "docs/validation/performance-result.md", "Status: PENDING"),
+    ("performance-m3", "docs/validation/performance-result.md", "M3 native evidence: PENDING"),
+    ("performance-m4", "docs/validation/performance-result.md", "M4 native evidence: PENDING"),
+    ("performance-instruments", "docs/validation/performance-result.md", "Local Instruments trace paths: PENDING"),
+)
+
+M6_M5_HANDOFF_FILES = (
+    "MAC-CONTINUATION.md",
+    "m5-artifacts.sha256",
+    "m5-review-red-source-files.sha256",
+    "m5-source-files.sha256",
+    "private-presenter-m5-review-red-source.tar",
+    "private-presenter-m5-source.tar",
+    "private-presenter-m5-wsl.bundle",
+)
+
+M6_PHASE_ZERO_ALLOWED_CHANGES = (
+    "Scripts/test_validate_project_structure_m6.py",
+    "Scripts/validate_project_structure.py",
+    "Scripts/verify-wsl.sh",
+)
+
+M6_PHASE_ZERO_IMMUTABLE_SOURCE_PATHS = (
+    "project.yml",
+    "Packages/TeleprompterCore/Package.swift",
+    "PrivatePresenterApp/Info.plist",
+    "PrivatePresenterApp/Resources/PrivatePresenter.entitlements",
+    "Config/Shared.xcconfig",
+    "Config/Debug.xcconfig",
+    "Config/Release.xcconfig",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/PersistedSnapshot.swift",
+)
+
 
 
 
@@ -2534,6 +2625,198 @@ def validate_m5_source() -> list[str]:
     return violations
 
 
+def validate_m6_path_inventory(
+    *, required_paths: tuple[str, ...], absent_paths: tuple[str, ...]
+) -> list[str]:
+    """Apply an explicit inventory without a mutable milestone-stage bypass."""
+    violations = [
+        f"missing-path:{path}" for path in required_paths if not (ROOT / path).is_file()
+    ]
+    violations.extend(
+        f"phase-zero:future-path-present:{path}"
+        for path in absent_paths
+        if (ROOT / path).exists()
+    )
+    return violations
+
+
+def validate_m6_source() -> list[str]:
+    """Validate the M6 phase-zero source and its exact predecessor evidence epoch."""
+    violations = validate_m6_path_inventory(
+        required_paths=("Scripts/test_validate_project_structure_m6.py",),
+        absent_paths=M6_PHASE_ZERO_FUTURE_PATHS,
+    )
+
+    parent = git("rev-parse", f"{M6_PLAN_COMMIT}^")
+    if parent.returncode != 0 or parent.stdout.strip() != M6_PLAN_PARENT:
+        violations.append("ancestry:m6-plan-parent")
+    plan_paths = git(
+        "diff-tree", "--no-commit-id", "--name-only", "-r", M6_PLAN_COMMIT
+    )
+    if plan_paths.returncode != 0 or plan_paths.stdout.splitlines() != [M6_PLAN_PATH]:
+        violations.append("ancestry:m6-plan-path")
+    if git("merge-base", "--is-ancestor", M6_PLAN_COMMIT, "HEAD").returncode != 0:
+        violations.append("ancestry:m6-plan-not-ancestor")
+
+    for path in M6_PROTECTED_PATHS:
+        baseline_returncode, baseline_bytes = committed_bytes(M6_PLAN_COMMIT, path)
+        current = (ROOT / path).read_bytes() if (ROOT / path).is_file() else None
+        if baseline_returncode != 0 or current != baseline_bytes:
+            violations.append(f"protected-byte:{path}")
+
+    for path in M6_PHASE_ZERO_IMMUTABLE_SOURCE_PATHS:
+        baseline_returncode, baseline_bytes = committed_bytes(M6_PLAN_COMMIT, path)
+        current = (ROOT / path).read_bytes() if (ROOT / path).is_file() else None
+        if baseline_returncode != 0 or current != baseline_bytes:
+            violations.append(f"phase-zero:source-creep:{path}")
+
+    for label, path, marker in M6_PREDECESSOR_PENDING_CLAIMS:
+        if not (ROOT / path).is_file() or read(path).splitlines().count(marker) != 1:
+            violations.append(f"evidence:predecessor-pending:{label}")
+
+    committed_changes = git(
+        "diff", "--name-only", "--diff-filter=ACMR", f"{M6_PLAN_COMMIT}..HEAD"
+    )
+    if committed_changes.returncode != 0:
+        violations.append("scope:m6-phase-zero-history")
+    else:
+        changed_paths = set(filter(None, committed_changes.stdout.splitlines()))
+        unexpected = sorted(changed_paths.difference(M6_PHASE_ZERO_ALLOWED_CHANGES))
+        violations.extend(f"scope:m6-phase-zero:{path}" for path in unexpected)
+
+    production_paths = [
+        path.relative_to(ROOT).as_posix()
+        for root in (ROOT / "Packages/TeleprompterCore/Sources", ROOT / "PrivatePresenterApp")
+        for path in root.rglob("*.swift")
+    ]
+    production_sources = {path: read(path) for path in production_paths}
+    joined_sources = "\n".join(production_sources.values())
+    prohibited = (
+        "addGlobalMonitorForEvents",
+        "addLocalMonitorForEvents",
+        "CGEventTap",
+        "CGEvent.tapCreate",
+        "AXIsProcessTrusted",
+        "AXUIElement",
+        "NSApp.activate(",
+        "makeKeyAndOrderFront(",
+        "URLSession",
+        "URLRequest",
+        "NSURLConnection",
+        "NWConnection",
+        "import Network",
+        "WKWebView",
+        "CGWindowListCreateImage",
+        "SCScreenshotManager",
+        "MetricKit",
+        "Sentry",
+        "telemetry",
+        "analytics",
+    )
+    for path, source in production_sources.items():
+        for marker in prohibited:
+            if marker in source:
+                violations.append(f"prohibited:{marker}:{path}")
+
+    authority_counts = (
+        ("AppModel-count", "final class AppModel", 1),
+        ("observable-store-count", "@Observable", 1),
+        ("panel-construction-count", "TeleprompterPanel(contentRect:", 1),
+        ("reader-construction-count", "ReaderTextSystem(", 1),
+        ("scroll-session-construction-count", "ScrollSessionController(", 1),
+        ("focus-state-machine-count", "FocusChromeStateMachine()", 1),
+    )
+    for label, marker, expected_count in authority_counts:
+        if joined_sources.count(marker) != expected_count:
+            violations.append(f"authority:{label}")
+    app_model = production_sources.get("PrivatePresenterApp/App/AppModel.swift", "")
+    if "@MainActor\n@Observable\nfinal class AppModel" not in app_model:
+        violations.append("authority:AppModel-main-actor")
+    panel = production_sources.get(
+        "PrivatePresenterApp/Overlay/TeleprompterPanel.swift", ""
+    )
+    for label, marker in (
+        ("nonactivating", ".nonactivatingPanel"),
+        ("permanent-non-main", "override var canBecomeMain: Bool { false }"),
+        (
+            "dynamic-key-eligibility",
+            "override var canBecomeKey: Bool { !isOverlayLocked && NSApp.isActive }",
+        ),
+    ):
+        if marker not in panel:
+            violations.append(f"panel:{label}")
+
+    snapshot = production_sources.get(
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/"
+        "PersistedSnapshot.swift",
+        "",
+    )
+    document = production_sources.get(
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift",
+        "",
+    )
+    if "currentSchemaVersion = 1" not in snapshot:
+        violations.append("schema:persisted-snapshot-version")
+    if "currentSchemaVersion = 1" not in document:
+        violations.append("schema:script-document-version")
+
+    runner = read("Scripts/verify-wsl.sh")
+    runner_markers = (
+        'M5_HANDOFF="$PWD/.omx/handoff/private-presenter-m5"',
+        f"M5_MANIFEST_SHA={M6_M5_HANDOFF_MANIFEST_SHA256}",
+        'find "$M5_HANDOFF" -maxdepth 1 -type f',
+        'sha256sum "$M5_HANDOFF/m5-artifacts.sha256"',
+        f'git worktree add --detach "$M5_ROOT/tree" {M6_PLAN_PARENT}',
+        M6_M5_SOURCE_TREE,
+        'cp -a "$M5_HANDOFF" "$M5_ROOT/tree/.omx/handoff/private-presenter-m5"',
+        "trap 'git worktree remove --force",
+        "python3 -B Scripts/test_validate_project_structure_m5.py",
+        "python3 -B Scripts/test_validate_project_structure_m6.py",
+    )
+    for marker in runner_markers:
+        if marker not in runner:
+            violations.append(f"runner:missing-marker:{marker}")
+    for marker, expected_count in (
+        ("sha256sum -c m5-artifacts.sha256", 2),
+        ("git bundle verify private-presenter-m5-wsl.bundle", 2),
+        ("python3 Scripts/validate_project_structure.py", 2),
+        ("python3 -B Scripts/test_validate_project_structure_m5.py", 1),
+        ("python3 -B Scripts/test_validate_project_structure_m6.py", 1),
+    ):
+        if runner.count(marker) != expected_count:
+            violations.append(f"runner:marker-count:{marker}")
+    inventory_start = runner.find('M5_EXPECTED_FILES="$(printf')
+    inventory_end = runner.find('test "$(find', inventory_start)
+    inventory_source = runner[inventory_start:inventory_end]
+    if inventory_start < 0 or inventory_end <= inventory_start:
+        violations.append("runner:m5-inventory-block")
+    else:
+        for name in M6_M5_HANDOFF_FILES:
+            if inventory_source.count(name) != 1:
+                violations.append(f"runner:m5-inventory:{name}")
+
+    epoch_start = runner.find('(cd "$M5_ROOT/tree"')
+    epoch_end = runner.find('git worktree remove --force "$M5_ROOT/tree"', epoch_start)
+    m5_position = runner.find("python3 -B Scripts/test_validate_project_structure_m5.py")
+    m6_position = runner.find("python3 -B Scripts/test_validate_project_structure_m6.py")
+    if not (
+        epoch_start >= 0
+        and epoch_end > epoch_start
+        and epoch_start < m5_position < epoch_end < m6_position
+    ):
+        violations.append("runner:epoch-routing")
+
+    validator_source = read("Scripts/validate_project_structure.py")
+    main_start = validator_source.rfind("def " + "main() -> None:")
+    main_source = validator_source[main_start:]
+    if main_source.count("validate_" + "m6_source()") != 1:
+        violations.append("runner:current-m6-main-count")
+    if "validate_" + "m5_source()" in main_source:
+        violations.append("runner:current-m5-main")
+
+    return violations
+
+
 
 def main() -> None:
     missing = [path for path in REQUIRED_PATHS if not (ROOT / path).is_file()]
@@ -2600,13 +2883,13 @@ def main() -> None:
     m4_violations = validate_m4_source()
     if m4_violations:
         fail("Milestone 4 source validation failed: " + ", ".join(m4_violations))
-    m5_violations = validate_m5_source()
-    if m5_violations:
-        fail("Milestone 5 validation failed: " + ", ".join(m5_violations))
+    m6_violations = validate_m6_source()
+    if m6_violations:
+        fail("Milestone 6 validation failed: " + ", ".join(m6_violations))
     validate_xcode_listing()
     print(
         "Project structure validation passed "
-        "(Milestone 0 Phase B + Milestone 4 + Milestone 5 source)."
+        "(Milestone 0 Phase B + Milestone 4 + Milestone 6 source)."
     )
 
 
