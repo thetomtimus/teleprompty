@@ -8,7 +8,7 @@ python3 -B -m unittest \
   Scripts/test_validate_project_structure_m4.py
 
 M5_HANDOFF="$PWD/.omx/handoff/private-presenter-m5"
-M5_MANIFEST_SHA=2370a865e22a9e1ea3d38b577e0078a9e2e62d0d02c8d30417621e04d976f8b9
+M5_MANIFEST_SHA=29a38045cb4f01c29c5973baeb3ec57de0cda249d52e82e385481a2724f20eae
 M5_EXPECTED_FILES="$(printf '%s\n' MAC-CONTINUATION.md m5-artifacts.sha256 \
   m5-review-red-source-files.sha256 m5-source-files.sha256 \
   private-presenter-m5-review-red-source.tar private-presenter-m5-source.tar \
