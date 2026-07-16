@@ -1,0 +1,97 @@
+name: Build M6 macOS DMG
+
+on:
+  push:
+    branches:
+      - build/m6-dmg
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out build trigger branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pin the exact verified M6 source candidate
+        run: |
+          set -euo pipefail
+          expected='e96a09782d14b9fb6f7e334431713da5079dac67'
+          git checkout --detach "$expected"
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain=v1)"
+
+      - name: Install pinned XcodeGen
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/xcodegen.zip \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.45.4/xcodegen.zip
+          ditto -x -k /tmp/xcodegen.zip /tmp/xcodegen
+          sudo /tmp/xcodegen/xcodegen/install.sh /usr/local
+          test "$(xcodegen --version)" = "Version: 2.45.4"
+
+      - name: Run the complete automated macOS gate
+        run: ./Scripts/verify-macos.sh
+
+      - name: Ad-hoc sign and package the arm64 DMG
+        run: |
+          set -euo pipefail
+          app='.build/DerivedData-Release/Build/Products/Release/Private Presenter.app'
+          executable="$app/Contents/MacOS/Private Presenter"
+          test -d "$app"
+          test -x "$executable"
+
+          codesign --force --deep --sign - \
+            --entitlements PrivatePresenterApp/Resources/PrivatePresenter.entitlements \
+            "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          architectures="$(lipo -archs "$executable")"
+          printf 'Packaged architectures: %s\n' "$architectures"
+          case " $architectures " in
+            *" arm64 "*) ;;
+            *) echo "error: packaged app does not contain arm64" >&2; exit 1 ;;
+          esac
+
+          mkdir -p dist/dmg-root
+          ditto "$app" 'dist/dmg-root/Private Presenter.app'
+          ln -s /Applications dist/dmg-root/Applications
+          cat > dist/dmg-root/OPEN-FIRST.txt <<'TXT'
+          PRIVATE PRESENTER — M6 TEST BUILD
+
+          1. Drag “Private Presenter.app” to the Applications shortcut.
+          2. The first time, right-click the app and choose Open.
+          3. If macOS still blocks this ad-hoc-signed test build, run:
+
+             xattr -dr com.apple.quarantine "/Applications/Private Presenter.app"
+             open "/Applications/Private Presenter.app"
+
+          This build is not notarized. It still needs the physical Keynote,
+          extended-display, VoiceOver, Instruments, and visual acceptance checks.
+          TXT
+          printf '%s\n' 'e96a09782d14b9fb6f7e334431713da5079dac67' > dist/SOURCE-SHA.txt
+
+          hdiutil create \
+            -volname 'Private Presenter M6 Test' \
+            -srcfolder dist/dmg-root \
+            -ov -format UDZO \
+            dist/Private-Presenter-M6-macOS-arm64.dmg
+          hdiutil verify dist/Private-Presenter-M6-macOS-arm64.dmg
+          shasum -a 256 dist/Private-Presenter-M6-macOS-arm64.dmg \
+            > dist/Private-Presenter-M6-macOS-arm64.dmg.sha256
+
+      - name: Upload downloadable DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Private-Presenter-M6-macOS-arm64-DMG
+          path: |
+            dist/Private-Presenter-M6-macOS-arm64.dmg
+            dist/Private-Presenter-M6-macOS-arm64.dmg.sha256
+            dist/SOURCE-SHA.txt
+          if-no-files-found: error
+          retention-days: 7
