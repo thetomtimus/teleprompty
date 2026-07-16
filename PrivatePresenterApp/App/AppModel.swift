@@ -30,6 +30,7 @@ final class AppModel {
     private(set) var shortcutBindings: [ShortcutBinding]
     private(set) var snapshotRevision: UInt64
     private(set) var hotKeyStatus: HotKeyTransactionResult?
+    private(set) var focusChromeState: FocusChromeState
 
     private(set) var displays: [RuntimeDisplay] = []
     private(set) var selectedDisplayID: UInt32?
@@ -66,6 +67,7 @@ final class AppModel {
     @ObservationIgnored private var isReaderAttached = false
     @ObservationIgnored private var pendingScrollRetirement: PendingScrollRetirement?
     @ObservationIgnored private var lastAcceptedScrollCheckpointUptime: TimeInterval?
+    @ObservationIgnored private var pointerPresent = false
 
     private struct PendingScrollRetirement {
         let retiring: ScrollSessionGeneration
@@ -145,6 +147,7 @@ final class AppModel {
         shortcutBindings = Self.defaultShortcutBindings
         snapshotRevision = 0
         hotKeyStatus = nil
+        focusChromeState = .unlocked
         restorationCompleted = !restorationRequired
         isPersistenceLoadSafe = !restorationRequired
         proofConfigurationSnapshot = overlayController.configurationSnapshot
@@ -304,6 +307,14 @@ final class AppModel {
             completeHotKeyTransaction(result)
         case .retryHotKeyRegistration:
             effectHandler(.retryHotKeys)
+        case .setFocusModeEnabled(let enabled):
+            setFocusModeEnabled(enabled)
+        case .pointerPresenceChanged(let present):
+            guard pointerPresent != present else { break }
+            pointerPresent = present
+            effectHandler(.updateFocusMode(focusModeConfiguration))
+        case .focusChromeStateChanged(let state):
+            focusChromeState = state
         case .showOverlay:
             showOverlayCommand()
         case .hideOverlay:
@@ -805,6 +816,26 @@ final class AppModel {
         }
     }
 
+    private func setFocusModeEnabled(_ enabled: Bool) {
+        guard preferences.isFocusModeEnabled != enabled else { return }
+        invalidatePendingClearForDurableChange()
+        preferences.isFocusModeEnabled = enabled
+        snapshotRevision += 1
+        emit([
+            .scheduleSnapshot(snapshot()),
+            .updateFocusMode(focusModeConfiguration),
+        ])
+    }
+
+    private var focusModeConfiguration: FocusModeConfiguration {
+        FocusModeConfiguration(
+            isVisible: overlaySession.visibility == .visible,
+            isLocked: preferences.isLocked,
+            isFocusModeEnabled: preferences.isFocusModeEnabled,
+            pointerPresent: pointerPresent
+        )
+    }
+
     private func restart() {
         localError = nil
         invalidatePendingClearForDurableChange()
@@ -838,6 +869,7 @@ final class AppModel {
         }
         restorationCompleted = true
         isPersistenceLoadSafe = true
+        pointerPresent = false
         displays = []
         latestTopology = nil
         selectedDisplayID = nil
@@ -863,6 +895,7 @@ final class AppModel {
                 generation: generation,
                 anchor: overlaySession.readingAnchor
             ),
+            .updateFocusMode(focusModeConfiguration),
         ])
     }
 
@@ -871,6 +904,7 @@ final class AppModel {
         restorationCompleted = true
         isPersistenceLoadSafe = false
         overlaySession = OverlaySession()
+        pointerPresent = false
         displays = []
         latestTopology = nil
         selectedDisplayID = nil
@@ -881,7 +915,11 @@ final class AppModel {
         localError = .snapshotLoadFailed
         pendingClear = nil
         pendingShieldedMoveDisplayID = nil
-        emit([.reassessPrivacy, .setPanelLocked(preferences.isLocked)])
+        emit([
+            .reassessPrivacy,
+            .setPanelLocked(preferences.isLocked),
+            .updateFocusMode(focusModeConfiguration),
+        ])
     }
 
     private func snapshot() -> PersistedSnapshot {
@@ -949,6 +987,7 @@ final class AppModel {
         isSelectionConfirmed = false
         isShielded = true
         overlaySession.visibility = .hidden
+        pointerPresent = false
         overlaySession.currentSessionDisplayID = nil
         overlaySession.recoveryConfirmationState = .required
         pendingShieldedMoveDisplayID = nil
@@ -1047,11 +1086,12 @@ final class AppModel {
         isSelectionConfirmed = false
         isShielded = true
         overlaySession.visibility = .hidden
+        pointerPresent = false
         overlaySession.playbackPhase = .paused
         overlaySession.currentSessionDisplayID = nil
         overlaySession.recoveryConfirmationState = .required
         pendingShieldedMoveDisplayID = nil
-        emit([stop, .hidePanel])
+        emit([stop, .hidePanel, .updateFocusMode(focusModeConfiguration)])
     }
 
     private func showOverlayCommand() {
@@ -1084,6 +1124,7 @@ final class AppModel {
                 display,
                 proposedFrame: restoredFrame(for: display)
             ))
+        effectHandler(.updateFocusMode(focusModeConfiguration))
         #if DEBUG
         captureFocus(label: "after show")
         #endif
@@ -1092,7 +1133,7 @@ final class AppModel {
     private func hideOverlayCommand() {
         let stop = retireScrollSessionEffect(reason: .hide)
         overlaySession.visibility = .hidden
-        emit([stop, .hidePanel])
+        emit([stop, .hidePanel, .updateFocusMode(focusModeConfiguration)])
     }
 
     private func setLockedCommand(_ locked: Bool) {
@@ -1100,7 +1141,11 @@ final class AppModel {
         invalidatePendingClearForDurableChange()
         preferences.isLocked = locked
         snapshotRevision += 1
-        emit([.setPanelLocked(locked), .scheduleSnapshot(snapshot())])
+        emit([
+            .setPanelLocked(locked),
+            .scheduleSnapshot(snapshot()),
+            .updateFocusMode(focusModeConfiguration),
+        ])
     }
 
     private func restoredFrame(for display: RuntimeDisplay) -> CGRect? {
@@ -1140,6 +1185,7 @@ final class AppModel {
                 overlaySession.playbackPhase = .paused
             case .hideOverlay:
                 overlaySession.visibility = .hidden
+                pointerPresent = false
                 externalEffects.append(.hidePanel)
             case .shieldController:
                 isShielded = true
@@ -1173,6 +1219,9 @@ final class AppModel {
                 payload: DiagnosticEventPayload(privacyDirective: directive.diagnosticName)
             )
             #endif
+        }
+        if directives.contains(.hideOverlay) {
+            externalEffects.append(.updateFocusMode(focusModeConfiguration))
         }
         return externalEffects
     }
@@ -1347,6 +1396,7 @@ final class AppModel {
             .start, .togglePlayback, .restart, .setSpeed, .moveBackward, .moveForward,
             .performShortcut, .requestHotKeyReconfiguration,
             .hotKeyReconfigurationCompleted, .retryHotKeyRegistration,
+            .setFocusModeEnabled, .pointerPresenceChanged, .focusChromeStateChanged,
             .showOverlay, .setLocked, .restore, .restoreFailed, .selectDisplay,
             .confirmSelectedDisplay, .readerAttachmentChanged, .readerScreenChanged,
             .readerBoundsWillChange, .readerBoundsChanged:
@@ -1405,6 +1455,7 @@ final class AppModel {
             .replaceReader, .updateReaderAttributes, .scheduleSnapshot,
             .flushSnapshot, .saveSnapshotImmediately, .flushPersistence,
             .reconfigureHotKeys, .retryHotKeys,
+            .updateFocusMode, .teardownFocusMode,
             .moveControllerWhileShielded, .resetViewport, .reassessPrivacy,
             .queryTopology, .evaluatePrivacy:
             break
@@ -1459,6 +1510,7 @@ extension AppEffect {
         case .moveControllerWhileShielded: .moveControllerWhileShielded
         case .scheduleSnapshot, .flushSnapshot, .saveSnapshotImmediately,
             .flushPersistence, .reconfigureHotKeys, .retryHotKeys,
+            .updateFocusMode, .teardownFocusMode,
             .resetViewport, .reassessPrivacy,
             .queryTopology, .evaluatePrivacy:
             .other

@@ -8,6 +8,7 @@ struct OverlayRootView: View {
     static let interiorIsFullyOpaque = true
     static let resizeZones = ClampedPanelInteractionController.ResizeEdge.allCases
 
+    let model: AppModel?
     let readerSystem: ReaderTextSystem?
     let readerViewportFraction: Double
     let onReaderAttachmentChanged: @MainActor (Bool) -> Void
@@ -20,6 +21,7 @@ struct OverlayRootView: View {
     let onResizeEnded: () -> Void
 
     init(
+        model: AppModel? = nil,
         readerSystem: ReaderTextSystem? = nil,
         readerViewportFraction: Double = 0.5,
         onReaderAttachmentChanged: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -35,6 +37,7 @@ struct OverlayRootView: View {
             ) -> Void = { _, _ in },
         onResizeEnded: @escaping () -> Void = {}
     ) {
+        self.model = model
         self.readerSystem = readerSystem
         self.readerViewportFraction = readerViewportFraction
         self.onReaderAttachmentChanged = onReaderAttachmentChanged
@@ -51,11 +54,18 @@ struct OverlayRootView: View {
         ZStack {
             Color(red: 0.05, green: 0.06, blue: 0.09)
             VStack(spacing: 0) {
-                Text("Private Presenter")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: Self.readerHeaderHeight)
+                if isChromeVisible {
+                    if let model {
+                        OverlayChromeView(model: model)
+                            .frame(height: Self.readerHeaderHeight)
+                    } else {
+                        Text("Private Presenter")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Self.readerHeaderHeight)
+                    }
+                }
                 if let readerSystem {
                     ReaderTextView(
                         system: readerSystem,
@@ -98,6 +108,10 @@ struct OverlayRootView: View {
         .overlay(alignment: .bottomTrailing) {
             interactionZone(edge: .bottomRight).frame(width: 18, height: 18)
         }
+    }
+
+    private var isChromeVisible: Bool {
+        model?.focusChromeState != .lockedFocusChromeHidden
     }
 
     private func interactionZone(

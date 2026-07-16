@@ -56,6 +56,8 @@ final class OverlayPanelController: NSWindowController {
     private var interactionStartFrame: NSRect?
     private let operationRecorder: (OverlayPanelOperation) -> Void
     private let appliedFrameRecorder: (OverlayAppliedFrameRecord) -> Void
+    private weak var connectedModel: AppModel?
+    private(set) var hostingControllerConstructionCount = 0
     var onAppliedFrame: ((OverlayAppliedFrameRecord) -> Void)?
     var onReaderAttachmentChanged: (@MainActor (Bool) -> Void)?
     var onReaderScreenChanged: (@MainActor () -> Void)?
@@ -119,8 +121,17 @@ final class OverlayPanelController: NSWindowController {
         }
         super.init(window: panel)
 
-        panel.contentViewController = NSHostingController(
+    }
+
+    @discardableResult
+    func connect(model: AppModel) -> Bool {
+        if let connectedModel {
+            return connectedModel === model
+        }
+        connectedModel = model
+        teleprompterPanel.contentViewController = NSHostingController(
             rootView: OverlayRootView(
+                model: model,
                 readerSystem: readerTextSystem,
                 onReaderAttachmentChanged: { [weak self] isAttached in
                     self?.onReaderAttachmentChanged?(isAttached)
@@ -148,6 +159,12 @@ final class OverlayPanelController: NSWindowController {
                 }
             )
         )
+        hostingControllerConstructionCount += 1
+        return true
+    }
+
+    var connectedModelIdentity: ObjectIdentifier? {
+        connectedModel.map(ObjectIdentifier.init)
     }
 
     @available(*, unavailable)

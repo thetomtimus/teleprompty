@@ -179,15 +179,15 @@ final class ControllerPresentationTests: XCTestCase {
         XCTAssertNil(presentation.productCommand(for: .speed))
     }
 
-    func testM2FocusModeExplainsM4AndDoesNotChangeChrome() {
+    func testM4FocusModeIsEnabledWithoutPlaceholderCopy() {
         let presentation = ControllerPresentation(
             scriptText: "Generated script",
             isPanelVisible: false,
             isClearConfirmationRequired: false
         )
 
-        XCTAssertEqual(presentation.explanation(for: .focusMode), ControllerPresentation.m4Explanation)
-        XCTAssertFalse(presentation.isEnabled(.focusMode))
+        XCTAssertNil(presentation.explanation(for: .focusMode))
+        XCTAssertTrue(presentation.isEnabled(.focusMode))
         XCTAssertNil(presentation.productCommand(for: .focusMode))
     }
 

@@ -176,7 +176,7 @@ private final class FocusHarness {
     lazy var controller = FocusModeController(
         scheduler: scheduler,
         pointerMonitor: pointerMonitor,
-        reduceMotionProvider: { [reduceMotion] in reduceMotion },
+        reduceMotionProvider: { [weak self] in self?.reduceMotion ?? false },
         setChromeVisible: { [weak self] visible, _ in self?.visibility.append(visible) },
         stateChanged: { _ in }
     )

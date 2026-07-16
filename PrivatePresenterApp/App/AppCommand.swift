@@ -48,6 +48,9 @@ enum AppCommand {
     case requestHotKeyReconfiguration([ShortcutBinding])
     case hotKeyReconfigurationCompleted(HotKeyTransactionResult)
     case retryHotKeyRegistration
+    case setFocusModeEnabled(Bool)
+    case pointerPresenceChanged(Bool)
+    case focusChromeStateChanged(FocusChromeState)
 
     case showOverlay
     case hideOverlay

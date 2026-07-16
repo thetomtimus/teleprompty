@@ -181,10 +181,13 @@ struct ControllerView: View {
                 Text("\(Int(model.preferences.speedPointsPerSecond)) pt/s")
                     .monospacedDigit()
             }
-            Toggle("Focus Mode", isOn: .constant(false)).disabled(true)
-            Text(ControllerPresentation.m4Explanation)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Toggle(
+                "Focus Mode",
+                isOn: Binding(
+                    get: { model.preferences.isFocusModeEnabled },
+                    set: { model.send(.setFocusModeEnabled($0)) }
+                )
+            )
         }
         .accessibilityElement(children: .contain)
     }

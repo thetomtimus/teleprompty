@@ -94,10 +94,14 @@ class TeleprompterPanel: NSPanel {
         titlebarAppearsTransparent = true
     }
 
-    /// Custom drag/resize gestures never require key-window status. Keeping the
-    /// panel permanently non-key prevents an unlocked pointer gesture from
-    /// activating Private Presenter over the presentation application.
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { !isOverlayLocked && NSApp.isActive }
+
+    static func keyEligibility(
+        isLocked: Bool,
+        applicationIsActive: Bool
+    ) -> Bool {
+        !isLocked && applicationIsActive
+    }
 
     override var canBecomeMain: Bool { false }
 

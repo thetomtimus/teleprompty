@@ -48,6 +48,8 @@ enum AppEffect: Equatable {
     case flushPersistence
     case reconfigureHotKeys([ShortcutBinding])
     case retryHotKeys
+    case updateFocusMode(FocusModeConfiguration)
+    case teardownFocusMode
 
     case stagePanelHidden(RuntimeDisplay, proposedFrame: CGRect?)
     case showPanel(RuntimeDisplay, proposedFrame: CGRect?)

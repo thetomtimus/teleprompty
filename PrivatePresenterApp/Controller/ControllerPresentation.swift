@@ -53,7 +53,7 @@ struct ControllerPresentation: Equatable, Sendable {
     func isEnabled(_ control: ControllerControl) -> Bool {
         switch control {
         case .focusMode:
-            false
+            true
         case .start, .pause, .restart, .speed, .back, .forward:
             !isEmpty
         case .clear:
@@ -68,7 +68,7 @@ struct ControllerPresentation: Equatable, Sendable {
         case .start, .pause, .restart, .speed, .back, .forward:
             nil
         case .focusMode:
-            Self.m4Explanation
+            nil
         default:
             nil
         }

@@ -123,6 +123,16 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         XCTAssertFalse(panel.canBecomeMain)
     }
 
+    func testUnlockedPanelRestoresInteractionWithoutAcceptingKey() {
+        let panel = makeController().teleprompterPanel
+        panel.setLocked(true)
+        panel.setLocked(false)
+
+        XCTAssertFalse(panel.ignoresMouseEvents)
+        XCTAssertFalse(panel.isKeyWindow)
+        XCTAssertFalse(panel.canBecomeMain)
+    }
+
     func testShowDoesNotActivateApplication() {
         let controller = makeController()
         let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier

@@ -23,6 +23,27 @@ final class AppEffectAdapter {
             self?.model?.send(.performShortcut(action))
         }
     )
+    lazy var pointerPresenceMonitor: PointerPresenceMonitoring = PointerPresenceMonitor(
+        scheduler: TaskRepeatingScheduler(),
+        locationProvider: { NSEvent.mouseLocation },
+        panelFrameProvider: { [weak self] in
+            self?.overlayController.teleprompterPanel.frame ?? .zero
+        },
+        onPresenceChanged: { [weak self] present in
+            self?.model?.send(.pointerPresenceChanged(present))
+        }
+    )
+    lazy var focusModeController = FocusModeController(
+        scheduler: TaskFocusDeadlineScheduler(),
+        pointerMonitor: pointerPresenceMonitor,
+        reduceMotionProvider: {
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        },
+        setChromeVisible: { _, _ in },
+        stateChanged: { [weak self] state in
+            self?.model?.send(.focusChromeStateChanged(state))
+        }
+    )
     #if DEBUG
     private var handleDepth = 0
     private(set) var maximumHandleDepth = 0
@@ -98,6 +119,10 @@ final class AppEffectAdapter {
     func connect(model: AppModel, controller: ControllerWindowController) {
         self.model = model
         controllerWindowController = controller
+        precondition(
+            overlayController.connect(model: model),
+            "OverlayPanelController cannot connect to a second AppModel"
+        )
         overlayController.readerTextSystem.onResyncRequested = { [weak model] revision in
             model?.send(.readerResyncRequested(appliedRevision: revision))
         }
@@ -408,6 +433,10 @@ final class AppEffectAdapter {
             model?.send(
                 .hotKeyReconfigurationCompleted(carbonHotKeyService.retry())
             )
+        case .updateFocusMode(let configuration):
+            focusModeController.apply(configuration)
+        case .teardownFocusMode:
+            focusModeController.teardown()
         case .stagePanelHidden(let display, let proposedFrame):
             #if DEBUG
             recordPanelOperation(.stageHidden, correlationID: correlationID)
