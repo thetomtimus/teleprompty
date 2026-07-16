@@ -1766,7 +1766,11 @@ M6_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS = (
     "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
 )
 M6_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS = (
-    ("real-inventory-command", "model.send(.displayInventoryLoaded(", 1),
+    (
+        "real-inventory-command",
+        ".displayInventoryLoaded(RuntimeDisplayInventory(displays: [display]))",
+        1,
+    ),
     ("real-confirm-command", "model.send(.confirmSelectedDisplay)", 1),
     (
         "real-shielded-move-completion",

@@ -696,12 +696,30 @@ final class OverlayVisualSnapshotTests: XCTestCase {
             XCTAssertTrue(titleProbe.resizeChanges.isEmpty)
             XCTAssertEqual(titleProbe.resizeEndCount, 0)
 
-            let headerProbe = M6VisualTestSupport.HostedRootProbe(size: size)
-            let playback = metrics.headerControlRegions[0]
-            headerProbe.press(at: CGPoint(x: playback.frame.midX, y: playback.frame.midY))
-            XCTAssertFalse(headerProbe.controlState.isPaused)
-            XCTAssertTrue(headerProbe.titleChanges.isEmpty)
-            XCTAssertTrue(headerProbe.resizeChanges.isEmpty)
+            for header in metrics.headerControlRegions {
+                let headerProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+                let before = headerProbe.controlState
+                let dispatchesBeforePress = headerProbe.commandDispatchCount
+                headerProbe.press(
+                    at: CGPoint(x: header.frame.midX, y: header.frame.midY)
+                )
+                XCTAssertEqual(
+                    headerProbe.commandDispatchCount, dispatchesBeforePress + 1,
+                    header.identifier
+                )
+                switch header.identifier {
+                case "privatePresenter.headerPlayback":
+                    XCTAssertNotEqual(headerProbe.controlState.isPaused, before.isPaused)
+                case "privatePresenter.headerLock":
+                    XCTAssertNotEqual(headerProbe.controlState.isLocked, before.isLocked)
+                case "privatePresenter.headerSettings":
+                    XCTAssertEqual(headerProbe.showExistingControllerCount, 1)
+                default:
+                    XCTFail("Unexpected header control: \(header.identifier)")
+                }
+                XCTAssertTrue(headerProbe.titleChanges.isEmpty)
+                XCTAssertTrue(headerProbe.resizeChanges.isEmpty)
+            }
         }
     }
 

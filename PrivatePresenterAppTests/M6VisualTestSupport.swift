@@ -99,6 +99,7 @@ enum M6VisualTestSupport {
         var alignment: TeleprompterTextAlignment
         var isPaused: Bool
         var isFocusModeEnabled: Bool
+        var isLocked: Bool
     }
 
     struct HostedAccessibilityControl: Equatable {
@@ -114,7 +115,10 @@ enum M6VisualTestSupport {
         let textMutationCount: Int
         let attachmentFrame: CGRect
         let textFrame: CGRect
+        let activeBandFrame: CGRect
+        let textContainerInset: NSSize
         let hostingFrame: CGRect
+        let panelWindowFrame: CGRect
         let anchor: ReadingAnchor?
     }
 
@@ -137,11 +141,17 @@ enum M6VisualTestSupport {
             var showExistingControllerCount = 0
         }
 
+        private struct HostedAccessibilityControlFrame {
+            let identifier: String
+            let screenFrame: CGRect
+        }
+
         private let callbacks: CallbackRecorder
         private let model: AppModel
         private let system: ReaderTextSystem
         private let window: NSWindow
         private let hosting: NSHostingView<AnyView>
+        private var hostedAccessibilityControlFrames: [HostedAccessibilityControlFrame] = []
 
         init(
             size: CGSize,
@@ -151,7 +161,7 @@ enum M6VisualTestSupport {
             let callbacks = CallbackRecorder()
             self.callbacks = callbacks
             system = ReaderTextSystem(text: scriptText, revision: 0)
-            model = AppModel(
+            let model = AppModel(
                 overlayController: OverlayPanelController(),
                 document: ScriptDocument(
                     title: "Hosted Presenter", text: scriptText
@@ -163,8 +173,28 @@ enum M6VisualTestSupport {
                     }
                 }
             )
+            self.model = model
+            let display = RuntimeDisplay(
+                id: 6_006,
+                localizedName: "Hosted Private Display",
+                isBuiltIn: true,
+                isMain: true,
+                isOnline: true,
+                frame: CGRect(origin: .zero, size: size),
+                visibleFrame: CGRect(origin: .zero, size: size),
+                scale: 2,
+                persistentUUID: "hosted-private-display",
+                mirrorSourceID: nil,
+                isInMirrorSet: false
+            )
+            model.send(
+                .displayInventoryLoaded(RuntimeDisplayInventory(displays: [display]))
+            )
+            model.send(.confirmSelectedDisplay)
+            model.send(.completeShieldedMove(screenID: display.id))
+            model.send(.showOverlay)
             if initiallyPlaying {
-                model.send(.start)
+                model.send(.togglePlayback)
             }
 
             let root = AnyView(
@@ -211,9 +241,14 @@ enum M6VisualTestSupport {
                 speedPointsPerSecond: model.preferences.speedPointsPerSecond,
                 alignment: model.preferences.textAlignment,
                 isPaused: model.isPaused,
-                isFocusModeEnabled: model.preferences.isFocusModeEnabled
+                isFocusModeEnabled: model.preferences.isFocusModeEnabled,
+                isLocked: model.isLocked
             )
         }
+
+        var commandDispatchCount: Int { model.commandDispatchCount }
+        var isPrivatePresenterConfirmed: Bool { model.isSelectionConfirmed }
+        var isShielded: Bool { model.isShielded }
 
         var resizeChanges: [HostedResizeChange] { callbacks.resizeChanges }
         var resizeEndCount: Int { callbacks.resizeEndCount }
@@ -238,7 +273,10 @@ enum M6VisualTestSupport {
                 textMutationCount: system.textMutationCount,
                 attachmentFrame: adapter?.attachmentView?.frame ?? .zero,
                 textFrame: system.textView.frame,
+                activeBandFrame: system.activeBandView.frame,
+                textContainerInset: system.textView.textContainerInset,
                 hostingFrame: hosting.frame,
+                panelWindowFrame: window.frame,
                 anchor: adapter?.captureAnchor(viewportFraction: 0.5)
             )
         }
@@ -286,6 +324,21 @@ enum M6VisualTestSupport {
             layout()
         }
 
+        func hostedIdentifier(at point: CGPoint) -> String? {
+            guard hosting.bounds.contains(point), hostedHitTest(point) != nil else {
+                return nil
+            }
+            let windowPoint = hosting.convert(point, to: nil)
+            let screenPoint = window.convertPoint(toScreen: windowPoint)
+            return hostedAccessibilityControlFrames
+                .filter { $0.screenFrame.contains(screenPoint) }
+                .min {
+                    $0.screenFrame.width * $0.screenFrame.height
+                        < $1.screenFrame.width * $1.screenFrame.height
+                }?
+                .identifier
+        }
+
         func drag(from point: CGPoint, by translation: CGSize) {
             guard hosting.bounds.contains(point), hostedHitTest(point) != nil else { return }
             let destination = CGPoint(
@@ -304,6 +357,22 @@ enum M6VisualTestSupport {
         private func layout() {
             hosting.layoutSubtreeIfNeeded()
             hosting.displayIfNeeded()
+            cacheHostedAccessibilityControlFrames()
+        }
+
+        private func cacheHostedAccessibilityControlFrames() {
+            hostedAccessibilityControlFrames = Self.accessibilityElements(in: hosting)
+                .compactMap { element in
+                    guard let identifier = Self.accessibilityIdentifier(of: element),
+                        Self.chromeIdentifiers.contains(identifier),
+                        let screenFrame = Self.accessibilityFrame(of: element),
+                        !screenFrame.isEmpty
+                    else { return nil }
+                    return HostedAccessibilityControlFrame(
+                        identifier: identifier,
+                        screenFrame: screenFrame
+                    )
+                }
         }
 
         private func send(
@@ -362,6 +431,13 @@ enum M6VisualTestSupport {
                 return view.accessibilityLabel()
             }
             return (element as? NSAccessibilityElement)?.accessibilityLabel()
+        }
+
+        private static func accessibilityFrame(of element: AnyObject) -> CGRect? {
+            if let view = element as? NSView {
+                return view.accessibilityFrame()
+            }
+            return (element as? NSAccessibilityElement)?.accessibilityFrame()
         }
 
         private static func accessibilityEnabled(of element: AnyObject) -> Bool {
