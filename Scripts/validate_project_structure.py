@@ -1550,6 +1550,7 @@ M6_LEDGER_TITLES = (
     "Record the actor teardown path in final scope",
     "Return every accessibility retry decision explicitly",
     "Make Carbon callbacks and messages isolation-correct",
+    "Keep the display-link target and teardown actor-safe",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1978,6 +1979,7 @@ M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/App/AppEffect.swift",
     "PrivatePresenterApp/App/AppModel.swift",
     "PrivatePresenterApp/App/DependencyContainer.swift",
+    "PrivatePresenterApp/Overlay/DisplayLinkFrameClock.swift",
     "PrivatePresenterApp/Overlay/OverlayRootView.swift",
     "PrivatePresenterApp/Overlay/OverlayChromeView.swift",
     "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",

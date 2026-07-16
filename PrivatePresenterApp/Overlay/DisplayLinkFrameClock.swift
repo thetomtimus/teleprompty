@@ -13,6 +13,7 @@ typealias FrameClockFactory = @MainActor (
 
 @MainActor
 final class DisplayLinkFrameClock: FrameClock {
+    @MainActor
     private final class Target: NSObject {
         let onTick: @MainActor (TimeInterval) -> Void
 
@@ -21,9 +22,7 @@ final class DisplayLinkFrameClock: FrameClock {
         }
 
         @objc func displayLinkDidFire(_ link: CADisplayLink) {
-            MainActor.assumeIsolated {
-                onTick(link.timestamp)
-            }
+            onTick(link.timestamp)
         }
     }
 
@@ -68,9 +67,5 @@ final class DisplayLinkFrameClock: FrameClock {
         link.invalidate()
         target = nil
         attachedView = nil
-    }
-
-    deinit {
-        link?.invalidate()
     }
 }
