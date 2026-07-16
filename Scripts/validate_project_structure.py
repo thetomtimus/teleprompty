@@ -12,6 +12,7 @@ import platform
 import re
 import subprocess
 import sys
+import tarfile
 from functools import lru_cache
 
 
@@ -1459,13 +1460,92 @@ M6_PROTECTED_PATHS = (
     "docs/validation/source-artifact-checksums.sha256",
 )
 
-M6_PHASE_ZERO_FUTURE_PATHS = (
+M6_FINAL_EVIDENCE_PATHS = (
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
     ".omx/handoff/private-presenter-m6/m6-artifacts.sha256",
     ".omx/handoff/private-presenter-m6/m6-source-files.sha256",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-source.tar",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-wsl.bundle",
+)
+
+M6_RESULT_PATH = "docs/validation/visual-result.md"
+M6_CONTINUATION_DIR = ".omx/handoff/private-presenter-m6"
+M6_CONTINUATION_FILES = (
+    "MAC-CONTINUATION.md",
+    "m6-artifacts.sha256",
+    "m6-source-files.sha256",
+    "private-presenter-m6-source.tar",
+    "private-presenter-m6-wsl.bundle",
+)
+M6_ARTIFACT_MANIFEST_ENTRIES = (
+    "MAC-CONTINUATION.md",
+    "m6-source-files.sha256",
+    "private-presenter-m6-source.tar",
+    "private-presenter-m6-wsl.bundle",
+)
+M6_SCREENSHOT_STATES = (
+    "unlocked",
+    "locked",
+    "focus-hidden",
+    "bright-background",
+    "active-band",
+)
+M6_REFERENCE_HASHES = (
+    (
+        "teleprompter-ui-reference",
+        "352437f2fc06efbab7f7ea7ad910f56eaa65c87eaf2574d30df742019ea9ac92",
+    ),
+    (
+        "teleprompter-concept",
+        "d8a42232d19d87a23b1a2aacbc1970cae75bd0f0c7a3b523c701c5a2fa79762e",
+    ),
+)
+M6_RESULT_PENDING_FIELDS = (
+    "Status: PENDING",
+    "WSL static verification record: PENDING",
+    "Source SHA: PENDING",
+    "Source tree SHA: PENDING",
+    "Release executable SHA-256: PENDING",
+    "Controlled Mac host identifier: PENDING",
+    "macOS/Xcode/Swift toolchain: PENDING",
+    "Swift compilation: PENDING",
+    "AppKit/TextKit/Core Graphics render: PENDING",
+    "Screenshot capture: PENDING",
+    "Independent visual review: PENDING",
+    "M3 native predecessor evidence: PENDING",
+    "M4 native predecessor evidence: PENDING",
+    "M5 native predecessor evidence: PENDING",
+    "Keyboard accessibility: PENDING",
+    "Full Keyboard Access: PENDING",
+    "VoiceOver: PENDING",
+    "Accessibility Inspector: PENDING",
+    "Increase Contrast: PENDING",
+    "Differentiate Without Color: PENDING",
+    "Reduce Motion: PENDING",
+    "M5 performance replay: PENDING",
+    "Release Instruments: PENDING",
+    "Keynote: PENDING",
+    "Private display: PENDING",
+    "Audience display: PENDING",
+    "Physical presenter result: PENDING",
+)
+M6_LEDGER_TITLES = (
+    "Keep visual work inside its exact evidence epoch",
+    "Make the reading card opaque before making it decorative",
+    "Keep long-form type spacious without replacing the script",
+    "Make reference chrome useful without taking Keynote input",
+    "Preserve readable structure through every contained resize",
+    "Detect visual drift without a brittle snapshot dependency",
+    "Keep visual acceptance reproducible and honestly host-bound",
+)
+M6_PRIOR_LEDGER_PAIRS = (
+    ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
+    ("15997ff4936354a329407e95d52a947c03e4670c", "cf9bee368e6dfee4139add84127814ebe129b5bc"),
+    ("1f9125ea834edcf78ea32d6d8d19ed6a1244e4c0", "478b73e7e1df537372f79cc74329c9a3d5b6ade0"),
+    ("8421695e42451c261a8b2a2596095f024546b6ba", "89702da8a44e723039cd3628581a1f9fba0280cd"),
+    ("b769ac7c1603abfaa2b8f475d5dc502fe6071a09", "a8a276d3e9bfd89bf9b753eeb6823b576c3e3fc3"),
+    ("2b17d6078c7b4a5cb233cd74cbcb960b53eb5da4", "4e6956cf1dd776a531d0da4f443c8cbf78a2e9ad"),
 )
 
 M6_M3_REQUIRED_PATHS = (
@@ -1719,7 +1799,7 @@ M6_M5_HANDOFF_FILES = (
     "private-presenter-m5-wsl.bundle",
 )
 
-M6_PHASE_ZERO_ALLOWED_CHANGES = (
+M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
     "PrivatePresenterApp/App/AppEffect.swift",
     "PrivatePresenterApp/App/AppModel.swift",
@@ -1739,9 +1819,10 @@ M6_PHASE_ZERO_ALLOWED_CHANGES = (
     "Scripts/test_validate_project_structure_m6.py",
     "Scripts/validate_project_structure.py",
     "Scripts/verify-wsl.sh",
+    M6_RESULT_PATH,
 )
 
-M6_PHASE_ZERO_IMMUTABLE_SOURCE_PATHS = (
+M6_IMMUTABLE_SOURCE_PATHS = (
     "project.yml",
     "Packages/TeleprompterCore/Package.swift",
     "PrivatePresenterApp/Info.plist",
@@ -2863,31 +2944,381 @@ def validate_m5_source() -> list[str]:
     return violations
 
 
-def validate_m6_path_inventory(
-    *, required_paths: tuple[str, ...], absent_paths: tuple[str, ...]
-) -> list[str]:
-    """Apply an explicit inventory without a mutable milestone-stage bypass."""
-    violations = [
+def validate_m6_path_inventory(*, required_paths: tuple[str, ...]) -> list[str]:
+    """Require the final M6 inventory without a mutable milestone-stage bypass."""
+    return [
         f"missing-path:{path}" for path in required_paths if not (ROOT / path).is_file()
     ]
-    violations.extend(
-        f"phase-zero:future-path-present:{path}"
-        for path in absent_paths
-        if (ROOT / path).exists()
+
+
+def m6_expected_screenshot_rows() -> tuple[str, ...]:
+    reference_hashes = [digest for _, digest in M6_REFERENCE_HASHES]
+    return tuple(
+        "| " + " | ".join(
+            (
+                state,
+                "PENDING",
+                "PENDING",
+                "PENDING",
+                *reference_hashes,
+                "PENDING",
+            )
+        ) + " |"
+        for state in M6_SCREENSHOT_STATES
     )
+
+
+def m6_expected_review_rows() -> tuple[str, ...]:
+    return tuple(
+        f"| {state} | {reference} | PENDING | PENDING | PENDING | PENDING |"
+        for state in M6_SCREENSHOT_STATES
+        for reference, _ in M6_REFERENCE_HASHES
+    )
+
+
+def validate_m6_result_text(text: str) -> list[str]:
+    """Validate a content-neutral PENDING result without promoting host evidence."""
+    violations: list[str] = []
+    lines = text.splitlines()
+    for marker in M6_RESULT_PENDING_FIELDS:
+        if lines.count(marker) != 1:
+            violations.append(f"evidence:visual-result-pending:{marker}")
+    for row in m6_expected_screenshot_rows():
+        if lines.count(row) != 1:
+            state = row.split("|", 2)[1].strip()
+            violations.append(f"evidence:screenshot-row:{state}")
+    for row in m6_expected_review_rows():
+        if lines.count(row) != 1:
+            cells = [cell.strip() for cell in row.strip("|").split("|")]
+            violations.append(f"evidence:review-row:{cells[0]}:{cells[1]}")
+    for reference, digest in M6_REFERENCE_HASHES:
+        if text.count(digest) != len(M6_SCREENSHOT_STATES):
+            violations.append(f"evidence:reference-hash:{reference}")
+    acceptance_markers = (
+        "Every individual state/reference score must be at least 90/100.",
+        "Averages are forbidden and cannot mask any individual score below 90/100.",
+        "Reviewer identity and written rationale are required per state/reference pair.",
+    )
+    for marker in acceptance_markers:
+        if lines.count(marker) != 1:
+            violations.append(f"evidence:acceptance-rule:{marker}")
+    review_rows = [
+        [cell.strip() for cell in line.strip("|").split("|")]
+        for line in lines
+        if line.startswith("| ") and line.count("|") == 7
+    ]
+    for cells in review_rows:
+        if len(cells) == 6 and cells[0] in M6_SCREENSHOT_STATES:
+            if cells[2:] != ["PENDING", "PENDING", "PENDING", "PENDING"]:
+                violations.append(f"evidence:review-overclaim:{cells[0]}:{cells[1]}")
+    for marker in (
+        "Status: PASS",
+        "Status: GREEN",
+        "M6 complete",
+        "M6 native automated candidate",
+        "M6 visual candidate",
+        "M6 physical visual candidate",
+        "Swift compilation: PASS",
+        "AppKit/TextKit/Core Graphics render: PASS",
+        "VoiceOver: PASS",
+        "Release Instruments: PASS",
+        "Keynote: PASS",
+        "Physical presenter result: PASS",
+    ):
+        if marker in text:
+            violations.append(f"evidence:overclaim:{marker}")
+    for marker in (
+        "SENTINEL_PRIVATE_",
+        "document.title",
+        "document.text",
+        "displayID",
+        "CGDirectDisplayID",
+        "/Users/",
+        "/home/",
+        "C:\\Users\\",
+        "file://",
+    ):
+        if marker in text:
+            violations.append(f"evidence:private-surface:{marker}")
+    return violations
+
+
+def m6_history_rows() -> list[tuple[str, list[str], str]]:
+    result = git(
+        "log", "--reverse", "--format=%H%x09%P%x09%s", f"{M6_PLAN_COMMIT}..HEAD"
+    )
+    if result.returncode != 0:
+        return []
+    rows: list[tuple[str, list[str], str]] = []
+    for line in result.stdout.splitlines():
+        fields = line.split("\t", 2)
+        if len(fields) == 3:
+            rows.append((fields[0], fields[1].split(), fields[2]))
+    return rows
+
+
+def validate_m6_history_rows(
+    rows: list[tuple[str, list[str], str]],
+) -> list[str]:
+    violations: list[str] = []
+    expected_titles = [title for title in M6_LEDGER_TITLES for _ in range(2)]
+    if len(rows) != len(expected_titles):
+        violations.append("ledger:exact-history-count")
+        return violations
+    if [title for _, _, title in rows] != expected_titles:
+        violations.append("ledger:exact-history-titles")
+    previous = M6_PLAN_COMMIT
+    for index, (commit, parents, _) in enumerate(rows):
+        if parents != [previous]:
+            violations.append(f"ledger:nonconsecutive:{index}")
+        previous = commit
+    for index, pair in enumerate(M6_PRIOR_LEDGER_PAIRS):
+        actual = (rows[index * 2][0], rows[index * 2 + 1][0])
+        if actual != pair:
+            violations.append(f"ledger:prior-pair:{index}")
+    return violations
+
+
+def parse_sha256_manifest(path: Path) -> tuple[list[tuple[str, str]], list[str]]:
+    if not path.is_file():
+        return [], [f"continuation:missing-manifest:{path.name}"]
+    entries: list[tuple[str, str]] = []
+    violations: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  ([^\r\n]+)", line)
+        if match is None:
+            violations.append(f"continuation:manifest-format:{path.name}")
+            continue
+        digest, relative = match.groups()
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            violations.append(f"continuation:manifest-path:{path.name}:{relative}")
+            continue
+        entries.append((digest, relative))
+    if len(entries) != len({relative for _, relative in entries}):
+        violations.append(f"continuation:manifest-duplicate:{path.name}")
+    return entries, violations
+
+
+def validate_m6_continuation_guide(
+    text: str,
+    *,
+    history_rows: list[tuple[str, list[str], str]],
+    source_sha: str,
+    source_tree: str,
+) -> list[str]:
+    violations: list[str] = []
+    lines = text.splitlines()
+    identities = (
+        f"Exact M6 plan SHA: `{M6_PLAN_COMMIT}`",
+        f"Exact WSL source SHA: `{source_sha}`",
+        f"Exact Git tree: `{source_tree}`",
+        f"Immutable M5 manifest SHA-256 prerequisite: `{M6_M5_HANDOFF_MANIFEST_SHA256}`",
+    )
+    for marker in identities:
+        if lines.count(marker) != 1:
+            violations.append(f"continuation:identity:{marker.split(':', 1)[0]}")
+    required_markers = (
+        "Status: PENDING controlled-Mac replay; M6 WSL source candidate only",
+        "M3 native evidence: PENDING",
+        "M4 native evidence: PENDING",
+        "M5 native evidence: PENDING",
+        "M6 Swift/AppKit/TextKit/Core Graphics compilation and render: PENDING",
+        "M6 screenshot capture and reference scores: PENDING",
+        "M6 accessibility and VoiceOver: PENDING",
+        "M6 Release performance and Instruments: PENDING",
+        "M6 Keynote/private-display/audience-display/physical proof: PENDING",
+        "Replay every RED SHA before its immediate GREEN child.",
+        "A configuration, missing SDK, missing display, or missing Keynote is not a valid RED.",
+        "Maximum honest label: M6 WSL source candidate; M3-M5 native evidence pending",
+        "Stop before M7; do not edit HANDOFF.md or push.",
+        "./Scripts/bootstrap-macos.sh",
+        "xcodebuild analyze -project PrivatePresenter.xcodeproj",
+        "xcodebuild build -project PrivatePresenter.xcodeproj",
+        "xcrun swift-format lint --recursive Packages PrivatePresenterApp",
+        "M6 render test: PENDING",
+        "Five controlled synthetic screenshots: PENDING",
+        "Keyboard/VoiceOver/Accessibility Inspector audit: PENDING",
+        "M5 50,000-word Release replay and Instruments: PENDING",
+        "Keynote extended nonmirrored private/audience display gate: PENDING",
+    )
+    for marker in required_markers:
+        if text.count(marker) != 1:
+            violations.append(f"continuation:missing-marker:{marker}")
+    expected_pairs = [
+        (rows[0][0], rows[1][0])
+        for rows in (history_rows[index:index + 2] for index in range(0, len(history_rows), 2))
+        if len(rows) == 2
+    ]
+    pair_pattern = re.compile(
+        r"^\| M6\.(\d) \| `([0-9a-f]{40})` \| `([0-9a-f]{40})` \| "
+        r"`python3 -B Scripts/test_validate_project_structure_m6\.py` \| ([^|]+) \|$",
+        re.MULTILINE,
+    )
+    pair_matches = pair_pattern.findall(text)
+    if len(pair_matches) != len(M6_LEDGER_TITLES):
+        violations.append("continuation:pair-count")
+    else:
+        labels = [int(label) for label, _, _, _ in pair_matches]
+        pairs = [(red, green) for _, red, green, _ in pair_matches]
+        expectations = [expectation.strip() for _, _, _, expectation in pair_matches]
+        if labels != list(range(len(M6_LEDGER_TITLES))):
+            violations.append("continuation:pair-labels")
+        if pairs != expected_pairs:
+            violations.append("continuation:pairs")
+        if any(not expectation.startswith("Expected RED:") for expectation in expectations):
+            violations.append("continuation:pair-expectations")
+    for marker in (
+        "Status: PASS",
+        "M6 complete",
+        "M6 native automated candidate",
+        "M6 visual candidate",
+        "M6 physical visual candidate",
+        "VoiceOver: PASS",
+        "Instruments: PASS",
+        "Keynote: PASS",
+    ):
+        if marker in text:
+            violations.append(f"continuation:overclaim:{marker}")
+    for marker in (
+        "SENTINEL_PRIVATE_",
+        "document.title",
+        "document.text",
+        "displayID",
+        "CGDirectDisplayID",
+        "/Users/",
+        "/home/",
+        "C:\\Users\\",
+        "file://",
+    ):
+        if marker in text:
+            violations.append(f"continuation:private-surface:{marker}")
+    return violations
+
+
+def validate_m6_continuation(handoff_root: Path | None = None) -> list[str]:
+    handoff = handoff_root or ROOT / M6_CONTINUATION_DIR
+    violations: list[str] = []
+    actual_files = (
+        tuple(sorted(path.name for path in handoff.iterdir() if path.is_file()))
+        if handoff.is_dir()
+        else ()
+    )
+    if actual_files != tuple(sorted(M6_CONTINUATION_FILES)):
+        violations.append("continuation:exact-file-inventory")
+    head = git("rev-parse", "HEAD")
+    tree = git("rev-parse", "HEAD^{tree}")
+    if head.returncode != 0 or tree.returncode != 0:
+        return [*violations, "continuation:git-identity"]
+    source_sha = head.stdout.strip()
+    source_tree = tree.stdout.strip()
+    guide = handoff / "MAC-CONTINUATION.md"
+    if guide.is_file():
+        violations.extend(
+            validate_m6_continuation_guide(
+                guide.read_text(encoding="utf-8"),
+                history_rows=m6_history_rows(),
+                source_sha=source_sha,
+                source_tree=source_tree,
+            )
+        )
+    else:
+        violations.append("continuation:missing-guide")
+
+    source_manifest = handoff / "m6-source-files.sha256"
+    source_entries, source_manifest_violations = parse_sha256_manifest(source_manifest)
+    violations.extend(source_manifest_violations)
+    expected_paths_result = git(
+        "diff", "--name-only", "--diff-filter=ACMR", f"{M6_PLAN_COMMIT}..{source_sha}"
+    )
+    expected_paths = (
+        sorted(filter(None, expected_paths_result.stdout.splitlines()))
+        if expected_paths_result.returncode == 0
+        else []
+    )
+    source_paths = [relative for _, relative in source_entries]
+    if source_paths != expected_paths:
+        violations.append("continuation:source-manifest-paths")
+    for digest, relative in source_entries:
+        target = ROOT / relative
+        if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+            violations.append(f"continuation:source-hash:{relative}")
+
+    artifact_manifest = handoff / "m6-artifacts.sha256"
+    artifact_entries, artifact_manifest_violations = parse_sha256_manifest(
+        artifact_manifest
+    )
+    violations.extend(artifact_manifest_violations)
+    artifact_paths = [relative for _, relative in artifact_entries]
+    if artifact_paths != list(M6_ARTIFACT_MANIFEST_ENTRIES):
+        violations.append("continuation:artifact-manifest-paths")
+    for digest, relative in artifact_entries:
+        target = handoff / relative
+        if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+            violations.append(f"continuation:artifact-hash:{relative}")
+
+    archive = handoff / "private-presenter-m6-source.tar"
+    if archive.is_file():
+        try:
+            with tarfile.open(archive, mode="r:") as source_tar:
+                members = source_tar.getmembers()
+                member_names = [member.name for member in members]
+                if member_names != expected_paths or len(member_names) != len(set(member_names)):
+                    violations.append("continuation:tar-paths")
+                for member in members:
+                    extracted = source_tar.extractfile(member)
+                    target = ROOT / member.name
+                    if (
+                        not member.isfile()
+                        or member.mtime != 0
+                        or member.uid != 0
+                        or member.gid != 0
+                        or extracted is None
+                        or not target.is_file()
+                        or extracted.read() != target.read_bytes()
+                    ):
+                        violations.append(f"continuation:tar-entry:{member.name}")
+        except (tarfile.TarError, OSError):
+            violations.append("continuation:tar-invalid")
+    else:
+        violations.append("continuation:tar-missing")
+
+    bundle = handoff / "private-presenter-m6-wsl.bundle"
+    if bundle.is_file():
+        verify = subprocess.run(
+            ["git", "bundle", "verify", bundle.name],
+            cwd=handoff,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        heads = subprocess.run(
+            ["git", "bundle", "list-heads", bundle.name],
+            cwd=handoff,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if verify.returncode != 0:
+            violations.append("continuation:bundle-verify")
+        expected_head = f"{source_sha} HEAD"
+        if heads.returncode != 0 or heads.stdout.splitlines() != [expected_head]:
+            violations.append("continuation:bundle-head")
+    else:
+        violations.append("continuation:bundle-missing")
     return violations
 
 
 def validate_m6_source() -> list[str]:
-    """Validate the M6 phase-zero source and its exact predecessor evidence epoch."""
+    """Validate the final M6 WSL source candidate and host-bound continuation."""
     violations = validate_m6_path_inventory(
         required_paths=(
             "Scripts/test_validate_project_structure_m6.py",
             *M6_M1_REQUIRED_PATHS,
             *M6_M3_REQUIRED_PATHS,
             *M6_M5_VISUAL_REQUIRED_PATHS,
+            *M6_FINAL_EVIDENCE_PATHS,
         ),
-        absent_paths=M6_PHASE_ZERO_FUTURE_PATHS,
     )
 
     parent = git("rev-parse", f"{M6_PLAN_COMMIT}^")
@@ -2907,11 +3338,11 @@ def validate_m6_source() -> list[str]:
         if baseline_returncode != 0 or current != baseline_bytes:
             violations.append(f"protected-byte:{path}")
 
-    for path in M6_PHASE_ZERO_IMMUTABLE_SOURCE_PATHS:
+    for path in M6_IMMUTABLE_SOURCE_PATHS:
         baseline_returncode, baseline_bytes = committed_bytes(M6_PLAN_COMMIT, path)
         current = (ROOT / path).read_bytes() if (ROOT / path).is_file() else None
         if baseline_returncode != 0 or current != baseline_bytes:
-            violations.append(f"phase-zero:source-creep:{path}")
+            violations.append(f"immutable:source-creep:{path}")
 
     for label, path, marker in M6_PREDECESSOR_PENDING_CLAIMS:
         if not (ROOT / path).is_file() or read(path).splitlines().count(marker) != 1:
@@ -2921,11 +3352,18 @@ def validate_m6_source() -> list[str]:
         "diff", "--name-only", "--diff-filter=ACMR", f"{M6_PLAN_COMMIT}..HEAD"
     )
     if committed_changes.returncode != 0:
-        violations.append("scope:m6-phase-zero-history")
+        violations.append("scope:m6-final-history")
     else:
-        changed_paths = set(filter(None, committed_changes.stdout.splitlines()))
-        unexpected = sorted(changed_paths.difference(M6_PHASE_ZERO_ALLOWED_CHANGES))
-        violations.extend(f"scope:m6-phase-zero:{path}" for path in unexpected)
+        changed_paths = tuple(sorted(filter(None, committed_changes.stdout.splitlines())))
+        if changed_paths != tuple(sorted(M6_FINAL_CHANGED_PATHS)):
+            violations.append("scope:m6-final-exact-paths")
+
+    if (ROOT / M6_RESULT_PATH).is_file():
+        violations.extend(validate_m6_result_text(read(M6_RESULT_PATH)))
+    else:
+        violations.append("evidence:visual-result-missing")
+    violations.extend(validate_m6_history_rows(m6_history_rows()))
+    violations.extend(validate_m6_continuation())
 
     production_paths = [
         path.relative_to(ROOT).as_posix()

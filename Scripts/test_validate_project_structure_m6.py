@@ -8,8 +8,10 @@ import importlib.util
 import inspect
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -54,13 +56,91 @@ EXPECTED_PROTECTED_PATHS = (
     "docs/validation/source-artifact-checksums.sha256",
 )
 
-EXPECTED_FUTURE_M6_PATHS = (
+EXPECTED_FINAL_EVIDENCE_PATHS = (
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
     ".omx/handoff/private-presenter-m6/m6-artifacts.sha256",
     ".omx/handoff/private-presenter-m6/m6-source-files.sha256",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-source.tar",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-wsl.bundle",
+)
+EXPECTED_RESULT_PATH = "docs/validation/visual-result.md"
+EXPECTED_CONTINUATION_DIR = ".omx/handoff/private-presenter-m6"
+EXPECTED_CONTINUATION_FILES = (
+    "MAC-CONTINUATION.md",
+    "m6-artifacts.sha256",
+    "m6-source-files.sha256",
+    "private-presenter-m6-source.tar",
+    "private-presenter-m6-wsl.bundle",
+)
+EXPECTED_ARTIFACT_ENTRIES = (
+    "MAC-CONTINUATION.md",
+    "m6-source-files.sha256",
+    "private-presenter-m6-source.tar",
+    "private-presenter-m6-wsl.bundle",
+)
+EXPECTED_SCREENSHOT_STATES = (
+    "unlocked",
+    "locked",
+    "focus-hidden",
+    "bright-background",
+    "active-band",
+)
+EXPECTED_REFERENCE_HASHES = (
+    (
+        "teleprompter-ui-reference",
+        "352437f2fc06efbab7f7ea7ad910f56eaa65c87eaf2574d30df742019ea9ac92",
+    ),
+    (
+        "teleprompter-concept",
+        "d8a42232d19d87a23b1a2aacbc1970cae75bd0f0c7a3b523c701c5a2fa79762e",
+    ),
+)
+EXPECTED_RESULT_PENDING_FIELDS = (
+    "Status: PENDING",
+    "WSL static verification record: PENDING",
+    "Source SHA: PENDING",
+    "Source tree SHA: PENDING",
+    "Release executable SHA-256: PENDING",
+    "Controlled Mac host identifier: PENDING",
+    "macOS/Xcode/Swift toolchain: PENDING",
+    "Swift compilation: PENDING",
+    "AppKit/TextKit/Core Graphics render: PENDING",
+    "Screenshot capture: PENDING",
+    "Independent visual review: PENDING",
+    "M3 native predecessor evidence: PENDING",
+    "M4 native predecessor evidence: PENDING",
+    "M5 native predecessor evidence: PENDING",
+    "Keyboard accessibility: PENDING",
+    "Full Keyboard Access: PENDING",
+    "VoiceOver: PENDING",
+    "Accessibility Inspector: PENDING",
+    "Increase Contrast: PENDING",
+    "Differentiate Without Color: PENDING",
+    "Reduce Motion: PENDING",
+    "M5 performance replay: PENDING",
+    "Release Instruments: PENDING",
+    "Keynote: PENDING",
+    "Private display: PENDING",
+    "Audience display: PENDING",
+    "Physical presenter result: PENDING",
+)
+EXPECTED_LEDGER_TITLES = (
+    "Keep visual work inside its exact evidence epoch",
+    "Make the reading card opaque before making it decorative",
+    "Keep long-form type spacious without replacing the script",
+    "Make reference chrome useful without taking Keynote input",
+    "Preserve readable structure through every contained resize",
+    "Detect visual drift without a brittle snapshot dependency",
+    "Keep visual acceptance reproducible and honestly host-bound",
+)
+EXPECTED_PRIOR_LEDGER_PAIRS = (
+    ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
+    ("15997ff4936354a329407e95d52a947c03e4670c", "cf9bee368e6dfee4139add84127814ebe129b5bc"),
+    ("1f9125ea834edcf78ea32d6d8d19ed6a1244e4c0", "478b73e7e1df537372f79cc74329c9a3d5b6ade0"),
+    ("8421695e42451c261a8b2a2596095f024546b6ba", "89702da8a44e723039cd3628581a1f9fba0280cd"),
+    ("b769ac7c1603abfaa2b8f475d5dc502fe6071a09", "a8a276d3e9bfd89bf9b753eeb6823b576c3e3fc3"),
+    ("2b17d6078c7b4a5cb233cd74cbcb960b53eb5da4", "4e6956cf1dd776a531d0da4f443c8cbf78a2e9ad"),
 )
 
 EXPECTED_M3_REQUIRED_PATHS = (
@@ -416,6 +496,28 @@ EXPECTED_M5_MANIFEST_ENTRIES = (
     "private-presenter-m5-review-red-source.tar",
     "private-presenter-m5-wsl.bundle",
 )
+EXPECTED_FINAL_CHANGED_PATHS = (
+    "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
+    "PrivatePresenterApp/App/AppEffect.swift",
+    "PrivatePresenterApp/App/AppModel.swift",
+    "PrivatePresenterApp/App/DependencyContainer.swift",
+    "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+    "PrivatePresenterApp/Overlay/OverlayChromeView.swift",
+    "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
+    "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+    "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
+    "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
+    "PrivatePresenterAppTests/M6VisualTestSupport.swift",
+    "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
+    "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
+    "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "Scripts/test_validate_project_structure_m6.py",
+    "Scripts/validate_project_structure.py",
+    "Scripts/verify-wsl.sh",
+    EXPECTED_RESULT_PATH,
+)
 
 
 class Milestone6ValidatorContractTests(unittest.TestCase):
@@ -427,7 +529,17 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_M5_SOURCE_TREE": EXPECTED_M5_TREE,
             "M6_M5_HANDOFF_MANIFEST_SHA256": EXPECTED_M5_MANIFEST_SHA256,
             "M6_PROTECTED_PATHS": EXPECTED_PROTECTED_PATHS,
-            "M6_PHASE_ZERO_FUTURE_PATHS": EXPECTED_FUTURE_M6_PATHS,
+            "M6_FINAL_EVIDENCE_PATHS": EXPECTED_FINAL_EVIDENCE_PATHS,
+            "M6_RESULT_PATH": EXPECTED_RESULT_PATH,
+            "M6_CONTINUATION_DIR": EXPECTED_CONTINUATION_DIR,
+            "M6_CONTINUATION_FILES": EXPECTED_CONTINUATION_FILES,
+            "M6_ARTIFACT_MANIFEST_ENTRIES": EXPECTED_ARTIFACT_ENTRIES,
+            "M6_SCREENSHOT_STATES": EXPECTED_SCREENSHOT_STATES,
+            "M6_REFERENCE_HASHES": EXPECTED_REFERENCE_HASHES,
+            "M6_RESULT_PENDING_FIELDS": EXPECTED_RESULT_PENDING_FIELDS,
+            "M6_LEDGER_TITLES": EXPECTED_LEDGER_TITLES,
+            "M6_PRIOR_LEDGER_PAIRS": EXPECTED_PRIOR_LEDGER_PAIRS,
+            "M6_FINAL_CHANGED_PATHS": EXPECTED_FINAL_CHANGED_PATHS,
             "M6_PREDECESSOR_PENDING_CLAIMS": EXPECTED_PENDING_CLAIMS,
             "M6_M5_HANDOFF_FILES": EXPECTED_M5_HANDOFF_FILES,
             "M6_M1_REQUIRED_PATHS": EXPECTED_M1_REQUIRED_PATHS,
@@ -523,7 +635,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("Milestone 6 validation failed", main_source)
         self.assertNotIn("Milestone 5 validation failed", main_source)
 
-    def testPhaseZeroRequiresFutureM6InventoryAbsentAndClaimsPending(self) -> None:
+    def testFinalM6InventoryProtectedBytesAndPendingPredecessorsAreExact(self) -> None:
         parent = VALIDATOR.git("rev-parse", f"{EXPECTED_PLAN_COMMIT}^")
         self.assertEqual(parent.returncode, 0, parent.stderr)
         self.assertEqual(parent.stdout.strip(), EXPECTED_PLAN_PARENT)
@@ -542,9 +654,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                 )
                 self.assertEqual(committed.returncode, 0, committed.stderr.decode())
                 self.assertEqual(committed.stdout, (ROOT / path).read_bytes())
-        for path in EXPECTED_FUTURE_M6_PATHS:
-            with self.subTest(future_path=path):
-                self.assertFalse((ROOT / path).exists())
+        for path in EXPECTED_FINAL_EVIDENCE_PATHS:
+            with self.subTest(final_path=path):
+                self.assertTrue((ROOT / path).is_file(), path)
         for _, path, marker in EXPECTED_PENDING_CLAIMS:
             with self.subTest(pending_path=path, marker=marker):
                 self.assertEqual(VALIDATOR.read(path).splitlines().count(marker), 1)
@@ -552,27 +664,30 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertTrue(hasattr(VALIDATOR, "validate_m6_source"))
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
-    def testFinalStageCannotRetainPhaseZeroAbsenceAllowance(self) -> None:
+    def testFinalStageCannotRetainAnyPhaseZeroAbsenceAllowance(self) -> None:
         self.assertTrue(
             hasattr(VALIDATOR, "validate_m6_path_inventory"),
-            "phase zero must expose the path-inventory oracle used by final-stage tests",
+            "final source must expose its exact path-inventory oracle",
         )
         final_violations = VALIDATOR.validate_m6_path_inventory(
-            required_paths=EXPECTED_FUTURE_M6_PATHS,
-            absent_paths=(),
+            required_paths=EXPECTED_FINAL_EVIDENCE_PATHS,
         )
-        for path in EXPECTED_FUTURE_M6_PATHS:
+        for path in EXPECTED_FINAL_EVIDENCE_PATHS:
             with self.subTest(final_required_path=path):
-                self.assertIn(f"missing-path:{path}", final_violations)
-        phase_zero = VALIDATOR.validate_m6_path_inventory(
-            required_paths=("Scripts/test_validate_project_structure_m6.py",),
-            absent_paths=EXPECTED_FUTURE_M6_PATHS,
-        )
-        self.assertEqual(phase_zero, [])
+                if (ROOT / path).is_file():
+                    self.assertNotIn(f"missing-path:{path}", final_violations)
+                else:
+                    self.assertIn(f"missing-path:{path}", final_violations)
         source = inspect.getsource(VALIDATOR.validate_m6_path_inventory).lower()
         self.assertNotIn("getenv", source)
         self.assertNotIn("environ", source)
-        self.assertNotIn("phase_zero", inspect.signature(VALIDATOR.validate_m6_path_inventory).parameters)
+        self.assertEqual(
+            tuple(inspect.signature(VALIDATOR.validate_m6_path_inventory).parameters),
+            ("required_paths",),
+        )
+        final_source = inspect.getsource(VALIDATOR.validate_m6_source)
+        self.assertNotIn("absent_paths", final_source)
+        self.assertNotIn("PHASE_ZERO", final_source)
 
     def testM1OpaqueReferenceSurfaceContractAndMutations(self) -> None:
         test_source = VALIDATOR.read(
@@ -743,6 +858,219 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                 self.assertIn(f"visual:m5-missing-marker:{label}", violations)
 
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
+    def testM6PendingScreenshotIdentityRowsRejectEveryOmission(self) -> None:
+        path = ROOT / EXPECTED_RESULT_PATH
+        self.assertTrue(path.is_file(), "6A RED requires the additive visual-result template")
+        text = path.read_text(encoding="utf-8")
+        self.assertEqual(VALIDATOR.validate_m6_result_text(text), [])
+        rows = VALIDATOR.m6_expected_screenshot_rows()
+        self.assertEqual(len(rows), 5)
+
+        def replace_cell(row: str, cell_index: int, value: str) -> str:
+            cells = [cell.strip() for cell in row.strip("|").split("|")]
+            cells[cell_index] = value
+            return "| " + " | ".join(cells) + " |"
+
+        for state, row in zip(EXPECTED_SCREENSHOT_STATES, rows, strict=True):
+            for field, index in (
+                ("state", 0),
+                ("screenshot-hash", 1),
+                ("source-sha", 2),
+                ("executable-hash", 3),
+                ("primary-reference-hash", 4),
+                ("concept-reference-hash", 5),
+            ):
+                with self.subTest(state=state, omitted=field):
+                    mutation = text.replace(row, replace_cell(row, index, "OMITTED"), 1)
+                    violations = VALIDATOR.validate_m6_result_text(mutation)
+                    self.assertTrue(
+                        any(item.startswith("evidence:screenshot-row:") for item in violations),
+                        violations,
+                    )
+
+    def testM6PerReferenceScoreReviewerRationaleCannotBeAveragedOrPromoted(self) -> None:
+        path = ROOT / EXPECTED_RESULT_PATH
+        self.assertTrue(path.is_file(), "6A RED requires the additive visual-result template")
+        text = path.read_text(encoding="utf-8")
+        rows = VALIDATOR.m6_expected_review_rows()
+        self.assertEqual(len(rows), 10)
+        for row in rows:
+            cells = [cell.strip() for cell in row.strip("|").split("|")]
+            for field_index, field in ((2, "score"), (3, "reviewer"), (4, "rationale")):
+                with self.subTest(state=cells[0], reference=cells[1], omitted=field):
+                    mutated_cells = list(cells)
+                    mutated_cells[field_index] = "OMITTED"
+                    replacement = "| " + " | ".join(mutated_cells) + " |"
+                    violations = VALIDATOR.validate_m6_result_text(
+                        text.replace(row, replacement, 1)
+                    )
+                    self.assertIn(
+                        f"evidence:review-row:{cells[0]}:{cells[1]}", violations
+                    )
+        first = rows[0]
+        below_threshold = first.replace(
+            "| PENDING | PENDING | PENDING | PENDING |",
+            "| 89 | reviewer-1 | rationale | PENDING |",
+        )
+        averaged = text.replace(first, below_threshold, 1) + "\nAverage score: 95/100\n"
+        violations = VALIDATOR.validate_m6_result_text(averaged)
+        self.assertTrue(any(item.startswith("evidence:review-") for item in violations))
+        self.assertIn(
+            "Averages are forbidden and cannot mask any individual score below 90/100.",
+            text.splitlines(),
+        )
+
+    def testM6EveryNativeVisualPhysicalFieldStaysPendingAndPrivateNeutral(self) -> None:
+        path = ROOT / EXPECTED_RESULT_PATH
+        self.assertTrue(path.is_file(), "6A RED requires the additive visual-result template")
+        text = path.read_text(encoding="utf-8")
+        for marker in EXPECTED_RESULT_PENDING_FIELDS:
+            with self.subTest(pending_marker=marker):
+                mutation = text.replace(marker, marker.replace("PENDING", "PASS"), 1)
+                violations = VALIDATOR.validate_m6_result_text(mutation)
+                self.assertTrue(
+                    any(
+                        item.startswith("evidence:visual-result-pending:")
+                        or item.startswith("evidence:overclaim:")
+                        for item in violations
+                    ),
+                    violations,
+                )
+        for marker in (
+            "SENTINEL_PRIVATE_SCRIPT",
+            "document.title",
+            "displayID",
+            "/Users/private/operator.png",
+        ):
+            with self.subTest(private_marker=marker):
+                violations = VALIDATOR.validate_m6_result_text(text + f"\n{marker}\n")
+                self.assertTrue(
+                    any(item.startswith("evidence:private-surface:") for item in violations)
+                )
+
+    def testM6HistoryIsExactlySevenImmediateRedGreenPairs(self) -> None:
+        rows = VALIDATOR.m6_history_rows()
+        self.assertEqual(VALIDATOR.validate_m6_history_rows(rows), [])
+        self.assertEqual(len(rows), 14)
+        self.assertEqual(
+            [title for _, _, title in rows],
+            [title for title in EXPECTED_LEDGER_TITLES for _ in range(2)],
+        )
+        for index in range(7):
+            self.assertEqual(rows[index * 2 + 1][1], [rows[index * 2][0]])
+            mutation = list(rows)
+            green_sha, _, green_title = mutation[index * 2 + 1]
+            mutation[index * 2 + 1] = (green_sha, [EXPECTED_PLAN_COMMIT], green_title)
+            self.assertIn(
+                f"ledger:nonconsecutive:{index * 2 + 1}",
+                VALIDATOR.validate_m6_history_rows(mutation),
+            )
+
+    def testM6ContinuationInventoryHashesPairsSourceTreeTarAndBundleAreExact(self) -> None:
+        handoff = ROOT / EXPECTED_CONTINUATION_DIR
+        self.assertTrue(handoff.is_dir(), "6A RED requires the exact M6 Mac continuation")
+        self.assertEqual(VALIDATOR.validate_m6_continuation(handoff), [])
+        self.assertEqual(
+            tuple(sorted(path.name for path in handoff.iterdir() if path.is_file())),
+            tuple(sorted(EXPECTED_CONTINUATION_FILES)),
+        )
+
+        guide = (handoff / "MAC-CONTINUATION.md").read_text(encoding="utf-8")
+        rows = VALIDATOR.m6_history_rows()
+        source_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+        ).strip()
+        source_tree = subprocess.check_output(
+            ["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT, text=True
+        ).strip()
+        self.assertEqual(
+            VALIDATOR.validate_m6_continuation_guide(
+                guide,
+                history_rows=rows,
+                source_sha=source_sha,
+                source_tree=source_tree,
+            ),
+            [],
+        )
+        for label, mutation in (
+            ("source", guide.replace(source_sha, "0" * 40, 1)),
+            ("tree", guide.replace(source_tree, "0" * 40, 1)),
+            (
+                "pair",
+                guide.replace(rows[1][0], rows[0][0], 1),
+            ),
+        ):
+            with self.subTest(guide_identity=label):
+                self.assertTrue(
+                    VALIDATOR.validate_m6_continuation_guide(
+                        mutation,
+                        history_rows=rows,
+                        source_sha=source_sha,
+                        source_tree=source_tree,
+                    )
+                )
+
+        with tempfile.TemporaryDirectory() as directory:
+            scratch = Path(directory) / "handoff"
+            shutil.copytree(handoff, scratch)
+            (scratch / "unexpected.bin").write_bytes(b"extra")
+            self.assertIn(
+                "continuation:exact-file-inventory",
+                VALIDATOR.validate_m6_continuation(scratch),
+            )
+
+        for name in EXPECTED_CONTINUATION_FILES:
+            with self.subTest(missing_file=name), tempfile.TemporaryDirectory() as directory:
+                scratch = Path(directory) / "handoff"
+                shutil.copytree(handoff, scratch)
+                (scratch / name).unlink()
+                self.assertIn(
+                    "continuation:exact-file-inventory",
+                    VALIDATOR.validate_m6_continuation(scratch),
+                )
+
+        for manifest_name in ("m6-source-files.sha256", "m6-artifacts.sha256"):
+            with self.subTest(duplicate_manifest=manifest_name), tempfile.TemporaryDirectory() as directory:
+                scratch = Path(directory) / "handoff"
+                shutil.copytree(handoff, scratch)
+                manifest = scratch / manifest_name
+                first = manifest.read_text(encoding="utf-8").splitlines()[0]
+                manifest.write_text(
+                    manifest.read_text(encoding="utf-8") + first + "\n",
+                    encoding="utf-8",
+                )
+                self.assertIn(
+                    f"continuation:manifest-duplicate:{manifest_name}",
+                    VALIDATOR.validate_m6_continuation(scratch),
+                )
+
+        artifact_manifest = handoff / "m6-artifacts.sha256"
+        artifact_entries, _ = VALIDATOR.parse_sha256_manifest(artifact_manifest)
+        self.assertEqual(
+            tuple(relative for _, relative in artifact_entries),
+            EXPECTED_ARTIFACT_ENTRIES,
+        )
+        for _, relative in artifact_entries:
+            with self.subTest(wrong_artifact_hash=relative), tempfile.TemporaryDirectory() as directory:
+                scratch = Path(directory) / "handoff"
+                shutil.copytree(handoff, scratch)
+                manifest = scratch / "m6-artifacts.sha256"
+                source = manifest.read_text(encoding="utf-8")
+                manifest.write_text(
+                    re.sub(
+                        rf"^[0-9a-f]{{64}}  {re.escape(relative)}$",
+                        f"{'0' * 64}  {relative}",
+                        source,
+                        count=1,
+                        flags=re.MULTILINE,
+                    ),
+                    encoding="utf-8",
+                )
+                self.assertIn(
+                    f"continuation:artifact-hash:{relative}",
+                    VALIDATOR.validate_m6_continuation(scratch),
+                )
 
 
 if __name__ == "__main__":
