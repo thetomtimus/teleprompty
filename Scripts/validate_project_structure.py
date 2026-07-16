@@ -572,6 +572,127 @@ M3_PROHIBITED_PATTERNS = (
 M3_ALLOWED_PACKAGE_DEPENDENCIES = ("TeleprompterCore", "Carbon.framework")
 M3_BASELINE = "802953089e88369e2a8e9fb744f4e32b30d9727d"
 
+M4_REQUIRED_PATHS = (
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Shortcuts/ShortcutValidator.swift",
+    "Packages/TeleprompterCore/Sources/TeleprompterCore/Focus/FocusChromeStateMachine.swift",
+    "Packages/TeleprompterCore/Tests/TeleprompterCoreTests/ShortcutValidatorTests.swift",
+    "Packages/TeleprompterCore/Tests/TeleprompterCoreTests/FocusChromeStateMachineTests.swift",
+    "PrivatePresenterApp/Interfaces/HotKeyRegistering.swift",
+    "PrivatePresenterApp/Services/CarbonHotKeyService.swift",
+    "PrivatePresenterApp/Overlay/FocusModeController.swift",
+    "PrivatePresenterApp/Overlay/PointerPresenceMonitor.swift",
+    "PrivatePresenterApp/Overlay/OverlayChromeView.swift",
+    "PrivatePresenterApp/Menu/StatusItemController.swift",
+    "PrivatePresenterApp/App/AppLifecycleCoordinator.swift",
+    "PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift",
+    "PrivatePresenterAppTests/FocusModeControllerTests.swift",
+    "PrivatePresenterUITests/MenuLifecycleUITests.swift",
+    "Scripts/test_validate_project_structure_m4.py",
+    "Scripts/run-m4-hotkey-collision-holder.swift",
+)
+
+M4_CANONICAL_NAMED_TESTS = (
+    "testDefaultsMatchPRD",
+    "testBareSpaceAndArrowsAreRejected",
+    "testDuplicateChordIsRejected",
+    "testCustomChordRoundTrips",
+    "testRegistersEveryActionOnce",
+    "testReconfigurationUnregistersOldChordTransactionally",
+    "testPartialRegistrationRollsBack",
+    "testCollisionSurfacesWithoutFallback",
+    "testShutdownUnregistersAll",
+    "testHandlerDispatchesExpectedCommand",
+    "testEveryFocusTransition",
+    "testLockedFocusHidesAfterTwoSeconds",
+    "testPointerPresenceRevealsWithoutDisablingClickThrough",
+    "testDynamicCanBecomeKeyRequiresUnlockedAndActive",
+    "testUnlockNeverActivates",
+    "testReduceMotionRemovesDecorativeFade",
+    "testSingleModelIsSharedByBothWindowsAndStatusItem",
+    "testMenuContainsFiveRequiredActions",
+    "testClosingControllerDoesNotQuit",
+    "testShowControllerReusesInstance",
+    "testQuitFlushesPausedStateBeforeUnregisterAndTerminate",
+)
+
+M4_ADDED_NAMED_TESTS = (
+    "testEveryProductShortcutRequiresModifier",
+    "testMissingAndDuplicateActionsAreRejected",
+    "testCanonicalBindingsUseStableActionOrder",
+    "testInvalidRestoredBindingsUseDefaultsWithoutDiscardingDocument",
+    "testShortcutRoundTripKeepsPersistedSnapshotSchemaOne",
+    "testCustomizationIsDisabledByDefaultUntilPhysicalProof",
+    "testInitialFailureLeavesNoActiveHotKeysOrHandler",
+    "testStableCarbonIDsMapAllSevenActionsExactlyOnce",
+    "testUnknownSignatureOrIdentifierIsNotHandled",
+    "testReconfigurationKeepsUnchangedReferencesRegistered",
+    "testChangedOldReferencesUnregisterBeforeProposedRegistration",
+    "testOldUnregistrationFailureDoesNotStageProposalAndReportsUnknownState",
+    "testStagedCallbacksDoNotDispatchBeforeCommit",
+    "testFailedProposalRestoresCompleteOldMap",
+    "testRollbackFailureTearsDownAllRegistrationsAndReportsNoActiveHotKeys",
+    "testCleanupFailureNeverClaimsZeroActiveRegistrations",
+    "testUnknownCleanupDisablesRetryUntilRelaunch",
+    "testCleanupUnknownMessageIsFixedAndContentNeutral",
+    "testProposedBindingsPersistOnlyAfterRegistrationCommit",
+    "testFailedProposalKeepsPersistedOldBindings",
+    "testRetryFromDegradedStateRegistersCleanSevenActionSet",
+    "testDispatchRunsOnMainActorWithoutActivatingApplication",
+    "testHotKeyCommandsCannotBypassEmptyScriptOrPrivacyGuards",
+    "testProductAndDiagnosticRegistrarsNeverRunTogether",
+    "testShutdownRemovesHandlerAfterReferencesAndIsIdempotent",
+    "testShutdownReportsUnregistrationAndHandlerRemovalFailures",
+    "testUnlockedAndFocusOffStatesNeverArmHideDeadline",
+    "testLockedFocusArmsExactlyTwoSecondDeadline",
+    "testStaleHideDeadlineIsIgnored",
+    "testPointerExitRearmsFullDeadline",
+    "testHideAndTeardownCancelDeadlineAndSampling",
+    "testPointerSamplerRunsOnlyWhileVisibleLockedAndFocused",
+    "testPointerSamplerUsesLocationOnlyAtOneHundredMillisecondInterval",
+    "testLockedPointerRevealKeepsIgnoresMouseEventsTrue",
+    "testInactiveApplicationCannotYieldKeyPanelEvenWhenUnlocked",
+    "testShowHideLockFocusAndPointerPathsNeverActivateOrMakeKey",
+    "testCanBecomeMainRemainsFalseInEveryState",
+    "testFocusChromeUsesSameAppModelIdentityAsReaderWindow",
+    "testOverlayHostingControllerIsCreatedOnceOnConnect",
+    "testConnectModelIsIdempotentAndRejectsDifferentModel",
+    "testFocusChromeDoesNotMutateTextOrChangeReaderInset",
+    "testFocusPreferenceRoundTripsSchemaOne",
+    "testStatusItemOwnsExactlyFiveActionItems",
+    "testMenuAndStatusTitlesNeverContainScriptTitle",
+    "testEveryMenuActionDispatchesTypedAppCommand",
+    "testQuitRequestReachesLifecycleAsTypedAppCommand",
+    "testClosingControllerLeavesOverlayStatusAndHotKeysAlive",
+    "testShowControllerWhileUnsafeRemainsShielded",
+    "testStartupRegistersProductHotKeysAfterRestoreAndPrivacyAssessment",
+    "testStartupCollisionLeavesMenuAndControllerRecoveryAvailable",
+    "testQuitStopsAndCapturesBeforePausedSnapshotFlush",
+    "testFlushFailureKeepsRecoveryServicesAndCancelsTermination",
+    "testSuccessfulQuitStopsCallbacksBeforeStatusItemRemovalAndTerminateReply",
+    "testRepeatedQuitAndShutdownAreIdempotent",
+    "testRuntimeConstructsNoSecondModelPanelControllerStatusItemOrScrollOwner",
+)
+
+M4_PROHIBITED_PATTERNS = (
+    "addGlobalMonitorForEvents",
+    "addLocalMonitorForEvents",
+    "CGEventTap",
+    "CGEvent.tapCreate",
+    "AXIsProcessTrusted",
+    "AXUIElement",
+    "NSEvent.pressedMouseButtons",
+    "CGEventSource.keyState",
+    "NSApp.activate(",
+    "makeKeyAndOrderFront(",
+    "URLSession",
+    "WKWebView",
+    "MenuBarExtra",
+    "VoiceOver",
+    "50_000",
+)
+
+M4_BASELINE = "6aba2060c4308ea90d8973b2f606e5646e85d596"
+
 
 def fail(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
@@ -968,6 +1089,234 @@ def validate_m3_source() -> list[str]:
     return violations
 
 
+def validate_m4_source() -> list[str]:
+    violations: list[str] = []
+    missing_paths = [path for path in M4_REQUIRED_PATHS if not (ROOT / path).is_file()]
+    violations.extend(f"missing-path:{path}" for path in missing_paths)
+
+    test_roots = (
+        ROOT / "Packages/TeleprompterCore/Tests",
+        ROOT / "PrivatePresenterAppTests",
+        ROOT / "PrivatePresenterUITests",
+    )
+    test_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for root in test_roots
+        for path in root.rglob("*.swift")
+    )
+    violations.extend(
+        f"missing-test:{name}"
+        for name in (*M4_CANONICAL_NAMED_TESTS, *M4_ADDED_NAMED_TESTS)
+        if name not in test_sources
+    )
+
+    production_paths = [
+        path.relative_to(ROOT).as_posix()
+        for root in (ROOT / "Packages/TeleprompterCore/Sources", ROOT / "PrivatePresenterApp")
+        for path in root.rglob("*.swift")
+    ]
+    production_sources = {path: read(path) for path in production_paths}
+    for path, text in production_sources.items():
+        for pattern in M4_PROHIBITED_PATTERNS:
+            if pattern in text:
+                violations.append(f"prohibited:{pattern}:{path}")
+
+    app_sources = {
+        path: text
+        for path, text in production_sources.items()
+        if path.startswith("PrivatePresenterApp/")
+    }
+    joined_app_sources = "\n".join(app_sources.values())
+    if joined_app_sources.count("final class AppModel") != 1:
+        violations.append("authority:AppModel-count")
+    if joined_app_sources.count("@Observable") != 1:
+        violations.append("authority:observable-store-count")
+    if joined_app_sources.count("TeleprompterPanel(contentRect:") != 1:
+        violations.append("authority:panel-construction-count")
+    if joined_app_sources.count("NSStatusBar.system.statusItem(") != 1:
+        violations.append("authority:status-item-construction-count")
+    product_hot_keys = app_sources.get(
+        "PrivatePresenterApp/Services/CarbonHotKeyService.swift", ""
+    )
+    if product_hot_keys.count("InstallEventHandler(") != 1:
+        violations.append("authority:product-handler-install-count")
+    if joined_app_sources.count("ScrollSessionController(") != 1:
+        violations.append("authority:scroll-session-construction-count")
+
+    app_model = app_sources.get("PrivatePresenterApp/App/AppModel.swift", "")
+    if "@MainActor\n@Observable\nfinal class AppModel" not in app_model:
+        violations.append("authority:AppModel-main-actor")
+    for marker in (
+        "RegisterEventHotKey(",
+        "UnregisterEventHotKey(",
+        "GetApplicationEventTarget()",
+        "RemoveEventHandler(",
+        "action.stableIndex + 1",
+    ):
+        source = (
+            product_hot_keys
+            if marker != "action.stableIndex + 1"
+            else app_sources.get("PrivatePresenterApp/Interfaces/HotKeyRegistering.swift", "")
+        )
+        if marker not in source:
+            violations.append(f"hotkey:missing:{marker}")
+    for marker in (
+        "case cleanupUnknown",
+        "case degradedClean",
+        "case reconfiguring",
+        "case rollingBack",
+        "static let cleanupUnknownMessage",
+    ):
+        if marker not in product_hot_keys:
+            violations.append(f"hotkey:transaction-marker:{marker}")
+
+    runtime = app_sources.get("PrivatePresenterApp/App/AppRuntime.swift", "")
+    application = app_sources.get("PrivatePresenterApp/App/PrivatePresenterApp.swift", "")
+    if "case product" not in read("PrivatePresenterApp/Interfaces/HotKeyRegistering.swift"):
+        violations.append("hotkey:product-mode")
+    if "case legacyDiagnostic" not in read("PrivatePresenterApp/Interfaces/HotKeyRegistering.swift"):
+        violations.append("hotkey:legacy-mode")
+    if "case .product:" not in runtime or "case .legacyDiagnostic:" not in runtime:
+        violations.append("hotkey:exclusive-runtime-routing")
+    if "PRIVATE_PRESENTER_EVIDENCE_COMMIT" not in application:
+        violations.append("hotkey:bounded-legacy-proof-mode")
+
+    panel = app_sources.get("PrivatePresenterApp/Overlay/TeleprompterPanel.swift", "")
+    if "override var canBecomeKey: Bool { !isOverlayLocked && NSApp.isActive }" not in panel:
+        violations.append("panel:dynamic-key-eligibility")
+    if "override var canBecomeMain: Bool { false }" not in panel:
+        violations.append("panel:permanent-non-main")
+    if "ignoresMouseEvents = locked" not in panel:
+        violations.append("panel:locked-click-through")
+    if "proofLevel: OverlayPanelLevel = .statusBar" not in runtime:
+        violations.append("panel:status-bar-default")
+    dependency_container = app_sources.get(
+        "PrivatePresenterApp/App/DependencyContainer.swift", ""
+    )
+    if "orderingMode: OverlayPanelOrderingMode = .frontRegardless" not in dependency_container:
+        violations.append("panel:front-regardless-default")
+
+    focus_machine = production_sources.get(
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Focus/FocusChromeStateMachine.swift",
+        "",
+    )
+    if ".scheduleHide(after: 2, token: token)" not in focus_machine:
+        violations.append("focus:two-second-deadline")
+    pointer = app_sources.get("PrivatePresenterApp/Overlay/PointerPresenceMonitor.swift", "")
+    if "samplingInterval: TimeInterval = 0.1" not in pointer:
+        violations.append("focus:pointer-sampling-interval")
+    if "NSEvent.mouseLocation" not in dependency_container:
+        violations.append("focus:location-only-provider")
+    if "accessibilityDisplayShouldReduceMotion" not in dependency_container:
+        violations.append("focus:reduce-motion-provider")
+
+    menu = app_sources.get("PrivatePresenterApp/Menu/StatusItemController.swift", "")
+    required_menu_titles = (
+        '("Show Controller", #selector(showController))',
+        '("Start", #selector(togglePlayback))',
+        '("Show Teleprompter", #selector(toggleVisibility))',
+        '("Lock", #selector(toggleLock))',
+        '("Quit", #selector(requestQuit))',
+    )
+    if menu.count("NSMenuItem(title:") != 1 or any(
+        marker not in menu for marker in required_menu_titles
+    ):
+        violations.append("menu:exact-five-actions")
+    for marker in (
+        "case 0: command = .showController",
+        "case 1: command = .togglePlayback",
+        "case 2: command = .toggleVisibility",
+        "case 3: command = .toggleLock",
+        "case 4: command = .requestQuit",
+    ):
+        if marker not in menu:
+            violations.append("menu:typed-command-map")
+            break
+    if any(marker in menu for marker in ("model.document.title", "model.document.text")):
+        violations.append("menu:private-content-reference")
+
+    lifecycle = app_sources.get("PrivatePresenterApp/App/AppLifecycleCoordinator.swift", "")
+    ordered_lifecycle_markers = (
+        "record(.rejectMutations)",
+        "record(.pauseAndCapture)",
+        "record(.hideAndShield)",
+        "record(.stagePausedSnapshot)",
+        "record(.flushPausedSnapshot)",
+        "record(.enterQuiescence)",
+        "record(.unregisterHotKeys)",
+        "record(.stopFocusPointerDisplay)",
+        "record(.teardownScrollSession)",
+        "record(.removeStatusItem)",
+        "record(.closeController)",
+        "record(.terminateReady)",
+    )
+    lifecycle_positions = [lifecycle.find(marker) for marker in ordered_lifecycle_markers]
+    if any(position < 0 for position in lifecycle_positions) or lifecycle_positions != sorted(
+        lifecycle_positions
+    ):
+        violations.append("lifecycle:ordered-markers")
+    for marker in (
+        "model.send(.cancelTerminationAttempt)",
+        "record(.flushFailed)",
+        "if completed { return true }",
+    ):
+        if marker not in lifecycle:
+            violations.append(f"lifecycle:missing:{marker}")
+
+    snapshot_path = (
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/"
+        "PersistedSnapshot.swift"
+    )
+    if "static let currentSchemaVersion = 1" not in production_sources.get(snapshot_path, ""):
+        violations.append("schema:persisted-snapshot-version")
+    document_path = (
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift"
+    )
+    if "static let currentSchemaVersion = 1" not in production_sources.get(document_path, ""):
+        violations.append("schema:script-document-version")
+    if "static let documentBottomPadding = 64.0" not in app_sources.get(
+        "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", ""
+    ):
+        violations.append("reader:bottom-padding")
+    for path in (
+        "PrivatePresenterApp/Controller/EditorTextSystem.swift",
+        "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+    ):
+        if "NSTextView(usingTextLayoutManager: true)" not in app_sources.get(path, ""):
+            violations.append(f"textkit:not-textkit2:{path}")
+
+    protected_sources = (
+        "project.yml",
+        "Packages/TeleprompterCore/Package.swift",
+        "PrivatePresenterApp/Info.plist",
+        "PrivatePresenterApp/Resources/PrivatePresenter.entitlements",
+        "PrivatePresenterApp/Services/SnapshotStore.swift",
+    )
+    for path in protected_sources:
+        baseline = git("show", f"{M4_BASELINE}:{path}")
+        label = {
+            "project.yml": "dependency:project-yml-changed",
+            "Packages/TeleprompterCore/Package.swift": "dependency:package-swift-changed",
+            "PrivatePresenterApp/Resources/PrivatePresenter.entitlements": "entitlement:changed",
+        }.get(path, f"protected-source:{path}")
+        if baseline.returncode != 0 or baseline.stdout != read(path):
+            violations.append(label)
+    entitlements = read("PrivatePresenterApp/Resources/PrivatePresenter.entitlements")
+    if any(
+        marker in entitlements
+        for marker in (
+            "com.apple.security.network.client",
+            "com.apple.security.network.server",
+            "com.apple.security.automation.apple-events",
+            "com.apple.security.device.audio-input",
+            "com.apple.security.device.camera",
+        )
+    ):
+        violations.append("entitlement:non-sandbox-surface")
+
+    return violations
+
+
 def main() -> None:
     missing = [path for path in REQUIRED_PATHS if not (ROOT / path).is_file()]
     if missing:
@@ -1030,16 +1379,13 @@ def main() -> None:
     validate_data_safety()
     validate_historical_result_prefix()
     validate_m0_prohibited_surfaces()
-    m2_violations = validate_m2_source()
-    if m2_violations:
-        fail("Milestone 2 source validation failed: " + ", ".join(m2_violations))
-    m3_violations = validate_m3_source()
-    if m3_violations:
-        fail("Milestone 3 source validation failed: " + ", ".join(m3_violations))
+    m4_violations = validate_m4_source()
+    if m4_violations:
+        fail("Milestone 4 source validation failed: " + ", ".join(m4_violations))
     validate_xcode_listing()
     print(
         "Project structure validation passed "
-        "(Milestone 0 Phase B + Milestone 2 + Milestone 3 source)."
+        "(Milestone 0 Phase B + Milestone 4 current source)."
     )
 
 
