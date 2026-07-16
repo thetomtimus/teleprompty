@@ -191,6 +191,23 @@ final class ControllerPresentationTests: XCTestCase {
         XCTAssertNil(presentation.productCommand(for: .focusMode))
     }
 
+    func testCollisionMessageShowsFixedActionChordAndNumericStatus() {
+        let failure = HotKeyFailure(
+            action: .toggleVisibility,
+            shortcut: KeyboardShortcut(
+                virtualKeyCode: 4,
+                modifiers: [.control, .option]
+            ),
+            status: -987,
+            cleanup: []
+        )
+
+        XCTAssertEqual(
+            ControllerPresentation.globalShortcutStatusText(.conflict(failure)),
+            "Global shortcut conflict for toggleVisibility (Control-Option-H), status -987."
+        )
+    }
+
     func testProductControllerExposesOpenCloseAndHideShowThroughOnePanelState() {
         let hidden = ControllerPresentation(
             scriptText: "Generated script",

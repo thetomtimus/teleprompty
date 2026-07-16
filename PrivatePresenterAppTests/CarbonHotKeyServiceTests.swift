@@ -59,7 +59,7 @@ final class CarbonHotKeyServiceTests: XCTestCase {
         XCTAssertEqual(harness.service.state, .unregistered)
     }
 
-    func testHandlerDispatchesExpectedCommand() {
+    func testHandlerDispatchesExpectedCommand() async {
         let harness = makeRegisteredHarness()
 
         XCTAssertEqual(
@@ -68,6 +68,7 @@ final class CarbonHotKeyServiceTests: XCTestCase {
             ),
             noErr
         )
+        await Task.yield()
         XCTAssertEqual(harness.commands, [.toggleVisibility])
     }
 
@@ -170,10 +171,31 @@ final class CarbonHotKeyServiceTests: XCTestCase {
     func testRollbackFailureTearsDownAllRegistrationsAndReportsNoActiveHotKeys() {
         let harness = makeRegisteredHarness()
         harness.registrar.registrationFailures[.toggleLock] = [-987, -988]
+        let proposed = changing(.toggleLock, keyCode: 38)
 
-        let result = harness.service.reconfigure(changing(.toggleLock, keyCode: 38))
+        let result = harness.service.reconfigure(proposed)
 
-        XCTAssertDegradedClean(result)
+        guard case .degradedClean(let failure) = result else {
+            return XCTFail("Expected degradedClean, got \(result)")
+        }
+        XCTAssertEqual(
+            failure.attempts,
+            [
+                HotKeyAttemptStatus(
+                    operation: .proposedRegistration,
+                    action: .toggleLock,
+                    shortcut: proposed.first { $0.action == .toggleLock }!.shortcut,
+                    status: -987
+                ),
+                HotKeyAttemptStatus(
+                    operation: .rollbackRegistration,
+                    action: .toggleLock,
+                    shortcut: defaults().first { $0.action == .toggleLock }!.shortcut,
+                    status: -988
+                ),
+            ]
+        )
+        XCTAssertEqual(failure.cleanup.last?.operation, .removeHandler)
         XCTAssertEqual(harness.service.state.failureKind, .degradedClean)
         XCTAssertEqual(harness.service.activeActionCount, 0)
         XCTAssertEqual(harness.registrar.liveTokens.count, 0)
@@ -255,9 +277,10 @@ final class CarbonHotKeyServiceTests: XCTestCase {
         XCTAssertEqual(harness.service.activeActionCount, 7)
     }
 
-    func testDispatchRunsOnMainActorWithoutActivatingApplication() {
+    func testDispatchRunsOnMainActorWithoutActivatingApplication() async {
         let harness = makeRegisteredHarness()
         _ = harness.service.receiveForTesting(identifier: .init(action: .togglePlayback))
+        await Task.yield()
 
         XCTAssertEqual(harness.commands, [.togglePlayback])
         XCTAssertFalse(harness.registrar.operations.contains(.activateApplication))
@@ -301,6 +324,16 @@ final class CarbonHotKeyServiceTests: XCTestCase {
         XCTAssertEqual(first, second)
         XCTAssertEqual(harness.registrar.operations.count, operationCount)
         XCTAssertEqual(harness.registrar.operations.last, .removeHandler)
+    }
+
+    func testShutdownClosesAlreadyQueuedDispatch() async {
+        let harness = makeRegisteredHarness()
+        _ = harness.service.receiveForTesting(identifier: .init(action: .togglePlayback))
+
+        _ = harness.service.shutdown()
+        await Task.yield()
+
+        XCTAssertTrue(harness.commands.isEmpty)
     }
 
     func testShutdownReportsUnregistrationAndHandlerRemovalFailures() {

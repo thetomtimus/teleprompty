@@ -34,8 +34,27 @@ final class FocusModeControllerTests: XCTestCase {
     }
 
     func testReduceMotionRemovesDecorativeFade() {
-        XCTAssertEqual(makeFocusHarness(reduceMotion: true).controller.transitionDuration, 0)
-        XCTAssertGreaterThan(makeFocusHarness(reduceMotion: false).controller.transitionDuration, 0)
+        let reduced = makeFocusHarness(reduceMotion: true)
+        reduced.controller.apply(
+            .init(
+                isVisible: true,
+                isLocked: false,
+                isFocusModeEnabled: true,
+                pointerPresent: false
+            )
+        )
+        let animated = makeFocusHarness(reduceMotion: false)
+        animated.controller.apply(
+            .init(
+                isVisible: true,
+                isLocked: false,
+                isFocusModeEnabled: true,
+                pointerPresent: false
+            )
+        )
+
+        XCTAssertEqual(reduced.durations.last, 0)
+        XCTAssertGreaterThan(animated.durations.last ?? 0, 0)
     }
 
     func testHideAndTeardownCancelDeadlineAndSampling() {
@@ -173,11 +192,15 @@ private final class FocusHarness {
     let scheduler = FakeFocusDeadlineScheduler()
     let pointerMonitor = FakePointerMonitor()
     var visibility: [Bool] = []
+    var durations: [TimeInterval] = []
     lazy var controller = FocusModeController(
         scheduler: scheduler,
         pointerMonitor: pointerMonitor,
         reduceMotionProvider: { [weak self] in self?.reduceMotion ?? false },
-        setChromeVisible: { [weak self] visible, _ in self?.visibility.append(visible) },
+        setChromeVisible: { [weak self] visible, duration in
+            self?.visibility.append(visible)
+            self?.durations.append(duration)
+        },
         stateChanged: { _ in }
     )
     private let reduceMotion: Bool
@@ -187,7 +210,7 @@ private final class FocusHarness {
 
 @MainActor
 private final class FakeFocusDeadlineScheduler: FocusDeadlineScheduling {
-    var action: (() -> Void)?
+    var action: (@MainActor () -> Void)?
     var cancelCount = 0
     func schedule(after delay: TimeInterval, action: @escaping @MainActor () -> Void) { self.action = action }
     func cancel() { cancelCount += 1; action = nil }
@@ -205,7 +228,7 @@ private final class FakePointerMonitor: PointerPresenceMonitoring {
 @MainActor
 private final class FakeRepeatingScheduler: RepeatingScheduling {
     var interval: TimeInterval?
-    var action: (() -> Void)?
+    var action: (@MainActor () -> Void)?
     var startCount = 0
     var cancelCount = 0
     func start(interval: TimeInterval, action: @escaping @MainActor () -> Void) {

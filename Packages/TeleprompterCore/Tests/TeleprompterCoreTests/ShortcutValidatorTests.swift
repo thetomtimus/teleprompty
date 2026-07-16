@@ -96,17 +96,29 @@ final class ShortcutValidatorTests: XCTestCase {
     }
 
     func testInvalidRestoredBindingsUseDefaultsWithoutDiscardingDocument() {
-        var invalid = ShortcutValidator.defaultBindings
-        invalid.removeAll { $0.action == .toggleLock }
-        let original = makeSnapshot(text: "Synthetic restore fixture", shortcutBindings: invalid)
+        var missing = ShortcutValidator.defaultBindings
+        missing.removeAll { $0.action == .toggleLock }
+        var duplicateAction = ShortcutValidator.defaultBindings
+        duplicateAction.append(duplicateAction[0])
+        var duplicateChord = ShortcutValidator.defaultBindings
+        duplicateChord[1].shortcut = duplicateChord[0].shortcut
 
-        let resolution = ShortcutRestorePolicy.resolve(original)
+        for invalid in [missing, duplicateAction, duplicateChord] {
+            let original = makeSnapshot(
+                text: "Synthetic restore fixture",
+                shortcutBindings: invalid
+            )
+            let resolution = ShortcutRestorePolicy.resolve(original)
 
-        XCTAssertTrue(resolution.usedDefaultBindings)
-        XCTAssertEqual(resolution.snapshot.document, original.document)
-        XCTAssertEqual(resolution.snapshot.preferences, original.preferences)
-        XCTAssertEqual(resolution.snapshot.readingAnchor, original.readingAnchor)
-        XCTAssertEqual(resolution.snapshot.shortcutBindings, ShortcutValidator.defaultBindings)
+            XCTAssertTrue(resolution.usedDefaultBindings)
+            XCTAssertEqual(resolution.snapshot.document, original.document)
+            XCTAssertEqual(resolution.snapshot.preferences, original.preferences)
+            XCTAssertEqual(resolution.snapshot.readingAnchor, original.readingAnchor)
+            XCTAssertEqual(
+                resolution.snapshot.shortcutBindings,
+                ShortcutValidator.defaultBindings
+            )
+        }
     }
 
     func testShortcutRoundTripKeepsPersistedSnapshotSchemaOne() throws {

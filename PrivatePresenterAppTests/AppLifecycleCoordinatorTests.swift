@@ -88,13 +88,15 @@ final class AppLifecycleCoordinatorTests: XCTestCase {
 
     func testQuitStopsAndCapturesBeforePausedSnapshotFlush() async {
         let harness = makeLifecycleHarness(flushResult: true)
-        XCTAssertTrue(await harness.coordinator.stopAndFlush())
+        let stopped = await harness.coordinator.stopAndFlush()
+        XCTAssertTrue(stopped)
         XCTAssertLessThan(harness.events.firstIndex(of: .pauseAndCapture)!, harness.events.firstIndex(of: .flushPausedSnapshot)!)
     }
 
     func testFlushFailureKeepsRecoveryServicesAndCancelsTermination() async {
         let harness = makeLifecycleHarness(flushResult: false)
-        XCTAssertFalse(await harness.coordinator.stopAndFlush())
+        let stopped = await harness.coordinator.stopAndFlush()
+        XCTAssertFalse(stopped)
         XCTAssertFalse(harness.model.isTerminationAttempting)
         XCTAssertFalse(harness.model.isTerminationQuiescing)
         XCTAssertFalse(harness.events.contains(.unregisterHotKeys))
@@ -103,16 +105,19 @@ final class AppLifecycleCoordinatorTests: XCTestCase {
 
     func testSuccessfulQuitStopsCallbacksBeforeStatusItemRemovalAndTerminateReply() async {
         let harness = makeLifecycleHarness(flushResult: true)
-        XCTAssertTrue(await harness.coordinator.stopAndFlush())
+        let stopped = await harness.coordinator.stopAndFlush()
+        XCTAssertTrue(stopped)
         XCTAssertLessThan(harness.events.firstIndex(of: .stopFocusPointerDisplay)!, harness.events.firstIndex(of: .removeStatusItem)!)
         XCTAssertLessThan(harness.events.firstIndex(of: .removeStatusItem)!, harness.events.firstIndex(of: .terminateReady)!)
     }
 
     func testRepeatedQuitAndShutdownAreIdempotent() async {
         let harness = makeLifecycleHarness(flushResult: true)
-        XCTAssertTrue(await harness.coordinator.stopAndFlush())
+        let firstStop = await harness.coordinator.stopAndFlush()
+        XCTAssertTrue(firstStop)
         let events = harness.events
-        XCTAssertTrue(await harness.coordinator.stopAndFlush())
+        let secondStop = await harness.coordinator.stopAndFlush()
+        XCTAssertTrue(secondStop)
         XCTAssertEqual(harness.events, events)
     }
 
