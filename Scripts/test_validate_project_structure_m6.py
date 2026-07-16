@@ -142,6 +142,108 @@ EXPECTED_M1_SOURCE_MARKERS = (
     ),
 )
 
+EXPECTED_M2_NAMED_TESTS = (
+    "testReaderUsesSystemTypographyAndReferenceSpacing",
+    "testPersistedWeightMapsWithoutReplacingText",
+    "testActiveBandUsesTwoCachedTextKit2LineFragmentsForEveryWeightAtDefaultAndLargeSizes",
+    "testBandLineSelectionUsesNearestThenAdjacentWithFollowingTieBreak",
+    "testActiveBandOneAndZeroFragmentFallbacksAndCompactClampDoNotClipGlyphs",
+    "testBandMetricsCreateNoSecondTextLayoutManagerOrCacheOwner",
+    "testLiteralTextAndBandContrastThresholds",
+)
+EXPECTED_M2_SOURCE_MARKERS = (
+    (
+        "effect-font-weight",
+        "PrivatePresenterApp/App/AppEffect.swift",
+        "fontWeight: TeleprompterFontWeight,",
+        1,
+    ),
+    (
+        "model-persisted-weight",
+        "PrivatePresenterApp/App/AppModel.swift",
+        "fontWeight: preferences.fontWeight,",
+        2,
+    ),
+    (
+        "adapter-connect-weight",
+        "PrivatePresenterApp/App/DependencyContainer.swift",
+        "fontWeight: model.preferences.fontWeight,",
+        1,
+    ),
+    (
+        "reader-weight-parameter",
+        "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+        "fontWeight: TeleprompterFontWeight,",
+        1,
+    ),
+    (
+        "reader-weight-map",
+        "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+        "case .regular: .regular\n        case .medium: .medium\n        case .semibold: .semibold",
+        1,
+    ),
+    (
+        "reference-line-spacing",
+        "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+        "paragraph.lineHeightMultiple = 1.42",
+        1,
+    ),
+    (
+        "named-reading-color",
+        "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
+        ".foregroundColor: OverlayVisualTokens.readingText.appKitColor",
+        1,
+    ),
+    (
+        "layout-authority",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "struct OverlayLayoutMetrics: Equatable",
+        1,
+    ),
+    (
+        "line-measure-cap",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "min(1_050, max(0, size.width - 2 * effectiveReadingSideInset))",
+        1,
+    ),
+    (
+        "cached-band-query",
+        "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
+        "func cachedActiveBandLineFragments(viewportFraction: Double)",
+        1,
+    ),
+    (
+        "pure-band-selection",
+        "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
+        "static func selectActiveBandLineFragments(",
+        1,
+    ),
+    (
+        "layout-before-band-query",
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+        "viewportAdapter.ensureLayout()\n            resolvedBandFragments = viewportAdapter.cachedActiveBandLineFragments(",
+        1,
+    ),
+    (
+        "band-fallback",
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+        "2 * fallbackLineHeight + 12",
+        1,
+    ),
+    (
+        "band-horizontal-expansion",
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+        "let bandMinX = max(0, metrics.effectiveReadingSideInset - 18)",
+        1,
+    ),
+    (
+        "band-gradient-layer",
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+        "private let gradientLayer = CAGradientLayer()",
+        1,
+    ),
+)
+
 EXPECTED_PENDING_CLAIMS = (
     ("accessibility-status", "docs/validation/m5-accessibility-result.md", "Status: PENDING"),
     ("accessibility-m3", "docs/validation/m5-accessibility-result.md", "M3 native evidence: PENDING"),
@@ -191,6 +293,8 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_M1_REQUIRED_PATHS": EXPECTED_M1_REQUIRED_PATHS,
             "M6_M1_NAMED_TESTS": EXPECTED_M1_NAMED_TESTS,
             "M6_M1_SOURCE_MARKERS": EXPECTED_M1_SOURCE_MARKERS,
+            "M6_M2_NAMED_TESTS": EXPECTED_M2_NAMED_TESTS,
+            "M6_M2_SOURCE_MARKERS": EXPECTED_M2_SOURCE_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -353,6 +457,37 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertNotIn(".shadow(", root)
         self.assertIn("hasShadow = true", panel)
         self.assertIn("isOpaque = false", panel)
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
+    def testM2TypographyBandAndCachedFragmentContractAndMutations(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_M2_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        for label, path, marker, expected_count in EXPECTED_M2_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                source = VALIDATOR.read(path)
+                self.assertEqual(source.count(marker), expected_count, f"{path}:{label}")
+                original_read = VALIDATOR.read
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == path:
+                        return source.replace(marker, f"removed-{label}")
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(f"visual:m2-missing-marker:{label}", violations)
+
+        adapter = VALIDATOR.read(
+            "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift"
+        )
+        query = adapter.split("func cachedActiveBandLineFragments", 1)[1][:1_200]
+        self.assertNotIn("ensureLayout(", query)
+        self.assertNotIn("NSTextLayoutManager(", query)
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
 

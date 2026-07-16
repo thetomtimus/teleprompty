@@ -1549,6 +1549,34 @@ M6_M1_SOURCE_MARKERS = (
     ),
 )
 
+M6_M2_NAMED_TESTS = (
+    "testReaderUsesSystemTypographyAndReferenceSpacing",
+    "testPersistedWeightMapsWithoutReplacingText",
+    "testActiveBandUsesTwoCachedTextKit2LineFragmentsForEveryWeightAtDefaultAndLargeSizes",
+    "testBandLineSelectionUsesNearestThenAdjacentWithFollowingTieBreak",
+    "testActiveBandOneAndZeroFragmentFallbacksAndCompactClampDoNotClipGlyphs",
+    "testBandMetricsCreateNoSecondTextLayoutManagerOrCacheOwner",
+    "testLiteralTextAndBandContrastThresholds",
+)
+
+M6_M2_SOURCE_MARKERS = (
+    ("effect-font-weight", "PrivatePresenterApp/App/AppEffect.swift", "fontWeight: TeleprompterFontWeight,", 1),
+    ("model-persisted-weight", "PrivatePresenterApp/App/AppModel.swift", "fontWeight: preferences.fontWeight,", 2),
+    ("adapter-connect-weight", "PrivatePresenterApp/App/DependencyContainer.swift", "fontWeight: model.preferences.fontWeight,", 1),
+    ("reader-weight-parameter", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "fontWeight: TeleprompterFontWeight,", 1),
+    ("reader-weight-map", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "case .regular: .regular\n        case .medium: .medium\n        case .semibold: .semibold", 1),
+    ("reference-line-spacing", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "paragraph.lineHeightMultiple = 1.42", 1),
+    ("named-reading-color", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", ".foregroundColor: OverlayVisualTokens.readingText.appKitColor", 1),
+    ("layout-authority", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "struct OverlayLayoutMetrics: Equatable", 1),
+    ("line-measure-cap", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "min(1_050, max(0, size.width - 2 * effectiveReadingSideInset))", 1),
+    ("cached-band-query", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "func cachedActiveBandLineFragments(viewportFraction: Double)", 1),
+    ("pure-band-selection", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "static func selectActiveBandLineFragments(", 1),
+    ("layout-before-band-query", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "viewportAdapter.ensureLayout()\n            resolvedBandFragments = viewportAdapter.cachedActiveBandLineFragments(", 1),
+    ("band-fallback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "2 * fallbackLineHeight + 12", 1),
+    ("band-horizontal-expansion", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "let bandMinX = max(0, metrics.effectiveReadingSideInset - 18)", 1),
+    ("band-gradient-layer", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "private let gradientLayer = CAGradientLayer()", 1),
+)
+
 M6_PREDECESSOR_PENDING_CLAIMS = (
     ("accessibility-status", "docs/validation/m5-accessibility-result.md", "Status: PENDING"),
     ("accessibility-m3", "docs/validation/m5-accessibility-result.md", "M3 native evidence: PENDING"),
@@ -1575,9 +1603,14 @@ M6_M5_HANDOFF_FILES = (
 )
 
 M6_PHASE_ZERO_ALLOWED_CHANGES = (
+    "PrivatePresenterApp/App/AppEffect.swift",
+    "PrivatePresenterApp/App/AppModel.swift",
+    "PrivatePresenterApp/App/DependencyContainer.swift",
     "PrivatePresenterApp/Overlay/OverlayRootView.swift",
     "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
     "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+    "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
     "Scripts/test_validate_project_structure_m6.py",
@@ -2779,12 +2812,16 @@ def validate_m6_source() -> list[str]:
 
     visual_tests_path = "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
     visual_tests = read(visual_tests_path) if (ROOT / visual_tests_path).is_file() else ""
-    for name in M6_M1_NAMED_TESTS:
-        if visual_tests.count(f"func {name}()") != 1:
-            violations.append(f"visual:m1-missing-test:{name}")
+    for milestone, names in (("m1", M6_M1_NAMED_TESTS), ("m2", M6_M2_NAMED_TESTS)):
+        for name in names:
+            if visual_tests.count(f"func {name}()") != 1:
+                violations.append(f"visual:{milestone}-missing-test:{name}")
     for label, path, marker in M6_M1_SOURCE_MARKERS:
         if not (ROOT / path).is_file() or read(path).count(marker) != 1:
             violations.append(f"visual:m1-missing-marker:{label}")
+    for label, path, marker, expected_count in M6_M2_SOURCE_MARKERS:
+        if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
+            violations.append(f"visual:m2-missing-marker:{label}")
 
     root_source = production_sources.get(
         "PrivatePresenterApp/Overlay/OverlayRootView.swift", ""
