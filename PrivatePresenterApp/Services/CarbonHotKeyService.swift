@@ -100,7 +100,7 @@ final class CarbonHotKeyRegistrar: HotKeyRegistering {
         // Reject any unexpected executor before entering the synchronous commit gate;
         // the controlled-Mac build/runtime gate must still validate this Carbon contract.
         guard Thread.isMainThread else { return Int32(eventNotHandledErr) }
-        MainActor.assumeIsolated {
+        return MainActor.assumeIsolated {
             callback?(identifier) ?? Int32(eventNotHandledErr)
         }
     }
@@ -185,7 +185,7 @@ struct HotKeyShutdownReport: Equatable, Sendable {
 
 @MainActor
 final class CarbonHotKeyService {
-    static let cleanupUnknownMessage =
+    nonisolated static let cleanupUnknownMessage =
         "Global shortcuts could not be cleaned up safely. Quit and reopen Private Presenter before retrying."
 
     private struct ActiveEntry: Equatable {
