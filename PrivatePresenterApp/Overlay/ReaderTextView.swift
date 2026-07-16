@@ -86,12 +86,7 @@ final class ReaderViewportContainerView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
         backgroundView.wantsLayer = true
-        backgroundView.layer?.backgroundColor = NSColor(
-            red: 0.05,
-            green: 0.06,
-            blue: 0.09,
-            alpha: 1
-        ).cgColor
+        backgroundView.layer?.backgroundColor = NSColor.clear.cgColor
         backgroundView.identifier = NSUserInterfaceItemIdentifier(
             "privatePresenter.readerBackground"
         )

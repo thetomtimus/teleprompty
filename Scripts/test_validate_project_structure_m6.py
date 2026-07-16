@@ -78,7 +78,7 @@ EXPECTED_M1_SOURCE_MARKERS = (
     (
         "named-swiftui-srgb",
         "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
-        "Color(.sRGB, red: red, green: green, blue: blue, opacity: opacity)",
+        "Color(\n                .sRGB,\n                red: Double(red),",
     ),
     (
         "named-appkit-srgb",

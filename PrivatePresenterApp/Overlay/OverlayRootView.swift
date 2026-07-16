@@ -3,7 +3,7 @@ import SwiftUI
 /// Opaque, nonactivating reader surface with its header outside the clipped document.
 @MainActor
 struct OverlayRootView: View {
-    static let cornerRadius: CGFloat = 18
+    static let cornerRadius = OverlayVisualTokens.cardRadius
     static let readerHeaderHeight: CGFloat = 36
     static let interiorIsFullyOpaque = true
     static let resizeZones = ClampedPanelInteractionController.ResizeEdge.allCases
@@ -52,7 +52,16 @@ struct OverlayRootView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.05, green: 0.06, blue: 0.09)
+            LinearGradient(
+                stops: OverlayVisualTokens.cardGradientStops.map {
+                    Gradient.Stop(
+                        color: $0.color.swiftUIColor,
+                        location: $0.location
+                    )
+                },
+                startPoint: .top,
+                endPoint: .bottom
+            )
                 .accessibilityIdentifier("privatePresenter.readerBackground")
                 .accessibilityHidden(true)
             VStack(spacing: 0) {
@@ -82,7 +91,16 @@ struct OverlayRootView: View {
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .clipShape(cardShape)
+        .overlay {
+            cardShape
+                .strokeBorder(
+                    OverlayVisualTokens.cardBorder.swiftUIColor,
+                    lineWidth: OverlayVisualTokens.cardBorderWidth
+                )
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
         .animation(chromeAnimation, value: isChromeVisible)
         .overlay(alignment: .top) {
             interactionZone(edge: nil).frame(height: Self.readerHeaderHeight)
@@ -115,6 +133,10 @@ struct OverlayRootView: View {
 
     private var isChromeVisible: Bool {
         model?.focusChromeState != .lockedFocusChromeHidden
+    }
+
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
     }
 
     private var chromeAnimation: Animation? {
