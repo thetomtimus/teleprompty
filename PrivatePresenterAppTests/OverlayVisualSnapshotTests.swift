@@ -429,6 +429,185 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertTrue(ordinary.readingMotionEnabled)
     }
 
+    func testResizeMatrixKeepsEveryPixelAndControlInsideRoundedSurface() {
+        for size in m6ResizeSizeMatrix() {
+            let metrics = OverlayLayoutMetrics(size: size)
+            let path = RoundedRectangle(
+                cornerRadius: 30, style: .continuous
+            ).path(in: metrics.cardBounds).cgPath
+
+            assertPixelSubset(metrics.toolbarFrame, inside: path)
+            for region in metrics.controlRegions {
+                assertPixelSubset(region.frame, inside: path)
+            }
+            XCTAssertTrue(metrics.cardBounds.contains(metrics.headerFrame))
+            for region in metrics.resizeRegions {
+                XCTAssertTrue(metrics.cardBounds.contains(region.frame), "\(size):\(region.edge)")
+            }
+        }
+
+        let compact = OverlayLayoutMetrics(size: CGSize(width: 320, height: 180))
+        XCTAssertEqual(compact.toolbarFrame, CGRect(x: 2, y: 30, width: 316, height: 52))
+        XCTAssertEqual(compact.quickControlRegions.first?.frame, CGRect(x: 6, y: 34, width: 44, height: 44))
+        XCTAssertEqual(compact.quickControlRegions.last?.frame, CGRect(x: 270, y: 34, width: 44, height: 44))
+    }
+
+    func testToolbarNeverOverlapsBandOrFinalLine() {
+        for size in m6ResizeSizeMatrix() {
+            let metrics = OverlayLayoutMetrics(size: size)
+            XCTAssertFalse(metrics.toolbarFrame.intersects(metrics.readingFrame), "\(size)")
+            XCTAssertEqual(
+                metrics.readingFrame.height,
+                max(0, size.height - metrics.readingTopReserve - metrics.readingBottomReserve)
+            )
+            let finalLine = CGRect(
+                x: metrics.readingFrame.minX,
+                y: metrics.readingFrame.minY,
+                width: metrics.readingFrame.width,
+                height: min(1, metrics.readingFrame.height)
+            )
+            XCTAssertFalse(metrics.toolbarFrame.intersects(finalLine), "\(size)")
+            XCTAssertLessThanOrEqual(metrics.maximumActiveBandHeight, metrics.readingFrame.height)
+
+            let visible = OverlayRootView.chromePresentation(
+                focusState: .lockedFocusChromeVisible,
+                isLocked: true,
+                transitionDuration: 0.18,
+                readerGeometryIdentity: metrics.readingFrame.height
+            )
+            let hidden = OverlayRootView.chromePresentation(
+                focusState: .lockedFocusChromeHidden,
+                isLocked: true,
+                transitionDuration: 0.18,
+                readerGeometryIdentity: metrics.readingFrame.height
+            )
+            XCTAssertEqual(visible.readerGeometryIdentity, hidden.readerGeometryIdentity)
+        }
+    }
+
+    func testHundredResizesPreserveAnchorAndAvoidTextReplacement() throws {
+        let text = (1...240).map { "Stable resize line \($0)" }.joined(separator: "\n")
+        let system = ReaderTextSystem(text: text, revision: 0)
+        var viewport: ReaderViewportAdapter?
+        var pendingAnchor: ReadingAnchor?
+        var willChangeCount = 0
+        var changedCount = 0
+        let container = ReaderTextView.makeReaderView(
+            system: system,
+            onBoundsWillChange: {
+                willChangeCount += 1
+                pendingAnchor = viewport?.captureAnchor(viewportFraction: 0.5)
+            },
+            onBoundsChanged: {
+                changedCount += 1
+                if let pendingAnchor {
+                    _ = viewport?.restore(anchor: pendingAnchor)
+                }
+            }
+        )
+        viewport = container.viewportAdapter
+        container.frame = NSRect(x: 0, y: 0, width: 700, height: 350)
+        container.layoutSubtreeIfNeeded()
+
+        let adapter = try XCTUnwrap(viewport)
+        let baselineAnchor = adapter.captureAnchor(viewportFraction: 0.5)
+        let storage = system.textStorage
+        let replacements = system.fullReplacementCount
+        let mutations = system.textMutationCount
+        let sizes = m6ResizeSizeMatrix()
+        for index in 0..<100 {
+            let size = sizes[index % sizes.count]
+            container.frame = NSRect(origin: .zero, size: size)
+            container.layoutSubtreeIfNeeded()
+        }
+
+        let finalAnchor = adapter.captureAnchor(viewportFraction: 0.5)
+        XCTAssertTrue(system.textStorage === storage)
+        XCTAssertEqual(system.textStorage.string, text)
+        XCTAssertEqual(system.fullReplacementCount, replacements)
+        XCTAssertEqual(system.textMutationCount, mutations)
+        XCTAssertEqual(willChangeCount, 100)
+        XCTAssertEqual(changedCount, 100)
+        XCTAssertEqual(finalAnchor.utf16Offset, baselineAnchor.utf16Offset)
+        XCTAssertEqual(adapter.lastRestoredAnchor?.document, text)
+    }
+
+    func testEveryHeaderAndResizeFrameRemainsContainedExactlyOnce() {
+        for size in m6ResizeSizeMatrix() {
+            let metrics = OverlayLayoutMetrics(size: size)
+            let resolver = OverlayHitRegionResolver(metrics: metrics)
+            XCTAssertTrue(metrics.cardBounds.contains(metrics.headerFrame))
+            XCTAssertEqual(Set(metrics.headerControlRegions.map(\.identifier)).count, 3)
+            XCTAssertEqual(Set(metrics.resizeRegions.map(\.edge)).count, 8)
+
+            for region in metrics.headerControlRegions {
+                XCTAssertTrue(metrics.cardBounds.contains(region.frame))
+                XCTAssertEqual(
+                    resolver.resolve(point: CGPoint(x: region.frame.midX, y: region.frame.midY)),
+                    .control(region.identifier)
+                )
+            }
+            let titlePoint = CGPoint(
+                x: metrics.titleDragFrame.midX, y: metrics.titleDragFrame.midY
+            )
+            XCTAssertEqual(resolver.resolve(point: titlePoint), .titleDrag)
+        }
+    }
+
+    func testCompactTierDenseHitGridRoutesEveryControlBeforeResize() {
+        let metrics = OverlayLayoutMetrics(size: CGSize(width: 320, height: 180))
+        let resolver = OverlayHitRegionResolver(metrics: metrics)
+        XCTAssertEqual(metrics.quickControlRegions.count, 7)
+        for region in metrics.quickControlRegions {
+            for y in Int(region.frame.minY)..<Int(region.frame.maxY) {
+                for x in Int(region.frame.minX)..<Int(region.frame.maxX) {
+                    XCTAssertEqual(
+                        resolver.resolve(
+                            point: CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5)
+                        ),
+                        .control(region.identifier),
+                        "\(region.identifier) at \(x),\(y)"
+                    )
+                }
+            }
+        }
+    }
+
+    func testAllEightResizeOperationsRemainReachableOutsideControlsAtEveryTier() {
+        let compactExpected: [
+            (ClampedPanelInteractionController.ResizeEdge, CGPoint)
+        ] = [
+            (.bottomLeft, CGPoint(x: 9, y: 9)),
+            (.bottom, CGPoint(x: 110, y: 5)),
+            (.bottomRight, CGPoint(x: 311, y: 9)),
+            (.left, CGPoint(x: 5, y: 105)),
+            (.right, CGPoint(x: 315, y: 105)),
+            (.topLeft, CGPoint(x: 9, y: 171)),
+            (.top, CGPoint(x: 110, y: 175)),
+            (.topRight, CGPoint(x: 311, y: 171)),
+        ]
+        let compactProbes = OverlayHitRegionResolver.frozenResizeProbes(
+            size: CGSize(width: 320, height: 180)
+        )
+        XCTAssertEqual(compactProbes.map(\.edge), compactExpected.map { $0.0 })
+        XCTAssertEqual(compactProbes.map(\.point), compactExpected.map { $0.1 })
+
+        for size in m6ResizeSizeMatrix() {
+            let resolver = OverlayHitRegionResolver(
+                metrics: OverlayLayoutMetrics(size: size)
+            )
+            let probes = OverlayHitRegionResolver.frozenResizeProbes(size: size)
+            XCTAssertEqual(Set(probes.map(\.edge)).count, 8)
+            for probe in probes {
+                XCTAssertEqual(
+                    resolver.resolve(point: probe.point),
+                    .resize(probe.edge),
+                    "\(size):\(probe.edge)"
+                )
+            }
+        }
+    }
+
     private func assertColor(
         _ color: NSColor,
         red: CGFloat,
@@ -443,6 +622,44 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertEqual(converted.greenComponent, green / 255, accuracy: 0.000_001, file: file, line: line)
         XCTAssertEqual(converted.blueComponent, blue / 255, accuracy: 0.000_001, file: file, line: line)
         XCTAssertEqual(converted.alphaComponent, alpha, accuracy: 0.000_001, file: file, line: line)
+    }
+
+    private func assertPixelSubset(
+        _ rect: CGRect,
+        inside path: CGPath,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for y in Int(floor(rect.minY))..<Int(ceil(rect.maxY)) {
+            for x in Int(floor(rect.minX))..<Int(ceil(rect.maxX)) {
+                let point = CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5)
+                guard point.x >= rect.minX, point.x < rect.maxX,
+                    point.y >= rect.minY, point.y < rect.maxY
+                else { continue }
+                XCTAssertTrue(path.contains(point), "\(rect) excludes \(point)", file: file, line: line)
+            }
+        }
+    }
+
+    private func m6ResizeSizeMatrix() -> [CGSize] {
+        let fixed = [
+            CGSize(width: 320, height: 180),
+            CGSize(width: 700, height: 350),
+            CGSize(width: 1_036, height: 460),
+            CGSize(width: 1_440, height: 460),
+        ]
+        let policy = PanelFramePolicy()
+        let controlledDisplays = [
+            DisplayRect(x: 0, y: 0, width: 1_920, height: 1_080),
+            DisplayRect(x: -2_560, y: 0, width: 2_560, height: 1_440),
+        ]
+        let defaults = controlledDisplays.map { display -> CGSize in
+            let frame = policy.defaultFrame(in: display)
+            XCTAssertEqual(frame.width, display.width * 0.70)
+            XCTAssertEqual(frame.height, display.height * 0.35)
+            return CGSize(width: CGFloat(frame.width), height: CGFloat(frame.height))
+        }
+        return fixed + defaults
     }
 
     private func composite(

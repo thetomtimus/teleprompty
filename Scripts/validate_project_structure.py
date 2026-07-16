@@ -1507,6 +1507,37 @@ M6_M3_SOURCE_MARKERS = (
     ("central-pill-id", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", '"privatePresenter.quickFocus"', 1),
 )
 
+M6_M4_NAMED_TESTS = (
+    "testResizeMatrixKeepsEveryPixelAndControlInsideRoundedSurface",
+    "testToolbarNeverOverlapsBandOrFinalLine",
+    "testHundredResizesPreserveAnchorAndAvoidTextReplacement",
+    "testEveryHeaderAndResizeFrameRemainsContainedExactlyOnce",
+    "testCompactTierDenseHitGridRoutesEveryControlBeforeResize",
+    "testAllEightResizeOperationsRemainReachableOutsideControlsAtEveryTier",
+)
+M6_M4_SOURCE_MARKERS = (
+    ("card-bounds", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var cardBounds: CGRect {", 1),
+    ("header-frame", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var headerFrame: CGRect {", 1),
+    ("reading-frame", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var readingFrame: CGRect {", 1),
+    ("toolbar-frame", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var toolbarFrame: CGRect {", 1),
+    ("quick-regions", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var quickControlRegions: [ControlRegion] {", 1),
+    ("header-regions", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var headerControlRegions: [ControlRegion] {", 1),
+    ("resize-regions", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var resizeRegions: [ResizeRegion] {", 1),
+    ("hit-resolver", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "struct OverlayHitRegionResolver {", 1),
+    ("half-open-x", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "point.x >= rect.minX && point.x < rect.maxX", 1),
+    ("half-open-y", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "point.y >= rect.minY && point.y < rect.maxY", 1),
+    ("frozen-resize-probes", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "static func frozenResizeProbes(size: CGSize) -> [ResizeProbe] {", 1),
+    ("resize-layer", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "OverlayResizeInteractionLayer(", 1),
+    ("title-below-resize", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", ".zIndex(0)", 1),
+    ("resize-below-controls", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", ".zIndex(1)", 1),
+    ("controls-above-resize", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", ".zIndex(2)", 1),
+    ("responsive-reader-frame", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "let readingFrame = metrics.readerViewportFrame", 1),
+    ("root-layout-size", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "layoutSize: hostedView?.bounds.size", 2),
+    ("layout-size-authority", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "layoutSize: NSSize? = nil", 1),
+    ("will-change-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsWillChange()", 1),
+    ("changed-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsChanged()", 1),
+)
+
 M6_M1_REQUIRED_PATHS = (
     "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
@@ -2864,6 +2895,7 @@ def validate_m6_source() -> list[str]:
         ("m1", M6_M1_NAMED_TESTS),
         ("m2", M6_M2_NAMED_TESTS),
         ("m3", M6_M3_NAMED_TESTS),
+        ("m4", M6_M4_NAMED_TESTS),
     ):
         for name in names:
             if visual_tests.count(f"func {name}()") != 1:
@@ -2877,6 +2909,24 @@ def validate_m6_source() -> list[str]:
     for label, path, marker, expected_count in M6_M3_SOURCE_MARKERS:
         if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
             violations.append(f"visual:m3-missing-marker:{label}")
+    for label, path, marker, expected_count in M6_M4_SOURCE_MARKERS:
+        if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
+            violations.append(f"visual:m4-missing-marker:{label}")
+
+    resolver_source = read("PrivatePresenterApp/Overlay/OverlayRootView.swift")
+    precedence_markers = (
+        "for region in metrics.controlRegions",
+        "for region in metrics.cornerResizeRegions",
+        "for region in metrics.edgeResizeRegions",
+        "if Self.contains(point, in: metrics.titleDragFrame)",
+    )
+    precedence_positions = [resolver_source.find(marker) for marker in precedence_markers]
+    if any(position < 0 for position in precedence_positions) or precedence_positions != sorted(
+        precedence_positions
+    ):
+        violations.append("visual:m4-hit-precedence")
+    if ".aspectRatio(" in resolver_source or ".fixedSize(" in resolver_source:
+        violations.append("visual:m4-aspect-lock")
 
     root_source = production_sources.get(
         "PrivatePresenterApp/Overlay/OverlayRootView.swift", ""

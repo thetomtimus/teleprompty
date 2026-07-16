@@ -100,6 +100,37 @@ EXPECTED_M3_SOURCE_MARKERS = (
     ("central-pill-id", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", '"privatePresenter.quickFocus"', 1),
 )
 
+EXPECTED_M4_NAMED_TESTS = (
+    "testResizeMatrixKeepsEveryPixelAndControlInsideRoundedSurface",
+    "testToolbarNeverOverlapsBandOrFinalLine",
+    "testHundredResizesPreserveAnchorAndAvoidTextReplacement",
+    "testEveryHeaderAndResizeFrameRemainsContainedExactlyOnce",
+    "testCompactTierDenseHitGridRoutesEveryControlBeforeResize",
+    "testAllEightResizeOperationsRemainReachableOutsideControlsAtEveryTier",
+)
+EXPECTED_M4_SOURCE_MARKERS = (
+    ("card-bounds", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var cardBounds: CGRect {", 1),
+    ("header-frame", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var headerFrame: CGRect {", 1),
+    ("reading-frame", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var readingFrame: CGRect {", 1),
+    ("toolbar-frame", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var toolbarFrame: CGRect {", 1),
+    ("quick-regions", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var quickControlRegions: [ControlRegion] {", 1),
+    ("header-regions", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var headerControlRegions: [ControlRegion] {", 1),
+    ("resize-regions", "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift", "var resizeRegions: [ResizeRegion] {", 1),
+    ("hit-resolver", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "struct OverlayHitRegionResolver {", 1),
+    ("half-open-x", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "point.x >= rect.minX && point.x < rect.maxX", 1),
+    ("half-open-y", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "point.y >= rect.minY && point.y < rect.maxY", 1),
+    ("frozen-resize-probes", "PrivatePresenterApp/Overlay/OverlayRootView.swift", "static func frozenResizeProbes(size: CGSize) -> [ResizeProbe] {", 1),
+    ("resize-layer", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", "OverlayResizeInteractionLayer(", 1),
+    ("title-below-resize", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", ".zIndex(0)", 1),
+    ("resize-below-controls", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", ".zIndex(1)", 1),
+    ("controls-above-resize", "PrivatePresenterApp/Overlay/OverlayChromeView.swift", ".zIndex(2)", 1),
+    ("responsive-reader-frame", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "let readingFrame = metrics.readerViewportFrame", 1),
+    ("root-layout-size", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "layoutSize: hostedView?.bounds.size", 2),
+    ("layout-size-authority", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "layoutSize: NSSize? = nil", 1),
+    ("will-change-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsWillChange()", 1),
+    ("changed-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsChanged()", 1),
+)
+
 EXPECTED_M1_REQUIRED_PATHS = (
     "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
@@ -363,6 +394,8 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_M3_REQUIRED_PATHS": EXPECTED_M3_REQUIRED_PATHS,
             "M6_M3_NAMED_TESTS": EXPECTED_M3_NAMED_TESTS,
             "M6_M3_SOURCE_MARKERS": EXPECTED_M3_SOURCE_MARKERS,
+            "M6_M4_NAMED_TESTS": EXPECTED_M4_NAMED_TESTS,
+            "M6_M4_SOURCE_MARKERS": EXPECTED_M4_SOURCE_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -587,6 +620,41 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertNotIn("if isChromeVisible", root)
         self.assertNotIn("NSApp.activate", chrome)
         self.assertNotIn("makeKeyAndOrderFront", chrome)
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
+    def testM4ResponsiveContainmentHitRoutingAndAnchorContract(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_M4_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        for label, path, marker, expected_count in EXPECTED_M4_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                source = VALIDATOR.read(path)
+                self.assertEqual(source.count(marker), expected_count, f"{path}:{label}")
+                original_read = VALIDATOR.read
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == path:
+                        return source.replace(marker, f"removed-{label}")
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(f"visual:m4-missing-marker:{label}", violations)
+
+        resolver = VALIDATOR.read("PrivatePresenterApp/Overlay/OverlayRootView.swift")
+        control = resolver.index("for region in metrics.controlRegions")
+        corner = resolver.index("for region in metrics.cornerResizeRegions")
+        edge = resolver.index("for region in metrics.edgeResizeRegions")
+        title = resolver.index("if Self.contains(point, in: metrics.titleDragFrame)")
+        self.assertLess(control, corner)
+        self.assertLess(corner, edge)
+        self.assertLess(edge, title)
+        self.assertNotIn(".aspectRatio(", resolver)
+        self.assertNotIn(".fixedSize(", resolver)
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
 
