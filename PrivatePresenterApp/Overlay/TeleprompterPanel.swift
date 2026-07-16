@@ -92,6 +92,7 @@ class TeleprompterPanel: NSPanel {
         animationBehavior = .none
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
+        identifier = NSUserInterfaceItemIdentifier("privatePresenter.overlay")
     }
 
     override var canBecomeKey: Bool { !isOverlayLocked && NSApp.isActive }

@@ -73,6 +73,7 @@ final class ControllerWindowController: NSWindowController {
             defer: false
         )
         window.title = "Private Presenter"
+        window.identifier = NSUserInterfaceItemIdentifier("privatePresenter.controller")
         window.contentViewController = NSHostingController(rootView: ControllerView(model: model))
         window.setFrame(initialFrame, display: false)
         super.init(window: window)
@@ -120,6 +121,21 @@ final class ControllerWindowController: NSWindowController {
         operationRecorder(.presentationEntry)
         #endif
         placeControllerWhileShielded(on: candidate)
+        presentationCount += 1
+        #if DEBUG
+        operationRecorder(.showWindow)
+        #endif
+        showWindow(nil)
+        #if DEBUG
+        operationRecorder(.presentationExit)
+        #endif
+    }
+
+    func showExistingController() {
+        guard window != nil else { return }
+        #if DEBUG
+        operationRecorder(.presentationEntry)
+        #endif
         presentationCount += 1
         #if DEBUG
         operationRecorder(.showWindow)

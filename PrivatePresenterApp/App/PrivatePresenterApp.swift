@@ -5,19 +5,28 @@ import AppKit
 enum PrivatePresenterApplication {
     static func main() {
         let application = NSApplication.shared
+        let runtime: AppRuntime
         #if DEBUG
-        let resolution = DiagnosticProofConfiguration.resolve()
-        let evidenceRecorder = DiagnosticEvidenceRecorder.production(resolution: resolution)
-        let runtime = AppRuntime(
-            proofLevel: resolution.configuration.proofLevel,
-            diagnosticConfiguration: resolution.configuration,
-            diagnosticEvidenceRecorder: evidenceRecorder,
-            enforcesDiagnosticControllerCohort: !resolution.faults.contains(
-                .configControllerCohortInvalid
+        if ProcessInfo.processInfo.environment["PRIVATE_PRESENTER_EVIDENCE_COMMIT"] != nil {
+            let resolution = DiagnosticProofConfiguration.resolve()
+            let evidenceRecorder = DiagnosticEvidenceRecorder.production(resolution: resolution)
+            runtime = AppRuntime(
+                proofLevel: resolution.configuration.proofLevel,
+                diagnosticConfiguration: resolution.configuration,
+                diagnosticEvidenceRecorder: evidenceRecorder,
+                enforcesDiagnosticControllerCohort: !resolution.faults.contains(
+                    .configControllerCohortInvalid
+                ),
+                hotKeyStartupMode: .legacyDiagnostic
             )
-        )
+        } else {
+            runtime = AppRuntime(
+                proofLevel: .statusBar,
+                hotKeyStartupMode: .product
+            )
+        }
         #else
-        let runtime = AppRuntime(proofLevel: .statusBar)
+        runtime = AppRuntime(proofLevel: .statusBar)
         #endif
         let delegate = AppDelegate(runtime: runtime)
         application.setActivationPolicy(.regular)

@@ -50,6 +50,8 @@ enum AppEffect: Equatable {
     case retryHotKeys
     case updateFocusMode(FocusModeConfiguration)
     case teardownFocusMode
+    case showExistingController
+    case requestTermination
 
     case stagePanelHidden(RuntimeDisplay, proposedFrame: CGRect?)
     case showPanel(RuntimeDisplay, proposedFrame: CGRect?)
@@ -71,4 +73,5 @@ enum AppLocalError: String, Equatable, Sendable {
     case invalidShortcutConfiguration
     case globalShortcutConflict
     case globalShortcutCleanupUnknown
+    case terminationFlushFailed
 }

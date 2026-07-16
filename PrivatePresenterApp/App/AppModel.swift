@@ -43,6 +43,7 @@ final class AppModel {
     private(set) var restorationCompleted: Bool
     private(set) var isPersistenceLoadSafe: Bool
     private(set) var isTerminationQuiescing = false
+    private(set) var isTerminationAttempting = false
     let proofConfigurationSnapshot: OverlayConfigurationSnapshot
 
     #if DEBUG
@@ -288,7 +289,7 @@ final class AppModel {
         case .togglePlayback:
             if overlaySession.playbackPhase == .playing {
                 pausePlayback()
-            } else {
+            } else if canStartFromGlobalCommand {
                 startPlayback()
             }
         case .restart:
@@ -315,6 +316,28 @@ final class AppModel {
             effectHandler(.updateFocusMode(focusModeConfiguration))
         case .focusChromeStateChanged(let state):
             focusChromeState = state
+        case .toggleVisibility:
+            performShortcut(.toggleVisibility)
+        case .toggleLock:
+            performShortcut(.toggleLock)
+        case .showController:
+            effectHandler(.showExistingController)
+        case .requestQuit:
+            effectHandler(.requestTermination)
+        case .beginTerminationAttempt:
+            isTerminationAttempting = true
+            localError = nil
+        case .prepareForTermination:
+            prepareForTermination()
+        case .stagePausedTerminationSnapshot:
+            guard isTerminationAttempting else { break }
+            effectHandler(.scheduleSnapshot(snapshot()))
+        case .cancelTerminationAttempt:
+            isTerminationAttempting = false
+            localError = .terminationFlushFailed
+        case .enterTerminationQuiescence:
+            isTerminationAttempting = false
+            isTerminationQuiescing = true
         case .showOverlay:
             showOverlayCommand()
         case .hideOverlay:
@@ -354,10 +377,6 @@ final class AppModel {
         diagnosticCorrelationID = previousCorrelationID
     }
     #endif
-
-    func beginTerminationQuiescence() {
-        isTerminationQuiescing = true
-    }
 
     // MARK: - Milestone 0 mechanical compatibility
 
@@ -823,6 +842,19 @@ final class AppModel {
         snapshotRevision += 1
         emit([
             .scheduleSnapshot(snapshot()),
+            .updateFocusMode(focusModeConfiguration),
+        ])
+    }
+
+    private func prepareForTermination() {
+        guard isTerminationAttempting else { return }
+        pendingShowGeneration += 1
+        isShielded = true
+        overlaySession.visibility = .hidden
+        pointerPresent = false
+        emit([
+            retireScrollSessionEffect(reason: .teardown),
+            .hidePanel,
             .updateFocusMode(focusModeConfiguration),
         ])
     }
@@ -1382,7 +1414,7 @@ final class AppModel {
     }
 
     private func acceptsDuringTermination(_ command: AppCommand) -> Bool {
-        guard isTerminationQuiescing else { return true }
+        guard isTerminationAttempting || isTerminationQuiescing else { return true }
         switch command {
         case .completePreClearFlush, .pause, .hideOverlay, .flushPersistence,
             .topologyWillChange, .displayInventoryLoaded, .displayInventoryFailed,
@@ -1390,13 +1422,19 @@ final class AppModel {
             .scrollCheckpoint, .scrollTerminal, .scrollTerminalCapture,
             .scrollMutationCompleted, .teardownScrollSession:
             return true
+        case .prepareForTermination, .stagePausedTerminationSnapshot,
+            .cancelTerminationAttempt, .enterTerminationQuiescence,
+            .focusChromeStateChanged:
+            return true
         case .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
             .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,
             .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .setSpeed, .moveBackward, .moveForward,
             .performShortcut, .requestHotKeyReconfiguration,
             .hotKeyReconfigurationCompleted, .retryHotKeyRegistration,
-            .setFocusModeEnabled, .pointerPresenceChanged, .focusChromeStateChanged,
+            .setFocusModeEnabled, .pointerPresenceChanged,
+            .toggleVisibility, .toggleLock, .showController, .requestQuit,
+            .beginTerminationAttempt,
             .showOverlay, .setLocked, .restore, .restoreFailed, .selectDisplay,
             .confirmSelectedDisplay, .readerAttachmentChanged, .readerScreenChanged,
             .readerBoundsWillChange, .readerBoundsChanged:
@@ -1456,6 +1494,7 @@ final class AppModel {
             .flushSnapshot, .saveSnapshotImmediately, .flushPersistence,
             .reconfigureHotKeys, .retryHotKeys,
             .updateFocusMode, .teardownFocusMode,
+            .showExistingController, .requestTermination,
             .moveControllerWhileShielded, .resetViewport, .reassessPrivacy,
             .queryTopology, .evaluatePrivacy:
             break
@@ -1511,6 +1550,7 @@ extension AppEffect {
         case .scheduleSnapshot, .flushSnapshot, .saveSnapshotImmediately,
             .flushPersistence, .reconfigureHotKeys, .retryHotKeys,
             .updateFocusMode, .teardownFocusMode,
+            .showExistingController, .requestTermination,
             .resetViewport, .reassessPrivacy,
             .queryTopology, .evaluatePrivacy:
             .other

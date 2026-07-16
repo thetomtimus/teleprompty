@@ -83,6 +83,7 @@ final class AppRuntime {
     let overlayController: OverlayPanelController
     let model: AppModel
     let controllerWindowController: ControllerWindowController
+    let statusItemController: StatusItemController
     let displayService: SystemDisplayService
     let hotKeyStartupMode: HotKeyStartupMode
     #if DEBUG
@@ -95,6 +96,31 @@ final class AppRuntime {
 
     private let startupSeams: AppRuntimeStartupSeams
     private var startupTask: Task<Void, Never>?
+    lazy var lifecycleCoordinator = AppLifecycleCoordinator(
+        model: model,
+        flushPausedSnapshot: { [weak self] in
+            guard let self else { return false }
+            self.startupSeams.record(.flushPersistence)
+            return await self.dependencies.effectAdapter.flushForTermination()
+        },
+        unregisterHotKeys: { [weak self] in
+            await self?.unregisterSelectedHotKeys()
+        },
+        stopFocusPointerDisplay: { [weak self] in
+            self?.dependencies.effectAdapter.handle(.teardownFocusMode)
+            self?.displayService.stopObserving()
+        },
+        teardownScrollSession: { [weak self] in
+            self?.model.send(.teardownScrollSession)
+        },
+        removeStatusItem: { [weak self] in
+            self?.statusItemController.remove()
+        },
+        closeController: { [weak self] in
+            self?.controllerWindowController.close()
+            self?.startupSeams.record(.stopServices)
+        }
+    )
     #if DEBUG
     private var activeDiagnosticCorrelations: [UUID] = []
     private var currentDiagnosticCorrelationID: UUID?
@@ -193,6 +219,7 @@ final class AppRuntime {
         overlayController = dependencies.overlayController
         self.model = model
         self.controllerWindowController = controllerWindowController
+        statusItemController = StatusItemController(model: model)
         displayService = dependencies.displayService
         #if DEBUG
         hotKeyStartupMode =
@@ -237,12 +264,10 @@ final class AppRuntime {
     func stopAndFlush() async -> Bool {
         startupTask?.cancel()
         startupTask = nil
-        model.send(.topologyWillChange)
-        model.send(.teardownScrollSession)
-        model.beginTerminationQuiescence()
-        startupSeams.record(.flushPersistence)
-        let didFlush = await dependencies.effectAdapter.flushForTermination()
-        guard didFlush else { return false }
+        return await lifecycleCoordinator.stopAndFlush()
+    }
+
+    private func unregisterSelectedHotKeys() async {
         switch hotKeyStartupMode {
         case .product:
             _ = dependencies.effectAdapter.carbonHotKeyService.shutdown()
@@ -262,10 +287,6 @@ final class AppRuntime {
             break
             #endif
         }
-        displayService.stopObserving()
-        controllerWindowController.close()
-        startupSeams.record(.stopServices)
-        return true
     }
 
     private func runStartup(afterRestore: @MainActor () -> Void = {}) async {
@@ -347,6 +368,7 @@ final class AppRuntime {
             break
             #endif
         }
+        statusItemController.setActionsReady(true)
     }
 
     private func receive(_ result: Result<RuntimeDisplayInventory, Error>) {

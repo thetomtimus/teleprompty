@@ -51,6 +51,15 @@ enum AppCommand {
     case setFocusModeEnabled(Bool)
     case pointerPresenceChanged(Bool)
     case focusChromeStateChanged(FocusChromeState)
+    case toggleVisibility
+    case toggleLock
+    case showController
+    case requestQuit
+    case beginTerminationAttempt
+    case prepareForTermination
+    case stagePausedTerminationSnapshot
+    case cancelTerminationAttempt
+    case enterTerminationQuiescence
 
     case showOverlay
     case hideOverlay

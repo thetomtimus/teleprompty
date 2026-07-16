@@ -437,6 +437,10 @@ final class AppEffectAdapter {
             focusModeController.apply(configuration)
         case .teardownFocusMode:
             focusModeController.teardown()
+        case .showExistingController:
+            controllerWindowController?.showExistingController()
+        case .requestTermination:
+            NSApp.terminate(nil)
         case .stagePanelHidden(let display, let proposedFrame):
             #if DEBUG
             recordPanelOperation(.stageHidden, correlationID: correlationID)
@@ -496,12 +500,7 @@ final class AppEffectAdapter {
     }
 
     func flushForTermination() async -> Bool {
-        // Reject new durable intent at the model boundary, but drain any completion
-        // causally owned by an already-enqueued operation (notably pre-clear flush).
-        // Each such completion synchronously extends `persistenceGeneration` before
-        // its predecessor task returns, so the loop cannot miss its immediate save.
         isTerminationDraining = true
-
         while true {
             let observedGeneration = persistenceGeneration
             let observedTask = persistenceTask
@@ -510,36 +509,28 @@ final class AppEffectAdapter {
             guard observedGeneration == persistenceGeneration else { continue }
             break
         }
-
-        // This is the terminal barrier. `enqueuePersistence` refuses every later
-        // operation once it is set, and this flush is appended after the stable tail.
-        terminalFlushStarted = true
-        let precedingTask = persistenceTask
-        let snapshotStore = snapshotStore
-        let terminationFlushOverride = terminationFlushOverride
         let expectedRevision = model?.snapshotRevision ?? 0
-        persistenceGeneration += 1
-        let terminalTask = Task { @MainActor [weak self] in
-            _ = await precedingTask?.value
-            let didFlush: Bool
-            if let terminationFlushOverride {
-                didFlush = await terminationFlushOverride()
-            } else {
-                do {
-                    try await snapshotStore.flush()
-                    let status = await snapshotStore.status()
-                    didFlush =
-                        status.persistedRevision == expectedRevision
-                        || (expectedRevision == 0 && status.persistedRevision == nil)
-                } catch {
-                    didFlush = false
-                }
+        let didFlush: Bool
+        if let terminationFlushOverride {
+            didFlush = await terminationFlushOverride()
+        } else {
+            do {
+                try await snapshotStore.flush()
+                let status = await snapshotStore.status()
+                didFlush =
+                    status.persistedRevision == expectedRevision
+                    || (expectedRevision == 0 && status.persistedRevision == nil)
+            } catch {
+                didFlush = false
             }
-            self?.terminalFlushSucceeded = didFlush
         }
-        persistenceTask = terminalTask
-        _ = await terminalTask.value
-        return terminalFlushSucceeded
+        terminalFlushSucceeded = didFlush
+        terminalFlushStarted = didFlush
+        if !didFlush {
+            isTerminationDraining = false
+            terminalFlushStarted = false
+        }
+        return didFlush
     }
 
     private func session() -> ScrollSessionController? {
