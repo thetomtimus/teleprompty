@@ -608,6 +608,83 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         }
     }
 
+    func testActualOverlayRenderMatchesIndependentSemanticBaseline() throws {
+        let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
+        let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle()
+        let comparison = M6VisualTestSupport.compare(rendered.image, with: oracle)
+
+        XCTAssertTrue(comparison.interiorAlphaIsExact, comparison.summary)
+        XCTAssertTrue(comparison.checkerboardsMatch, comparison.summary)
+        XCTAssertTrue(comparison.outsideCornersAreClear, comparison.summary)
+        XCTAssertTrue(comparison.gradientProbesPass, comparison.summary)
+        XCTAssertTrue(comparison.geometryPasses, comparison.summary)
+        XCTAssertTrue(comparison.regionErrorsPass, comparison.summary)
+        XCTAssertTrue(comparison.structuralErrorsPass, comparison.summary)
+        XCTAssertTrue(comparison.passed, comparison.summary)
+    }
+
+    func testSemanticComparatorRejectsEveryNamedCorruption() throws {
+        let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
+        let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle()
+        for corruption in M6VisualTestSupport.Corruption.allCases {
+            let corrupted = try M6VisualTestSupport.corrupt(
+                rendered.image, corruption: corruption
+            )
+            let comparison = M6VisualTestSupport.compare(corrupted, with: oracle)
+            XCTAssertFalse(comparison.passed, "\(corruption) escaped every metric")
+            XCTAssertTrue(
+                comparison.failedMetrics.contains(corruption.expectedFailureMetric),
+                "\(corruption): \(comparison.summary)"
+            )
+        }
+    }
+
+    func testIndependentContinuousMaskRejectsWrongRadiusAndStyle() throws {
+        let canonical = try M6VisualTestSupport.makeLiteralCardMask(
+            radius: 30, style: .continuous
+        )
+        let wrongRadius = try M6VisualTestSupport.makeLiteralCardMask(
+            radius: 29, style: .continuous
+        )
+        let wrongStyle = try M6VisualTestSupport.makeLiteralCardMask(
+            radius: 30, style: .circular
+        )
+
+        XCTAssertTrue(M6VisualTestSupport.cardMaskMatchesCanonical(canonical))
+        XCTAssertFalse(M6VisualTestSupport.cardMaskMatchesCanonical(wrongRadius))
+        XCTAssertFalse(M6VisualTestSupport.cardMaskMatchesCanonical(wrongStyle))
+    }
+
+    func testRenderMatrixPreservesContainmentOpacityAndFocusGeometry() throws {
+        for size in M6VisualTestSupport.renderSizes {
+            let scenes = try M6VisualTestSupport.RenderState.allCases.map {
+                try M6VisualTestSupport.render(size: size, state: $0)
+            }
+            for scene in scenes {
+                XCTAssertTrue(scene.interiorIsOpaque, "\(size):\(scene.state)")
+                XCTAssertTrue(scene.structuresAreContained, "\(size):\(scene.state)")
+                XCTAssertEqual(scene.readerGeometry, scenes[0].readerGeometry)
+            }
+            XCTAssertEqual(scenes[1].readerFingerprint, scenes[2].readerFingerprint)
+            XCTAssertFalse(scenes[1].chromeIsAccessibilityNavigable)
+            XCTAssertFalse(scenes[2].chromeIsAccessibilityNavigable)
+        }
+    }
+
+    func testNativeRenderAttributesAndFramesRemainExplicit() throws {
+        let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
+        XCTAssertEqual(rendered.size, CGSize(width: 1_036, height: 460))
+        XCTAssertEqual(rendered.scale, 2)
+        XCTAssertEqual(rendered.localeIdentifier, "en_US_POSIX")
+        XCTAssertEqual(rendered.layoutDirection, .leftToRight)
+        XCTAssertEqual(rendered.appearanceName, .darkAqua)
+        XCTAssertEqual(rendered.font.pointSize, 42)
+        XCTAssertEqual(rendered.paragraphStyle.lineHeightMultiple, 1.42, accuracy: 0.000_001)
+        XCTAssertEqual(rendered.textColor.colorSpace, .sRGB)
+        XCTAssertEqual(rendered.readerFrame, CGRect(x: 52, y: 124, width: 932, height: 222))
+        XCTAssertEqual(rendered.toolbarFrame, CGRect(x: 324.5, y: 24, width: 387, height: 65))
+    }
+
     private func assertColor(
         _ color: NSColor,
         red: CGFloat,

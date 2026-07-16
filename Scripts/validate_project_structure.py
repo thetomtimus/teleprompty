@@ -1460,7 +1460,6 @@ M6_PROTECTED_PATHS = (
 )
 
 M6_PHASE_ZERO_FUTURE_PATHS = (
-    "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
     ".omx/handoff/private-presenter-m6/m6-artifacts.sha256",
@@ -1536,6 +1535,51 @@ M6_M4_SOURCE_MARKERS = (
     ("layout-size-authority", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "layoutSize: NSSize? = nil", 1),
     ("will-change-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsWillChange()", 1),
     ("changed-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsChanged()", 1),
+)
+
+M6_M5_VISUAL_REQUIRED_PATHS = (
+    "PrivatePresenterAppTests/M6VisualTestSupport.swift",
+)
+M6_M5_VISUAL_NAMED_TESTS = (
+    "testActualOverlayRenderMatchesIndependentSemanticBaseline",
+    "testSemanticComparatorRejectsEveryNamedCorruption",
+    "testIndependentContinuousMaskRejectsWrongRadiusAndStyle",
+    "testRenderMatrixPreservesContainmentOpacityAndFocusGeometry",
+    "testNativeRenderAttributesAndFramesRemainExplicit",
+)
+M6_M5_VISUAL_SOURCE_MARKERS = (
+    ("canonical-size", "static let canonicalSize = CGSize(width: 1_036, height: 460)", 1),
+    ("two-x-scale", "static let backingScale: CGFloat = 2", 1),
+    ("fixed-locale", 'Locale(identifier: "en_US_POSIX")', 1),
+    ("left-to-right", ".environment(\\.layoutDirection, .leftToRight)", 1),
+    ("dark-aqua", "NSAppearance(named: .darkAqua)", 1),
+    ("animations-disabled", "NSAnimationContext.runAnimationGroup", 1),
+    ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 2),
+    (
+        "literal-continuous-mask",
+        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: bounds).cgPath",
+        1,
+    ),
+    ("literal-oracle", "static func makeCanonicalSemanticOracle() throws -> SemanticOracle", 1),
+    ("glyph-mask", "static func literalGlyphAndIconExclusionMask()", 1),
+    ("two-pixel-edge-mask", "static func literalTwoDevicePixelEdgeMask()", 1),
+    ("alpha-threshold", "interiorAlphaFraction == 1", 1),
+    ("gradient-threshold", "gradientMaximumChannelError <= 2", 1),
+    ("geometry-threshold", "minimumRegionIntersectionOverUnion >= 0.98", 1),
+    ("region-threshold", "bandAndPillMeanAbsoluteError <= 4.0 / 255", 1),
+    ("mean-threshold", "structuralMeanAbsoluteError <= 3.0 / 255", 1),
+    ("p99-threshold", "structuralP99AbsoluteError <= 8.0 / 255", 1),
+    ("outlier-threshold", "structuralOutlierFraction <= 0.01", 1),
+    ("top-corruption", "case topGradientProbe", 1),
+    ("middle-corruption", "case middleGradientProbe", 1),
+    ("bottom-corruption", "case bottomGradientProbe", 1),
+    ("alpha-corruption", "case interiorAlphaPatch", 1),
+    ("corner-corruption", "case exteriorCorner", 1),
+    ("divider-corruption", "case translatedDivider", 1),
+    ("band-corruption", "case translatedBand", 1),
+    ("pill-corruption", "case translatedPill", 1),
+    ("primary-corruption", "case translatedPrimaryControl", 1),
+    ("four-device-pixel-translation", "let devicePixelTranslation = 4", 1),
 )
 
 M6_M1_REQUIRED_PATHS = (
@@ -1688,6 +1732,7 @@ M6_PHASE_ZERO_ALLOWED_CHANGES = (
     "PrivatePresenterApp/Overlay/ReaderTextView.swift",
     "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
+    "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
@@ -2840,6 +2885,7 @@ def validate_m6_source() -> list[str]:
             "Scripts/test_validate_project_structure_m6.py",
             *M6_M1_REQUIRED_PATHS,
             *M6_M3_REQUIRED_PATHS,
+            *M6_M5_VISUAL_REQUIRED_PATHS,
         ),
         absent_paths=M6_PHASE_ZERO_FUTURE_PATHS,
     )
@@ -2896,6 +2942,7 @@ def validate_m6_source() -> list[str]:
         ("m2", M6_M2_NAMED_TESTS),
         ("m3", M6_M3_NAMED_TESTS),
         ("m4", M6_M4_NAMED_TESTS),
+        ("m5", M6_M5_VISUAL_NAMED_TESTS),
     ):
         for name in names:
             if visual_tests.count(f"func {name}()") != 1:
@@ -2912,6 +2959,23 @@ def validate_m6_source() -> list[str]:
     for label, path, marker, expected_count in M6_M4_SOURCE_MARKERS:
         if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
             violations.append(f"visual:m4-missing-marker:{label}")
+    m5_support_path = M6_M5_VISUAL_REQUIRED_PATHS[0]
+    m5_support = read(m5_support_path) if (ROOT / m5_support_path).is_file() else ""
+    for label, marker, expected_count in M6_M5_VISUAL_SOURCE_MARKERS:
+        if m5_support.count(marker) != expected_count:
+            violations.append(f"visual:m5-missing-marker:{label}")
+    for marker in (
+        "OverlayVisualTokens",
+        "OverlayLayoutMetrics",
+        "WKWebView",
+        "HTML",
+        "CGWindowListCreateImage",
+        "SCScreenshotManager",
+        "recordBaseline",
+        "golden",
+    ):
+        if marker in m5_support:
+            violations.append(f"visual:m5-forbidden:{marker}")
 
     resolver_source = read("PrivatePresenterApp/Overlay/OverlayRootView.swift")
     precedence_markers = (

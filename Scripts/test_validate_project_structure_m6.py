@@ -55,7 +55,6 @@ EXPECTED_PROTECTED_PATHS = (
 )
 
 EXPECTED_FUTURE_M6_PATHS = (
-    "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
     ".omx/handoff/private-presenter-m6/m6-artifacts.sha256",
@@ -129,6 +128,51 @@ EXPECTED_M4_SOURCE_MARKERS = (
     ("layout-size-authority", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "layoutSize: NSSize? = nil", 1),
     ("will-change-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsWillChange()", 1),
     ("changed-callback", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "onBoundsChanged()", 1),
+)
+
+EXPECTED_M5_VISUAL_REQUIRED_PATHS = (
+    "PrivatePresenterAppTests/M6VisualTestSupport.swift",
+)
+EXPECTED_M5_VISUAL_NAMED_TESTS = (
+    "testActualOverlayRenderMatchesIndependentSemanticBaseline",
+    "testSemanticComparatorRejectsEveryNamedCorruption",
+    "testIndependentContinuousMaskRejectsWrongRadiusAndStyle",
+    "testRenderMatrixPreservesContainmentOpacityAndFocusGeometry",
+    "testNativeRenderAttributesAndFramesRemainExplicit",
+)
+EXPECTED_M5_VISUAL_SOURCE_MARKERS = (
+    ("canonical-size", "static let canonicalSize = CGSize(width: 1_036, height: 460)", 1),
+    ("two-x-scale", "static let backingScale: CGFloat = 2", 1),
+    ("fixed-locale", 'Locale(identifier: "en_US_POSIX")', 1),
+    ("left-to-right", ".environment(\\.layoutDirection, .leftToRight)", 1),
+    ("dark-aqua", "NSAppearance(named: .darkAqua)", 1),
+    ("animations-disabled", "NSAnimationContext.runAnimationGroup", 1),
+    ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 2),
+    (
+        "literal-continuous-mask",
+        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: bounds).cgPath",
+        1,
+    ),
+    ("literal-oracle", "static func makeCanonicalSemanticOracle() throws -> SemanticOracle", 1),
+    ("glyph-mask", "static func literalGlyphAndIconExclusionMask()", 1),
+    ("two-pixel-edge-mask", "static func literalTwoDevicePixelEdgeMask()", 1),
+    ("alpha-threshold", "interiorAlphaFraction == 1", 1),
+    ("gradient-threshold", "gradientMaximumChannelError <= 2", 1),
+    ("geometry-threshold", "minimumRegionIntersectionOverUnion >= 0.98", 1),
+    ("region-threshold", "bandAndPillMeanAbsoluteError <= 4.0 / 255", 1),
+    ("mean-threshold", "structuralMeanAbsoluteError <= 3.0 / 255", 1),
+    ("p99-threshold", "structuralP99AbsoluteError <= 8.0 / 255", 1),
+    ("outlier-threshold", "structuralOutlierFraction <= 0.01", 1),
+    ("top-corruption", "case topGradientProbe", 1),
+    ("middle-corruption", "case middleGradientProbe", 1),
+    ("bottom-corruption", "case bottomGradientProbe", 1),
+    ("alpha-corruption", "case interiorAlphaPatch", 1),
+    ("corner-corruption", "case exteriorCorner", 1),
+    ("divider-corruption", "case translatedDivider", 1),
+    ("band-corruption", "case translatedBand", 1),
+    ("pill-corruption", "case translatedPill", 1),
+    ("primary-corruption", "case translatedPrimaryControl", 1),
+    ("four-device-pixel-translation", "let devicePixelTranslation = 4", 1),
 )
 
 EXPECTED_M1_REQUIRED_PATHS = (
@@ -396,6 +440,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_M3_SOURCE_MARKERS": EXPECTED_M3_SOURCE_MARKERS,
             "M6_M4_NAMED_TESTS": EXPECTED_M4_NAMED_TESTS,
             "M6_M4_SOURCE_MARKERS": EXPECTED_M4_SOURCE_MARKERS,
+            "M6_M5_VISUAL_REQUIRED_PATHS": EXPECTED_M5_VISUAL_REQUIRED_PATHS,
+            "M6_M5_VISUAL_NAMED_TESTS": EXPECTED_M5_VISUAL_NAMED_TESTS,
+            "M6_M5_VISUAL_SOURCE_MARKERS": EXPECTED_M5_VISUAL_SOURCE_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -655,6 +702,46 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertLess(edge, title)
         self.assertNotIn(".aspectRatio(", resolver)
         self.assertNotIn(".fixedSize(", resolver)
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
+    def testM5SemanticNativeBaselineAndMutationContract(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_M5_VISUAL_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        for path in EXPECTED_M5_VISUAL_REQUIRED_PATHS:
+            with self.subTest(required_path=path):
+                self.assertTrue((ROOT / path).is_file(), path)
+
+        support_path = EXPECTED_M5_VISUAL_REQUIRED_PATHS[0]
+        if not (ROOT / support_path).is_file():
+            return
+        support = VALIDATOR.read(support_path)
+        self.assertNotIn("OverlayVisualTokens", support)
+        self.assertNotIn("OverlayLayoutMetrics", support)
+        for forbidden in (
+            "WKWebView", "HTML", "CGWindowListCreateImage",
+            "SCScreenshotManager", "recordBaseline", "golden",
+        ):
+            self.assertNotIn(forbidden, support)
+
+        for label, marker, expected_count in EXPECTED_M5_VISUAL_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                self.assertEqual(support.count(marker), expected_count, label)
+                original_read = VALIDATOR.read
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == support_path:
+                        return support.replace(marker, f"removed-{label}")
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(f"visual:m5-missing-marker:{label}", violations)
+
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
 
