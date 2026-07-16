@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import platform
 import re
 import subprocess
 import sys
+from functools import lru_cache
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -851,6 +853,562 @@ M5_PHASE_ZERO_NAMED_TESTS = (
     "test_phase_zero_current_source_is_green_and_main_invokes_m5_validator",
 )
 
+M5_CONTINUATION_REQUIRED_PATHS = (
+    ".omx/handoff/private-presenter-m5/MAC-CONTINUATION.md",
+    ".omx/handoff/private-presenter-m5/m5-artifacts.sha256",
+    ".omx/handoff/private-presenter-m5/m5-source-files.sha256",
+    ".omx/handoff/private-presenter-m5/private-presenter-m5-source.tar",
+    ".omx/handoff/private-presenter-m5/private-presenter-m5-wsl.bundle",
+)
+
+M5_FIXTURE_CONTRACT_MARKERS = (
+    (
+        "python-word-count",
+        "Scripts/generate-m5-fixture.py",
+        "WORD_COUNT = 50_000",
+    ),
+    (
+        "python-line-width",
+        "Scripts/generate-m5-fixture.py",
+        "LINE_WIDTH = 20",
+    ),
+    (
+        "python-utf8-count",
+        "Scripts/generate-m5-fixture.py",
+        "EXPECTED_UTF8_BYTES = 499_999",
+    ),
+    (
+        "python-utf16-count",
+        "Scripts/generate-m5-fixture.py",
+        "EXPECTED_UTF16_UNITS = 499_999",
+    ),
+    (
+        "python-newline-count",
+        "Scripts/generate-m5-fixture.py",
+        "EXPECTED_NEWLINES = 2_499",
+    ),
+    (
+        "python-digest",
+        "Scripts/generate-m5-fixture.py",
+        'EXPECTED_DIGEST = "d2aff66f0796536318d97d3b1d8080247728798dfa110725994019d58e7b09f4"',
+    ),
+    (
+        "python-token-format",
+        "Scripts/generate-m5-fixture.py",
+        'f"word{index:05d}"',
+    ),
+    (
+        "python-first-token",
+        "Scripts/generate-m5-fixture.py",
+        'words[0] != "word00000"',
+    ),
+    (
+        "python-middle-token",
+        "Scripts/generate-m5-fixture.py",
+        'data[250_000:250_009] != b"word25000"',
+    ),
+    (
+        "python-last-token",
+        "Scripts/generate-m5-fixture.py",
+        'words[-1] != "word49999"',
+    ),
+    (
+        "python-no-final-newline",
+        "Scripts/generate-m5-fixture.py",
+        'data.endswith(b"\\n")',
+    ),
+    (
+        "python-self-test",
+        "Scripts/generate-m5-fixture.py",
+        'parser.add_argument("--self-test", action="store_true")',
+    ),
+    (
+        "swift-word-count",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        "static let wordCount = 50_000",
+    ),
+    (
+        "swift-byte-count",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        "static let byteCount = 499_999",
+    ),
+    (
+        "swift-newline-count",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        "static let newlineCount = 2_499",
+    ),
+    (
+        "swift-line-width",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        "lineWidth == 20",
+    ),
+    (
+        "swift-first-token",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        'Data("word00000".utf8)',
+    ),
+    (
+        "swift-middle-token",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        'Data("word25000".utf8)',
+    ),
+    (
+        "swift-last-token",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        'Data("word49999".utf8)',
+    ),
+    (
+        "swift-digest",
+        "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
+        '"d2aff66f0796536318d97d3b1d8080247728798dfa110725994019d58e7b09f4"',
+    ),
+)
+
+M5_PERFORMANCE_CONTRACT_MARKERS = (
+    (
+        "baseline-opt-in",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        'private static let baselineEnvironmentKey = "PRIVATE_PRESENTER_M5_BASELINE"',
+    ),
+    (
+        "load-two-seconds",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "private static let maximumLoadDuration = 2.000",
+    ),
+    (
+        "edit-p95-fifty-ms",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "private static let maximumP95EditDuration = 0.050",
+    ),
+    (
+        "stall-one-hundred-ms",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "private static let maximumEditOrStallDuration = 0.100",
+    ),
+    (
+        "action-cadence-one-hundred-ms",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "private static let actionCadence = 0.100",
+    ),
+    (
+        "three-hundred-actions",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "XCTAssertEqual(actions.count, 300)",
+    ),
+    (
+        "fifty-six-action-cycles",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "XCTAssertEqual(actions.count / 6, 50)",
+    ),
+    (
+        "exact-edit-offsets",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "offset == 0 || offset == 250_000 || offset == 499_999",
+    ),
+    (
+        "restore-after-every-pair",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        'XCTAssertEqual(candidate, fixture, "pair \\((index + 1) / 2)")',
+    ),
+    (
+        "nearest-rank-p95",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "Int(ceil(0.95 * Double(sortedSamples.count)))",
+    ),
+    (
+        "nearest-rank-sample-285",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "XCTAssertEqual(oneBasedRank, 285)",
+    ),
+    (
+        "scroll-warmup",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "warmupDuration: 60",
+    ),
+    (
+        "scroll-measured-duration",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "measuredDuration: 300",
+    ),
+    (
+        "scroll-total-timeline",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "totalSampleTimes: [120, 180, 240, 300, 360]",
+    ),
+    (
+        "scroll-measured-timeline",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "XCTAssertEqual(result.measuredSampleTimes, [60, 120, 180, 240, 300])",
+    ),
+    (
+        "five-memory-samples",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "XCTAssertEqual(result.liveBytes.count, 5)",
+    ),
+    (
+        "mib-divisor",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "Double($0) / 1_048_576",
+    ),
+    (
+        "five-point-ols-x",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "x: [1, 2, 3, 4, 5]",
+    ),
+    (
+        "ols-slope-one-mib-per-minute",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "XCTAssertLessThanOrEqual(slope, 1.0)",
+    ),
+    (
+        "memory-delta-five-mib",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "XCTAssertLessThanOrEqual(liveMiB[4] - liveMiB[0], 5.0)",
+    ),
+    (
+        "filesystem-delay-two-hundred-ms",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        "func testDelayedFilesystemDoesNotBlockEditAndFinalRevisionFlushes() async throws {\n"
+        "        let fixture = try swiftFixture()\n"
+        "        let result = try await makeHarness(fixture: fixture).runDelayedFilesystemEdit(\n"
+        "            delay: 0.200",
+    ),
+    (
+        "load-endpoint-snapshot",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        ".snapshotLoadBegan,",
+    ),
+    (
+        "load-endpoint-reader-layout",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        ".firstReaderLayoutCompleted,",
+    ),
+    (
+        "load-endpoint-edit",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        ".syntheticEditReflectedInReader,",
+    ),
+    (
+        "load-endpoint-main-actor-sentinel",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        ".mainActorSentinelCompleted,",
+    ),
+    (
+        "load-endpoint-measurement-end",
+        "PrivatePresenterAppTests/FiftyThousandWordPerformanceTests.swift",
+        ".measurementEnded,",
+    ),
+)
+
+M5_SIGNPOST_STATIC_MARKERS = (
+    (
+        "subsystem",
+        "PrivatePresenterApp/Services/PerformanceSignposter.swift",
+        'static let subsystem = "com.privatepresenter.teleprompter"',
+    ),
+    (
+        "categories",
+        "PrivatePresenterApp/Interfaces/PerformanceSignposting.swift",
+        "case load\n    case layout\n    case edit\n    case scroll\n    case persistence",
+    ),
+    (
+        "operations",
+        "PrivatePresenterApp/Interfaces/PerformanceSignposting.swift",
+        'case restoreToInteractive = "restore-to-interactive"\n'
+        '    case readerLayout = "reader-layout"\n'
+        '    case editToVisible = "edit-to-visible"\n'
+        '    case scrollSession = "scroll-session"\n'
+        '    case scrollTick = "scroll-tick"\n'
+        '    case snapshotEncode = "snapshot-encode"\n'
+        '    case snapshotWrite = "snapshot-write"\n'
+        '    case snapshotFlush = "snapshot-flush"',
+    ),
+    (
+        "outcomes",
+        "PrivatePresenterApp/Interfaces/PerformanceSignposting.swift",
+        "case success\n    case failure\n    case cancelled",
+    ),
+    (
+        "reasons",
+        "PrivatePresenterApp/Interfaces/PerformanceSignposting.swift",
+        "case initial\n    case restore\n    case resync\n    case debounced\n    case flush",
+    ),
+)
+
+M5_SIGNPOST_CATEGORIES = ("load", "layout", "edit", "scroll", "persistence")
+
+M5_SIGNPOST_OPERATIONS = (
+    "restore-to-interactive",
+    "reader-layout",
+    "edit-to-visible",
+    "scroll-session",
+    "scroll-tick",
+    "snapshot-encode",
+    "snapshot-write",
+    "snapshot-flush",
+)
+
+M5_SIGNPOST_OUTCOMES = ("success", "failure", "cancelled")
+
+M5_SIGNPOST_REASONS = ("initial", "restore", "resync", "debounced", "flush")
+
+M5_ORDERED_CONTRACT_MARKERS = (
+    (
+        "disconnect-anchor-enqueue-before-order-out",
+        "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+        (
+            'Array(observation.events.prefix(3)), ["stop", "enqueue", "orderOut"]',
+            'firstIndex(of: "enqueue")',
+            'firstIndex(of: "orderOut")',
+            "XCTAssertLessThan(enqueue, orderOut)",
+            "XCTAssertTrue(observation.persistenceWriteIsStillPending)",
+            "XCTAssertTrue(observation.didOrderOutWhilePersistenceWasPending)",
+        ),
+    ),
+    (
+        "runtime-generation-before-topology-begin",
+        "PrivatePresenterApp/App/AppRuntime.swift",
+        (
+            "let generation = issueDisplayGeneration()",
+            "topologyGeneration = generation",
+            "model.beginTopologyTransaction(generation: generation)",
+        ),
+    ),
+    (
+        "stale-generation-rejected-before-model-command",
+        "PrivatePresenterApp/App/AppModel.swift",
+        (
+            "func acceptDisplayInventory(\n        _ inventory: RuntimeDisplayInventory,",
+            "guard generation == activeTopologyGeneration else { return }",
+            "send(.displayInventoryLoaded(inventory))",
+        ),
+    ),
+    (
+        "crash-restore-fail-closed",
+        "PrivatePresenterAppTests/AppModelTests.swift",
+        (
+            "model.send(.restore(snapshot))",
+            "XCTAssertTrue(model.isPaused)",
+            "XCTAssertEqual(model.overlaySession.visibility, .hidden)",
+            "XCTAssertNil(model.overlaySession.currentSessionDisplayID)",
+            "XCTAssertNil(model.selectedDisplayID)",
+            "XCTAssertTrue(model.displays.isEmpty)",
+        ),
+    ),
+    (
+        "quit-flush-before-quiescence-and-teardown",
+        "PrivatePresenterApp/App/AppLifecycleCoordinator.swift",
+        (
+            "record(.rejectMutations)",
+            "record(.pauseAndCapture)",
+            "record(.hideAndShield)",
+            "record(.stagePausedSnapshot)",
+            "record(.flushPausedSnapshot)",
+            "guard await flushPausedSnapshot() else {",
+            "model.send(.enterTerminationQuiescence)",
+            "record(.enterQuiescence)",
+            "record(.closeCarbonDispatch)",
+            "await closeCarbonDispatch()",
+            "record(.unregisterHotKeys)",
+            "await unregisterHotKeys()",
+            "record(.stopFocusPointerDisplay)",
+            "record(.teardownScrollSession)",
+            "record(.removeStatusItem)",
+            "record(.closeController)",
+            "record(.terminateReady)",
+        ),
+    ),
+    (
+        "quiescence-before-hostile-callbacks",
+        "PrivatePresenterAppTests/AppLifecycleCoordinatorTests.swift",
+        (
+            "harness.model.send(.beginTerminationAttempt)",
+            "harness.model.send(.prepareForTermination)",
+            "harness.model.send(.enterTerminationQuiescence)",
+            "harness.effects.removeAll()",
+            "harness.deliverQuiescentCallbacks()",
+            "XCTAssertTrue(harness.effects.isEmpty)",
+        ),
+    ),
+    (
+        "carbon-close-before-unregister-and-retry",
+        "PrivatePresenterAppTests/AppLifecycleCoordinatorTests.swift",
+        (
+            "service.closeDispatch()",
+            "let report = service.shutdown()",
+            "await Task.yield()",
+            "let registrationCount = registrar.registerCount",
+            "let retry = service.retry()",
+            "XCTAssertEqual(registrar.registerCount, registrationCount)",
+        ),
+    ),
+)
+
+M5_PENDING_TEMPLATE_MARKERS = (
+    "Status: PENDING",
+    "M5 WSL source candidate",
+    "Source SHA: PENDING",
+    "Executable SHA-256: PENDING",
+    "M3 native evidence: PENDING",
+    "M4 native evidence: PENDING",
+    "Promotion gate: external exact source/app SHA only",
+)
+
+M5_LEDGER_TITLES = (
+    "Keep M5 claims inside the WSL and native evidence boundary",
+    "Make every presenter control operable without sight or pointer",
+    "Keep recovery fail-closed through display, crash, and quit races",
+    "Measure hot paths without recording lecture identity",
+    "Hold 50,000-word lectures to recorded responsiveness limits",
+    "Keep M5 evidence reproducible without rewriting prior proof",
+)
+
+M5_PRIOR_RED_GREEN_COMMITS = (
+    ("f472cc2dfec0f44b10b2a21808b0ec7c89a292f5", "c680831d1592856733c6317351ff3bbd5cc35752"),
+    ("a227aa08102be5d104762c690fd367e3aa25ca2c", "6cba1fb91eef94b3e60538750b3227d981536b58"),
+    ("38b65fb977ddb6927ebe189233b78dc093946fd1", "96f7df80e701d03209e663e50d5722578c2ddff2"),
+    ("56ecee16845415536a53391b99665213aead8289", "b696205d38c0a6d5d2f44bccebcf8daca02a8313"),
+    ("7288a5c04b31fff902b83ebfbd7b636baff88369", "a56d9f2e963f92c60520e4b6efc19096c8a0ca7c"),
+)
+
+M5_REPLAY_MARKERS = (
+    "Status: PENDING controlled-Mac replay and physical proof",
+    "M3 native evidence: PENDING",
+    "M4 native evidence: PENDING",
+    "VoiceOver: PENDING",
+    "AppKit/XCTest: PENDING",
+    "Keynote/display/crash/quit: PENDING",
+    "Release/Instruments/50,000-word performance: PENDING",
+    "Replay every RED SHA before its immediate GREEN child",
+    "A configuration or toolchain failure is not a valid RED",
+    "Do not create a passed validation result",
+    "Stop before M6",
+)
+
+M5_PRIVATE_SURFACE_MARKERS = (
+    "SENTINEL_PRIVATE_",
+    "document.text",
+    "document.title",
+    "displayID",
+    "revision=",
+    "path=",
+    "url=",
+    "userID",
+    "String(describing:",
+)
+
+M5_FULL_REQUIRED_PATHS = (
+    M5_PLANNED_REQUIRED_PATHS
+    + ("PrivatePresenterAppTests/M5PerformanceTestSupport.swift",)
+    + M5_CONTINUATION_REQUIRED_PATHS
+)
+
+M5_CONTRACT_MARKER_COUNTS = {
+    ('fixture', 'python-word-count'): 1,
+    ('fixture', 'python-line-width'): 1,
+    ('fixture', 'python-utf8-count'): 1,
+    ('fixture', 'python-utf16-count'): 1,
+    ('fixture', 'python-newline-count'): 1,
+    ('fixture', 'python-digest'): 1,
+    ('fixture', 'python-token-format'): 1,
+    ('fixture', 'python-first-token'): 1,
+    ('fixture', 'python-middle-token'): 1,
+    ('fixture', 'python-last-token'): 1,
+    ('fixture', 'python-no-final-newline'): 1,
+    ('fixture', 'python-self-test'): 1,
+    ('fixture', 'swift-word-count'): 1,
+    ('fixture', 'swift-byte-count'): 1,
+    ('fixture', 'swift-newline-count'): 1,
+    ('fixture', 'swift-line-width'): 1,
+    ('fixture', 'swift-first-token'): 1,
+    ('fixture', 'swift-middle-token'): 1,
+    ('fixture', 'swift-last-token'): 1,
+    ('fixture', 'swift-digest'): 1,
+    ('performance', 'baseline-opt-in'): 1,
+    ('performance', 'load-two-seconds'): 1,
+    ('performance', 'edit-p95-fifty-ms'): 1,
+    ('performance', 'stall-one-hundred-ms'): 1,
+    ('performance', 'action-cadence-one-hundred-ms'): 1,
+    ('performance', 'three-hundred-actions'): 1,
+    ('performance', 'fifty-six-action-cycles'): 1,
+    ('performance', 'exact-edit-offsets'): 1,
+    ('performance', 'restore-after-every-pair'): 1,
+    ('performance', 'nearest-rank-p95'): 2,
+    ('performance', 'nearest-rank-sample-285'): 1,
+    ('performance', 'scroll-warmup'): 1,
+    ('performance', 'scroll-measured-duration'): 1,
+    ('performance', 'scroll-total-timeline'): 1,
+    ('performance', 'scroll-measured-timeline'): 1,
+    ('performance', 'five-memory-samples'): 1,
+    ('performance', 'mib-divisor'): 1,
+    ('performance', 'five-point-ols-x'): 1,
+    ('performance', 'ols-slope-one-mib-per-minute'): 1,
+    ('performance', 'memory-delta-five-mib'): 1,
+    ('performance', 'filesystem-delay-two-hundred-ms'): 1,
+    ('performance', 'load-endpoint-snapshot'): 1,
+    ('performance', 'load-endpoint-reader-layout'): 2,
+    ('performance', 'load-endpoint-edit'): 2,
+    ('performance', 'load-endpoint-main-actor-sentinel'): 2,
+    ('performance', 'load-endpoint-measurement-end'): 1,
+    ('signpost', 'subsystem'): 1,
+    ('signpost', 'categories'): 1,
+    ('signpost', 'operations'): 1,
+    ('signpost', 'outcomes'): 1,
+    ('signpost', 'reasons'): 1,
+}
+
+M5_ORDER_MARKER_COUNTS = {
+    ('disconnect-anchor-enqueue-before-order-out', 'Array(observation.events.prefix(3)), ["stop", "enqueue", "orderOut"]'): 1,
+    ('disconnect-anchor-enqueue-before-order-out', 'firstIndex(of: "enqueue")'): 1,
+    ('disconnect-anchor-enqueue-before-order-out', 'firstIndex(of: "orderOut")'): 1,
+    ('disconnect-anchor-enqueue-before-order-out', 'XCTAssertLessThan(enqueue, orderOut)'): 1,
+    ('disconnect-anchor-enqueue-before-order-out', 'XCTAssertTrue(observation.persistenceWriteIsStillPending)'): 1,
+    ('disconnect-anchor-enqueue-before-order-out', 'XCTAssertTrue(observation.didOrderOutWhilePersistenceWasPending)'): 1,
+    ('runtime-generation-before-topology-begin', 'let generation = issueDisplayGeneration()'): 1,
+    ('runtime-generation-before-topology-begin', 'topologyGeneration = generation'): 1,
+    ('runtime-generation-before-topology-begin', 'model.beginTopologyTransaction(generation: generation)'): 1,
+    ('stale-generation-rejected-before-model-command', 'func acceptDisplayInventory(\n        _ inventory: RuntimeDisplayInventory,'): 2,
+    ('stale-generation-rejected-before-model-command', 'guard generation == activeTopologyGeneration else { return }'): 4,
+    ('stale-generation-rejected-before-model-command', 'send(.displayInventoryLoaded(inventory))'): 2,
+    ('crash-restore-fail-closed', 'model.send(.restore(snapshot))'): 1,
+    ('crash-restore-fail-closed', 'XCTAssertTrue(model.isPaused)'): 9,
+    ('crash-restore-fail-closed', 'XCTAssertEqual(model.overlaySession.visibility, .hidden)'): 9,
+    ('crash-restore-fail-closed', 'XCTAssertNil(model.overlaySession.currentSessionDisplayID)'): 2,
+    ('crash-restore-fail-closed', 'XCTAssertNil(model.selectedDisplayID)'): 4,
+    ('crash-restore-fail-closed', 'XCTAssertTrue(model.displays.isEmpty)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.rejectMutations)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.pauseAndCapture)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.hideAndShield)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.stagePausedSnapshot)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.flushPausedSnapshot)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'guard await flushPausedSnapshot() else {'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'model.send(.enterTerminationQuiescence)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.enterQuiescence)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.closeCarbonDispatch)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'await closeCarbonDispatch()'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.unregisterHotKeys)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'await unregisterHotKeys()'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.stopFocusPointerDisplay)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.teardownScrollSession)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.removeStatusItem)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.closeController)'): 1,
+    ('quit-flush-before-quiescence-and-teardown', 'record(.terminateReady)'): 1,
+    ('quiescence-before-hostile-callbacks', 'harness.model.send(.beginTerminationAttempt)'): 1,
+    ('quiescence-before-hostile-callbacks', 'harness.model.send(.prepareForTermination)'): 1,
+    ('quiescence-before-hostile-callbacks', 'harness.model.send(.enterTerminationQuiescence)'): 1,
+    ('quiescence-before-hostile-callbacks', 'harness.effects.removeAll()'): 1,
+    ('quiescence-before-hostile-callbacks', 'harness.deliverQuiescentCallbacks()'): 2,
+    ('quiescence-before-hostile-callbacks', 'XCTAssertTrue(harness.effects.isEmpty)'): 1,
+    ('carbon-close-before-unregister-and-retry', 'service.closeDispatch()'): 1,
+    ('carbon-close-before-unregister-and-retry', 'let report = service.shutdown()'): 1,
+    ('carbon-close-before-unregister-and-retry', 'await Task.yield()'): 3,
+    ('carbon-close-before-unregister-and-retry', 'let registrationCount = registrar.registerCount'): 1,
+    ('carbon-close-before-unregister-and-retry', 'let retry = service.retry()'): 1,
+    ('carbon-close-before-unregister-and-retry', 'XCTAssertEqual(registrar.registerCount, registrationCount)'): 1,
+}
+
+
+
 
 def fail(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
@@ -865,6 +1423,17 @@ def git(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args], cwd=ROOT, check=False, text=True, capture_output=True
     )
+
+
+@lru_cache(maxsize=None)
+def committed_bytes(commit: str, path: str) -> tuple[int, bytes]:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode, result.stdout
 
 
 def validate_plists() -> None:
@@ -995,6 +1564,9 @@ def validate_m0_prohibited_surfaces() -> None:
 
 def validate_m2_source() -> list[str]:
     violations: list[str] = []
+    m4_or_later_source = (
+        ROOT / "PrivatePresenterApp/Menu/StatusItemController.swift"
+    ).is_file()
     missing_paths = [path for path in M2_REQUIRED_PATHS if not (ROOT / path).is_file()]
     violations.extend(f"missing-path:{path}" for path in missing_paths)
 
@@ -1006,14 +1578,28 @@ def validate_m2_source() -> list[str]:
         )
         for path in root.rglob("*.swift")
     )
+    superseded_m2_ui_tests = {
+        "testM2FocusModeExplainsM4AndDoesNotChangeChrome",
+        "testM2PreservesStatusBarFrontRegardlessAndPermanentNonKeyNonMain",
+    }
     violations.extend(
-        f"missing-test:{name}" for name in M2_NAMED_TESTS if name not in test_sources
+        f"missing-test:{name}"
+        for name in M2_NAMED_TESTS
+        if name not in test_sources
+        and not (m4_or_later_source and name in superseded_m2_ui_tests)
     )
 
     production_files = list((ROOT / "PrivatePresenterApp").rglob("*.swift"))
     for path in production_files:
         source = path.read_text(encoding="utf-8")
         for pattern in M2_PROHIBITED_PATTERNS:
+            if (
+                m4_or_later_source
+                and pattern == "NSStatusItem"
+                and path.relative_to(ROOT).as_posix()
+                == "PrivatePresenterApp/Menu/StatusItemController.swift"
+            ):
+                continue
             if pattern in source:
                 violations.append(f"prohibited:{pattern}:{path.relative_to(ROOT)}")
 
@@ -1054,8 +1640,13 @@ def validate_m2_source() -> list[str]:
             'Button("Restart") { dispatch(.restart) }',
             'Button("Back") { dispatch(.back) }',
             'Button("Forward") { dispatch(.forward) }',
-            'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
         )
+        if m4_or_later_source:
+            control_markers += ('accessibilityEntry("privatePresenter.focusMode")',)
+        else:
+            control_markers += (
+                'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
+            )
         for marker in control_markers:
             if marker not in controller_source:
                 violations.append(f"controller:missing-m3-marker:{marker}")
@@ -1100,6 +1691,9 @@ def validate_m2_source() -> list[str]:
 
 def validate_m3_source() -> list[str]:
     violations: list[str] = []
+    m4_or_later_source = (
+        ROOT / "PrivatePresenterApp/Menu/StatusItemController.swift"
+    ).is_file()
     # Keep this inventory explicit: M3 may add its validator contract, but its
     # controlled-Mac result is forbidden until native/package/physical evidence exists.
     missing_paths = [path for path in M3_REQUIRED_PATHS if not (ROOT / path).is_file()]
@@ -1125,6 +1719,12 @@ def validate_m3_source() -> list[str]:
     production_sources = {path: read(path) for path in production_paths}
     for path, text in production_sources.items():
         for pattern in M3_PROHIBITED_PATTERNS:
+            if (
+                m4_or_later_source
+                and pattern == "NSStatusItem"
+                and path == "PrivatePresenterApp/Menu/StatusItemController.swift"
+            ):
+                continue
             if pattern in text:
                 violations.append(f"prohibited:{pattern}:{path}")
 
@@ -1180,7 +1780,13 @@ def validate_m3_source() -> list[str]:
         violations.append("panel:status-bar-default")
     if "orderingMode: OverlayPanelOrderingMode = .frontRegardless" not in dependency_container:
         violations.append("panel:front-regardless-default")
-    if "override var canBecomeKey: Bool { false }" not in panel:
+    if m4_or_later_source:
+        if (
+            "override var canBecomeKey: Bool { !isOverlayLocked && NSApp.isActive }"
+            not in panel
+        ):
+            violations.append("panel:permanent-non-key")
+    elif "override var canBecomeKey: Bool { false }" not in panel:
         violations.append("panel:permanent-non-key")
     if "override var canBecomeMain: Bool { false }" not in panel:
         violations.append("panel:permanent-non-main")
@@ -1216,14 +1822,20 @@ def validate_m3_source() -> list[str]:
         violations.append("hot-path:asynchronous-session")
 
     controller = app_sources["PrivatePresenterApp/Controller/ControllerView.swift"]
-    for marker in (
+    controller_markers = (
         'Button("Start") { dispatch(.start) }',
         'Button("Pause") { dispatch(.pause) }',
         'Button("Restart") { dispatch(.restart) }',
         'Button("Back") { dispatch(.back) }',
         'Button("Forward") { dispatch(.forward) }',
-        'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
-    ):
+    )
+    if m4_or_later_source:
+        controller_markers += ('accessibilityEntry("privatePresenter.focusMode")',)
+    else:
+        controller_markers += (
+            'Toggle("Focus Mode", isOn: .constant(false)).disabled(true)',
+        )
+    for marker in controller_markers:
         if marker not in controller:
             violations.append(f"controller:missing-m3-marker:{marker}")
 
@@ -1476,20 +2088,33 @@ def validate_m4_source() -> list[str]:
 
 
 def validate_m5_source() -> list[str]:
-    """Validate the M5.0 boundary without claiming later M5 slices exist."""
+    """Validate the complete M5 source, evidence, and Mac-replay boundary."""
     violations: list[str] = []
 
     missing_paths = [
-        path for path in M5_PHASE_ZERO_REQUIRED_PATHS if not (ROOT / path).is_file()
+        path for path in M5_FULL_REQUIRED_PATHS if not (ROOT / path).is_file()
     ]
     violations.extend(f"missing-path:{path}" for path in missing_paths)
 
-    phase_zero_tests = read("Scripts/test_validate_project_structure_m5.py")
-    violations.extend(
-        f"missing-test:{name}"
-        for name in M5_PHASE_ZERO_NAMED_TESTS
-        if name not in phase_zero_tests
+    test_roots = (
+        ROOT / "Packages/TeleprompterCore/Tests",
+        ROOT / "PrivatePresenterAppTests",
+        ROOT / "PrivatePresenterUITests",
     )
+    swift_test_sources = "\n".join(
+        read(path.relative_to(ROOT).as_posix())
+        for root in test_roots
+        for path in root.rglob("*.swift")
+    )
+    required_test_names = (
+        *M5_ACCESSIBILITY_NAMED_TESTS,
+        *M5_LIFECYCLE_NAMED_TESTS,
+        *M5_SIGNPOST_NAMED_TESTS,
+        *M5_PERFORMANCE_NAMED_TESTS,
+    )
+    for name in required_test_names:
+        if re.search(rf"\bfunc\s+{re.escape(name)}\b", swift_test_sources) is None:
+            violations.append(f"missing-test:{name}")
 
     ancestry = git("merge-base", "--is-ancestor", M5_BASELINE, "HEAD")
     if ancestry.returncode != 0:
@@ -1497,24 +2122,49 @@ def validate_m5_source() -> list[str]:
 
     binary_suffixes = {".png"}
     for path in M5_PROTECTED_PATHS:
+        baseline_returncode, baseline_bytes = committed_bytes(M5_BASELINE, path)
         if Path(path).suffix in binary_suffixes:
-            baseline = subprocess.run(
-                ["git", "show", f"{M5_BASELINE}:{path}"],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-            )
             current = (ROOT / path).read_bytes() if (ROOT / path).is_file() else None
-            matches = baseline.returncode == 0 and baseline.stdout == current
+            matches = baseline_returncode == 0 and baseline_bytes == current
         else:
-            baseline = git("show", f"{M5_BASELINE}:{path}")
             matches = (
-                baseline.returncode == 0
+                baseline_returncode == 0
                 and (ROOT / path).is_file()
-                and baseline.stdout == read(path)
+                and baseline_bytes.decode("utf-8") == read(path)
             )
         if not matches:
             violations.append(f"protected-byte:{path}")
+
+    for contract_class, contracts in (
+        ("fixture", M5_FIXTURE_CONTRACT_MARKERS),
+        ("performance", M5_PERFORMANCE_CONTRACT_MARKERS),
+        ("signpost", M5_SIGNPOST_STATIC_MARKERS),
+    ):
+        for label, path, marker in contracts:
+            if not (ROOT / path).is_file():
+                violations.append(f"{contract_class}:missing-marker:{label}")
+                continue
+            expected_count = M5_CONTRACT_MARKER_COUNTS[(contract_class, label)]
+            if read(path).count(marker) != expected_count:
+                violations.append(f"{contract_class}:missing-marker:{label}")
+
+    for label, path, markers in M5_ORDERED_CONTRACT_MARKERS:
+        if not (ROOT / path).is_file():
+            violations.append(f"order:{label}")
+            continue
+        source = read(path)
+        if any(
+            source.count(marker) != M5_ORDER_MARKER_COUNTS[(label, marker)]
+            for marker in markers
+        ):
+            violations.append(f"order:{label}")
+            continue
+        cursor = -1
+        for marker in markers:
+            cursor = source.find(marker, cursor + 1)
+            if cursor < 0:
+                violations.append(f"order:{label}")
+                break
 
     production_paths = [
         path.relative_to(ROOT).as_posix()
@@ -1549,10 +2199,10 @@ def validate_m5_source() -> list[str]:
             violations.append(f"signpost:OS-boundary:{path}")
 
         for line_number, line in enumerate(source.splitlines(), start=1):
-            if "performanceSignposter" not in line:
-                continue
             if "metadata:" in line:
                 violations.append(f"signpost:arbitrary-metadata:{path}:{line_number}")
+            if "performanceSignposter" not in line:
+                continue
             if any(
                 marker in line
                 for marker in (
@@ -1571,6 +2221,158 @@ def validate_m5_source() -> list[str]:
 
     if found_m6_surface:
         violations.append("scope:m6-visual-polish")
+
+    interface_path = "PrivatePresenterApp/Interfaces/PerformanceSignposting.swift"
+    interface = production_sources.get(interface_path, "")
+
+    def enum_values(enum_name: str) -> tuple[str, ...]:
+        match = re.search(
+            rf"enum\s+{re.escape(enum_name)}\b[^{{]*\{{(.*?)^\}}",
+            interface,
+            re.MULTILINE | re.DOTALL,
+        )
+        if match is None:
+            return ()
+        values: list[str] = []
+        for name, raw_value in re.findall(
+            r'^\s*case\s+(\w+)(?:\s*=\s*"([^"]+)")?\s*$',
+            match.group(1),
+            re.MULTILINE,
+        ):
+            values.append(raw_value or name)
+        return tuple(values)
+
+    closed_enums = (
+        ("PerformanceSignpostCategory", M5_SIGNPOST_CATEGORIES),
+        ("PerformanceSignpostOperation", M5_SIGNPOST_OPERATIONS),
+        ("PerformanceSignpostOutcome", M5_SIGNPOST_OUTCOMES),
+        ("PerformanceSignpostReason", M5_SIGNPOST_REASONS),
+    )
+    for enum_name, expected in closed_enums:
+        if enum_values(enum_name) != tuple(expected):
+            violations.append(f"signpost:closed-metadata:{enum_name}")
+
+    scoped_token_markers = (
+        "PerformanceSignpostToken",
+        "PerformanceIntervalToken",
+        "OSSignpostIntervalState",
+    )
+    token_forbidden_paths = {
+        "PrivatePresenterApp/App/AppEffect.swift",
+        "PrivatePresenterApp/Services/SnapshotStore.swift",
+        "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
+    }
+    for path, source in production_sources.items():
+        if path.startswith("Packages/TeleprompterCore/") or path in token_forbidden_paths:
+            if any(marker in source for marker in scoped_token_markers):
+                violations.append(f"signpost:token-crosses-boundary:{path}")
+
+    allowed_private_surface_counts = {
+        (
+            "PrivatePresenterApp/Services/SnapshotStore.swift",
+            "revision=",
+        ): 1,
+        (
+            "PrivatePresenterApp/Services/SnapshotStore.swift",
+            "url=",
+        ): 1,
+        (
+            "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
+            "document.text",
+        ): 1,
+        (
+            "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
+            "document.title",
+        ): 1,
+    }
+    private_surface_paths = (
+        "PrivatePresenterApp/App/AppEffect.swift",
+        "Packages/TeleprompterCore/Sources/TeleprompterCore/Models/ScriptDocument.swift",
+        "PrivatePresenterApp/Services/SnapshotStore.swift",
+        "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift",
+    )
+    for path in private_surface_paths:
+        source = production_sources.get(path, "")
+        for marker in M5_PRIVATE_SURFACE_MARKERS:
+            allowed = allowed_private_surface_counts.get((path, marker), 0)
+            if source.count(marker) > allowed:
+                violations.append(f"privacy:private-surface:{path}:{marker}")
+
+    for path in M5_PENDING_EVIDENCE_PATHS:
+        if not (ROOT / path).is_file():
+            continue
+        lines = read(path).splitlines()
+        for marker in M5_PENDING_TEMPLATE_MARKERS:
+            if marker not in lines:
+                violations.append(f"evidence:missing-marker:{path}:{marker}")
+        if "Status: PENDING" not in lines:
+            violations.append(f"evidence:status-not-pending:{path}")
+
+    history_result = git("log", "--format=%H%x09%P%x09%s", f"{M5_BASELINE}..HEAD")
+    history_lines = history_result.stdout.splitlines() if history_result.returncode == 0 else []
+    history_titles = [
+        line.split("\t", 2)[2] for line in history_lines if line.count("\t") >= 2
+    ]
+    for title in M5_LEDGER_TITLES:
+        if history_titles.count(title) != 2:
+            violations.append(f"ledger:red-green-pair:{title}")
+
+    history_parents = {
+        fields[0]: fields[1].split()
+        for line in history_lines
+        if len(fields := line.split("\t", 2)) == 3
+    }
+    for red_sha, green_sha in M5_PRIOR_RED_GREEN_COMMITS:
+        if red_sha not in history_parents or history_parents.get(green_sha, [None])[0] != red_sha:
+            violations.append(f"ledger:prior-pair:{red_sha}:{green_sha}")
+
+    continuation_path = M5_CONTINUATION_REQUIRED_PATHS[0]
+    if (ROOT / continuation_path).is_file():
+        continuation_lines = read(continuation_path).splitlines()
+        for marker in M5_REPLAY_MARKERS:
+            if marker not in continuation_lines:
+                violations.append(f"continuation:missing-replay-marker:{marker}")
+        source_match = re.search(
+            r"^Exact WSL source SHA: `([0-9a-f]{40})`$",
+            read(continuation_path),
+            re.MULTILINE,
+        )
+        head = git("rev-parse", "HEAD")
+        if (
+            source_match is None
+            or head.returncode != 0
+            or source_match.group(1) != head.stdout.strip()
+        ):
+            violations.append("continuation:source-sha")
+
+    def checksum_manifest_is_valid(path: str) -> bool:
+        if not (ROOT / path).is_file():
+            return False
+        base = (
+            ROOT / ".omx/handoff/private-presenter-m5"
+            if path.endswith("m5-artifacts.sha256")
+            else ROOT
+        )
+        lines = read(path).splitlines()
+        if not lines:
+            return False
+        for line in lines:
+            match = re.fullmatch(r"([0-9a-f]{64})  ([^\r\n]+)", line)
+            if match is None:
+                return False
+            relative = Path(match.group(2))
+            if relative.is_absolute() or ".." in relative.parts:
+                return False
+            target = base / relative
+            if not target.is_file():
+                return False
+            if hashlib.sha256(target.read_bytes()).hexdigest() != match.group(1):
+                return False
+        return True
+
+    for path in M5_CONTINUATION_REQUIRED_PATHS[1:3]:
+        if not checksum_manifest_is_valid(path):
+            violations.append(f"continuation:checksum:{path}")
 
     if joined_app_sources.count("final class AppModel") != 1:
         violations.append("authority:AppModel-count")
@@ -1626,8 +2428,8 @@ def validate_m5_source() -> list[str]:
         ),
     )
     for path, label in protected_dependency_sources:
-        baseline = git("show", f"{M5_BASELINE}:{path}")
-        if baseline.returncode != 0 or baseline.stdout != read(path):
+        baseline_returncode, baseline_bytes = committed_bytes(M5_BASELINE, path)
+        if baseline_returncode != 0 or baseline_bytes.decode("utf-8") != read(path):
             violations.append(label)
 
     entitlements = read("PrivatePresenterApp/Resources/PrivatePresenter.entitlements")
@@ -1644,19 +2446,6 @@ def validate_m5_source() -> list[str]:
         )
     ):
         violations.append("entitlement:non-sandbox-surface")
-
-    scoped_token_markers = (
-        "PerformanceSignpostToken",
-        "PerformanceIntervalToken",
-        "OSSignpostIntervalState",
-    )
-    for path, source in production_sources.items():
-        if path.startswith("Packages/TeleprompterCore/") or path in (
-            "PrivatePresenterApp/App/AppEffect.swift",
-            "PrivatePresenterApp/Services/SnapshotStore.swift",
-        ):
-            if any(marker in source for marker in scoped_token_markers):
-                violations.append(f"signpost:token-crosses-boundary:{path}")
 
     panel = app_sources.get("PrivatePresenterApp/Overlay/TeleprompterPanel.swift", "")
     runtime = app_sources.get("PrivatePresenterApp/App/AppRuntime.swift", "")
@@ -1681,6 +2470,7 @@ def validate_m5_source() -> list[str]:
         violations.append("focus:two-second-deadline")
 
     return violations
+
 
 
 def main() -> None:
@@ -1750,11 +2540,11 @@ def main() -> None:
         fail("Milestone 4 source validation failed: " + ", ".join(m4_violations))
     m5_violations = validate_m5_source()
     if m5_violations:
-        fail("Milestone 5 phase-zero validation failed: " + ", ".join(m5_violations))
+        fail("Milestone 5 validation failed: " + ", ".join(m5_violations))
     validate_xcode_listing()
     print(
         "Project structure validation passed "
-        "(Milestone 0 Phase B + Milestone 4 + Milestone 5 phase-zero source)."
+        "(Milestone 0 Phase B + Milestone 4 + Milestone 5 source)."
     )
 
 

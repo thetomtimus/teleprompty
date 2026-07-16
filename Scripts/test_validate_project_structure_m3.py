@@ -224,7 +224,7 @@ class Milestone3ValidatorContractTests(unittest.TestCase):
             ),
             (
                 "PrivatePresenterApp/Overlay/TeleprompterPanel.swift",
-                "override var canBecomeKey: Bool { false }",
+                "override var canBecomeKey: Bool { !isOverlayLocked && NSApp.isActive }",
                 "override var canBecomeKey: Bool { true }",
                 "panel:permanent-non-key",
             ),
