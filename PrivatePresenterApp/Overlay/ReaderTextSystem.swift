@@ -21,12 +21,18 @@ final class ReaderTextSystem {
     private(set) var textMutationCount = 0
     private(set) var isActiveBandEnabled = true
     private var readerAttributes: [NSAttributedString.Key: Any] = [:]
+    private var pendingLayoutReason: PerformanceSignpostReason? = .initial
     private(set) weak var viewportAdapter: ReaderViewportAdapter?
     var onResyncRequested: (@MainActor (UInt64) -> Void)?
+    var onLayoutCompleted: (@MainActor () -> Void)?
+    let performanceRegistry: PerformanceIntervalRegistry
 
     init(
         text: String,
         revision: UInt64,
+        performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
+            signposter: DisabledPerformanceSignposter()
+        ),
         onResyncRequested: (@MainActor (UInt64) -> Void)? = nil
     ) {
         let textView = NSTextView(usingTextLayoutManager: true)
@@ -37,6 +43,7 @@ final class ReaderTextSystem {
         self.textStorage = textStorage
         activeBandView = ReaderActiveBandView()
         appliedRevision = revision
+        self.performanceRegistry = performanceRegistry
         self.onResyncRequested = onResyncRequested
 
         textView.isEditable = false
@@ -112,6 +119,16 @@ final class ReaderTextSystem {
         } else {
             guard revision >= appliedRevision else { return }
         }
+        switch reason {
+        case .initial:
+            pendingLayoutReason = .initial
+        case .restore:
+            pendingLayoutReason = .restore
+        case .resync:
+            pendingLayoutReason = .resync
+        case .clear:
+            pendingLayoutReason = nil
+        }
         textStorage.beginEditing()
         textStorage.replaceCharacters(
             in: NSRange(location: 0, length: textStorage.length),
@@ -180,6 +197,15 @@ final class ReaderTextSystem {
 
     func attachViewportAdapter(_ adapter: ReaderViewportAdapter) {
         viewportAdapter = adapter
+    }
+
+    func layoutCompleted() {
+        onLayoutCompleted?()
+    }
+
+    func takeLayoutReason() -> PerformanceSignpostReason? {
+        defer { pendingLayoutReason = nil }
+        return pendingLayoutReason
     }
 
     private func latchResync() {

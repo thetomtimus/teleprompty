@@ -76,6 +76,7 @@ enum ScrollSessionEvent: Equatable, Sendable {
 final class ScrollSessionController {
     private let viewport: ReaderViewport
     private let clockFactory: FrameClockFactory
+    private let performanceRegistry: PerformanceIntervalRegistry
     private let onEvent: @MainActor (ScrollSessionEvent) -> Void
     private var engine = ScrollEngine()
     private var clock: FrameClock?
@@ -83,6 +84,7 @@ final class ScrollSessionController {
     private var lastCheckpointUptime: TimeInterval?
     private var viewportFraction = 0.5
     private var didPublishTerminal = false
+    private var scrollSessionInterval: PerformanceIntervalHandle?
     private(set) var lastTerminalCapture: ScrollTerminalCapture?
 
     init(
@@ -90,10 +92,14 @@ final class ScrollSessionController {
         clockFactory: @escaping FrameClockFactory = { view, onTick in
             DisplayLinkFrameClock.make(attachedTo: view, onTick: onTick)
         },
+        performanceSignposter: any PerformanceSignposting = DisabledPerformanceSignposter(),
+        performanceRegistry: PerformanceIntervalRegistry? = nil,
         onEvent: @escaping @MainActor (ScrollSessionEvent) -> Void
     ) {
         self.viewport = viewport
         self.clockFactory = clockFactory
+        self.performanceRegistry = performanceRegistry
+            ?? PerformanceIntervalRegistry(signposter: performanceSignposter)
         self.onEvent = onEvent
     }
 
@@ -110,6 +116,7 @@ final class ScrollSessionController {
         let reconciled = reconcilePaused(binding)
         didPublishTerminal = false
         lastCheckpointUptime = uptime
+        scrollSessionInterval = performanceRegistry.begin(.scrollSession, reason: nil)
         _ = engine.apply(.start(at: uptime))
         guard let attachmentView = viewport.attachmentView else {
             publishClockUnavailable(generation: binding.generation)
@@ -155,6 +162,7 @@ final class ScrollSessionController {
     func reconcilePaused(
         _ binding: ScrollSessionBinding
     ) -> (anchor: ReadingAnchor, offset: Double) {
+        endScrollSession(outcome: .cancelled)
         invalidateClock()
         _ = engine.apply(.pause)
         let generationChanged = currentGeneration != binding.generation
@@ -221,6 +229,7 @@ final class ScrollSessionController {
             offset = fallbackOffset
         }
         invalidateClock()
+        endScrollSession(outcome: .success)
         currentGeneration = replacement
         didPublishTerminal = true
         lastCheckpointUptime = nil
@@ -332,6 +341,7 @@ final class ScrollSessionController {
 
     func teardown(generation: ScrollSessionGeneration) {
         guard generation == currentGeneration else { return }
+        endScrollSession(outcome: .cancelled)
         invalidateClock()
         _ = engine.apply(.suspend(.explicitSuspension))
         currentGeneration = nil
@@ -342,6 +352,7 @@ final class ScrollSessionController {
     @discardableResult
     func invalidateForViewportReplacement() -> ScrollTerminalCapture? {
         let capture = lastTerminalCapture
+        endScrollSession(outcome: .cancelled)
         invalidateClock()
         _ = engine.apply(.suspend(.explicitSuspension))
         currentGeneration = nil
@@ -352,6 +363,7 @@ final class ScrollSessionController {
 
     func restart(generation: ScrollSessionGeneration) {
         guard generation == currentGeneration else { return }
+        endScrollSession(outcome: .cancelled)
         invalidateClock()
         _ = engine.apply(.restart)
         viewport.setClipOriginY(0)
@@ -361,6 +373,7 @@ final class ScrollSessionController {
 
     private func suspend(generation: ScrollSessionGeneration) {
         guard generation == currentGeneration else { return }
+        endScrollSession(outcome: .cancelled)
         invalidateClock()
         _ = engine.apply(.suspend(.explicitSuspension))
         lastCheckpointUptime = nil
@@ -371,6 +384,9 @@ final class ScrollSessionController {
         generation: ScrollSessionGeneration
     ) {
         guard generation == currentGeneration, engine.phase == .playing else { return }
+        let tickInterval = performanceRegistry.isEnabled
+            ? performanceRegistry.begin(.scrollTick, reason: nil) : nil
+        defer { performanceRegistry.end(tickInterval, outcome: .success) }
         apply(engine.apply(.tick(at: uptime)), uptime: uptime, generation: generation)
     }
 
@@ -433,6 +449,9 @@ final class ScrollSessionController {
     ) {
         guard !didPublishTerminal else { return }
         didPublishTerminal = true
+        endScrollSession(
+            outcome: reason == .clockUnavailable ? .failure : .success
+        )
         let anchor = viewport.captureAnchor(viewportFraction: viewportFraction)
         let offset = viewport.clipOriginY
         invalidateClock()
@@ -454,7 +473,13 @@ final class ScrollSessionController {
         clock = nil
     }
 
+    private func endScrollSession(outcome: PerformanceSignpostOutcome) {
+        performanceRegistry.end(scrollSessionInterval, outcome: outcome)
+        scrollSessionInterval = nil
+    }
+
     deinit {
         clock?.invalidate()
+        performanceRegistry.end(scrollSessionInterval, outcome: .cancelled)
     }
 }

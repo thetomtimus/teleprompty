@@ -5,6 +5,7 @@ import TeleprompterCore
 @MainActor
 struct ControllerView: View {
     @Bindable var model: AppModel
+    let performanceRegistry: PerformanceIntervalRegistry
     @State private var clearToken: ClearToken?
 
     var body: some View {
@@ -83,6 +84,7 @@ struct ControllerView: View {
                 ScriptEditorTextView(
                     text: model.document.text,
                     revision: model.document.revision,
+                    performanceRegistry: performanceRegistry,
                     onEdit: { model.send(.applyScriptEdit($0)) }
                 )
                 .frame(minHeight: 300)

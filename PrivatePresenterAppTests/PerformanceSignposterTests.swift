@@ -31,6 +31,9 @@ final class PerformanceSignposterTests: XCTestCase {
         }
         _ = registry.begin(.scrollSession, reason: nil)
         registry.cancelAll() // teardown owns the final cancellation edge
+        let persistenceCompletionCount = recorder.completedOperations.filter {
+            $0 == .snapshotEncode || $0 == .snapshotWrite || $0 == .snapshotFlush
+        }.count
 
         let viewport = M5PerformanceViewport()
         let clockFactory = M5PerformanceFrameClockFactory()
@@ -66,10 +69,11 @@ final class PerformanceSignposterTests: XCTestCase {
         XCTAssertEqual(recorder.beginCount, recorder.endCount)
         XCTAssertTrue(recorder.completedOperations.contains(.scrollSession))
         XCTAssertTrue(recorder.completedOperations.contains(.scrollTick))
-        XCTAssertFalse(
-            recorder.completedOperations.contains {
+        XCTAssertEqual(
+            recorder.completedOperations.filter {
                 $0 == .snapshotEncode || $0 == .snapshotWrite || $0 == .snapshotFlush
-            },
+            }.count,
+            persistenceCompletionCount,
             "A frame callback must not enqueue persistence"
         )
     }
@@ -207,12 +211,12 @@ final class PerformanceSignposterTests: XCTestCase {
 
     func testEditIntervalEndsAfterIncrementalReaderLayout() throws {
         let recorder = M5PerformanceRecorder()
+        let registry = PerformanceIntervalRegistry(signposter: recorder)
         let root = URL(fileURLWithPath: "/tmp/private-presenter-m5-signpost-edit")
         let store = SnapshotStore(
             rootURL: root,
             fileSystem: M5PerformanceSnapshotFileSystem(),
-            sleeper: M5ImmediateCancellationSnapshotSleeper(),
-            performanceSignposter: recorder
+            sleeper: M5ImmediateCancellationSnapshotSleeper()
         )
         let overlay = OverlayPanelController()
         let viewport = M5PerformanceViewport()
@@ -221,11 +225,13 @@ final class PerformanceSignposterTests: XCTestCase {
             snapshotStore: store,
             overlayController: overlay,
             performanceSignposter: recorder,
+            performanceRegistry: registry,
             readerViewportProvider: { viewport },
             frameClockFactory: clocks.make
         )
         let model = AppModel(
             overlayController: overlay,
+            document: ScriptDocument(text: "base"),
             restorationRequired: false,
             effectHandler: adapter.handle
         )
@@ -239,9 +245,11 @@ final class PerformanceSignposterTests: XCTestCase {
                 viewport.ensureLayoutCount
             )
         }
-        let editor = EditorTextSystem(text: "base", revision: 0) { edit in
-            model.send(.applyScriptEdit(edit))
-        }
+        let editor = EditorTextSystem(
+            text: "base",
+            revision: 0,
+            performanceRegistry: registry
+        ) { edit in model.send(.applyScriptEdit(edit)) }
 
         editor.replaceCharactersForTesting(
             in: NSRange(location: 4, length: 0),
@@ -260,14 +268,18 @@ final class PerformanceSignposterTests: XCTestCase {
         let recorder = M5PerformanceRecorder()
         let sleeper = M5SuspendedSnapshotSleeper()
         let fileSystem = M5PerformanceSnapshotFileSystem()
+        let registry = PerformanceIntervalRegistry(signposter: recorder)
+        let persistence = PerformancePersistenceIntervals(registry: registry)
         let store = SnapshotStore(
             rootURL: URL(fileURLWithPath: "/tmp/private-presenter-m5-signpost-debounce"),
-            fileSystem: fileSystem,
-            sleeper: sleeper,
-            performanceSignposter: recorder
+            fileSystem: PerformanceSnapshotFileSystem(
+                base: fileSystem,
+                registry: registry
+            ),
+            sleeper: sleeper
         )
 
-        try await store.scheduleSave(snapshot(revision: 1))
+        try await persistence.scheduleSave(snapshot(revision: 1), store: store)
         await sleeper.waitUntilEntered()
 
         XCTAssertEqual(recorder.completedOperations, [.snapshotEncode])
@@ -279,15 +291,19 @@ final class PerformanceSignposterTests: XCTestCase {
     func testSnapshotEncodeWriteAndFlushAreSeparateIntervals() async throws {
         let recorder = M5PerformanceRecorder()
         let fileSystem = M5PerformanceSnapshotFileSystem()
+        let registry = PerformanceIntervalRegistry(signposter: recorder)
+        let persistence = PerformancePersistenceIntervals(registry: registry)
         let store = SnapshotStore(
             rootURL: URL(fileURLWithPath: "/tmp/private-presenter-m5-signpost-flush"),
-            fileSystem: fileSystem,
-            sleeper: M5ImmediateCancellationSnapshotSleeper(),
-            performanceSignposter: recorder
+            fileSystem: PerformanceSnapshotFileSystem(
+                base: fileSystem,
+                registry: registry
+            ),
+            sleeper: M5ImmediateCancellationSnapshotSleeper()
         )
 
-        try await store.scheduleSave(snapshot(revision: 2))
-        try await store.flush()
+        try await persistence.scheduleSave(snapshot(revision: 2), store: store)
+        try await persistence.flush(store: store)
 
         XCTAssertEqual(
             recorder.events.map(\.edge),
@@ -432,7 +448,7 @@ private final class M5PerformanceRecorder: PerformanceSignposting, @unchecked Se
         )
         let callback = onEnd
         lock.unlock()
-        if let callback {
+        if operation == .editToVisible, let callback {
             MainActor.assumeIsolated { callback(operation) }
         }
     }

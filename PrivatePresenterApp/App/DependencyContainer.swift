@@ -6,6 +6,9 @@ import TeleprompterCore
 final class AppEffectAdapter {
     private let snapshotStore: SnapshotStore
     private let overlayController: OverlayPanelController
+    private let performanceRegistry: PerformanceIntervalRegistry
+    private let performancePersistence: PerformancePersistenceIntervals
+    private weak var restorePerformanceGate: RestoreInteractivePerformanceGate?
     private weak var model: AppModel?
     private weak var controllerWindowController: ControllerWindowController?
     private let frameClockFactory: FrameClockFactory
@@ -63,6 +66,9 @@ final class AppEffectAdapter {
         snapshotStore: SnapshotStore,
         overlayController: OverlayPanelController,
         diagnosticRecorder: DiagnosticEvidenceRecorder? = nil,
+        performanceSignposter: any PerformanceSignposting = DisabledPerformanceSignposter(),
+        performanceRegistry: PerformanceIntervalRegistry? = nil,
+        restorePerformanceGate: RestoreInteractivePerformanceGate? = nil,
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil,
         readerViewportProvider: (@MainActor () -> ReaderViewport?)? = nil,
         frameClockFactory: @escaping FrameClockFactory = { view, onTick in
@@ -73,6 +79,9 @@ final class AppEffectAdapter {
             snapshotStore: snapshotStore,
             overlayController: overlayController,
             diagnosticRecorderObject: diagnosticRecorder,
+            performanceSignposter: performanceSignposter,
+            performanceRegistry: performanceRegistry,
+            restorePerformanceGate: restorePerformanceGate,
             terminationFlushOverride: terminationFlushOverride,
             readerViewportProvider: readerViewportProvider,
             frameClockFactory: frameClockFactory
@@ -82,6 +91,9 @@ final class AppEffectAdapter {
     convenience init(
         snapshotStore: SnapshotStore,
         overlayController: OverlayPanelController,
+        performanceSignposter: any PerformanceSignposting = DisabledPerformanceSignposter(),
+        performanceRegistry: PerformanceIntervalRegistry? = nil,
+        restorePerformanceGate: RestoreInteractivePerformanceGate? = nil,
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil,
         frameClockFactory: @escaping FrameClockFactory = { view, onTick in
             DisplayLinkFrameClock.make(attachedTo: view, onTick: onTick)
@@ -91,6 +103,9 @@ final class AppEffectAdapter {
             snapshotStore: snapshotStore,
             overlayController: overlayController,
             diagnosticRecorderObject: nil,
+            performanceSignposter: performanceSignposter,
+            performanceRegistry: performanceRegistry,
+            restorePerformanceGate: restorePerformanceGate,
             terminationFlushOverride: terminationFlushOverride,
             readerViewportProvider: nil,
             frameClockFactory: frameClockFactory
@@ -102,12 +117,22 @@ final class AppEffectAdapter {
         snapshotStore: SnapshotStore,
         overlayController: OverlayPanelController,
         diagnosticRecorderObject: AnyObject?,
+        performanceSignposter: any PerformanceSignposting,
+        performanceRegistry: PerformanceIntervalRegistry?,
+        restorePerformanceGate: RestoreInteractivePerformanceGate?,
         terminationFlushOverride: (@Sendable () async -> Bool)?,
         readerViewportProvider: (@MainActor () -> ReaderViewport?)?,
         frameClockFactory: @escaping FrameClockFactory
     ) {
         self.snapshotStore = snapshotStore
         self.overlayController = overlayController
+        let resolvedPerformanceRegistry = performanceRegistry
+            ?? PerformanceIntervalRegistry(signposter: performanceSignposter)
+        self.performanceRegistry = resolvedPerformanceRegistry
+        performancePersistence = PerformancePersistenceIntervals(
+            registry: resolvedPerformanceRegistry
+        )
+        self.restorePerformanceGate = restorePerformanceGate
         #if DEBUG
         diagnosticRecorder = diagnosticRecorderObject as? DiagnosticEvidenceRecorder
         #endif
@@ -128,8 +153,14 @@ final class AppEffectAdapter {
         overlayController.readerTextSystem.onResyncRequested = { [weak model] revision in
             model?.send(.readerResyncRequested(appliedRevision: revision))
         }
-        overlayController.onReaderAttachmentChanged = { [weak model] isAttached in
+        let restoreGate = restorePerformanceGate
+        overlayController.onReaderAttachmentChanged = {
+            [weak model, weak restoreGate] isAttached in
             model?.send(.readerAttachmentChanged(isAttached: isAttached))
+            if isAttached { restoreGate?.readerAttached() }
+        }
+        overlayController.readerTextSystem.onLayoutCompleted = { [weak restoreGate] in
+            restoreGate?.readerFirstLayoutCompleted()
         }
         overlayController.onReaderScreenChanged = { [weak model] in
             model?.send(.readerScreenChanged)
@@ -297,14 +328,29 @@ final class AppEffectAdapter {
                     postEditDocument: postEditDocument
                 )
                 overlayController.readerTextSystem.apply(edit)
+                let didLayout: Bool
+                if let viewport = readerViewportProvider() {
+                    viewport.ensureLayout()
+                    didLayout = true
+                } else {
+                    didLayout = false
+                }
+                let didApply = overlayController.readerTextSystem.textStorage.string
+                    == postEditDocument && didLayout
                 result = ScrollMutationResult(
                     generation: generation,
                     anchor: mapping.anchor,
                     pixelOffset: model?.overlaySession.pixelOffset ?? 0,
-                    outcome: mapping.requiresPause ? .adjusted : .restored,
+                    outcome: didApply
+                        ? (mapping.requiresPause ? .adjusted : .restored)
+                        : .failed,
                     mayResume: false
                 )
             }
+            performanceRegistry.endEditToVisible(
+                for: edit.revision,
+                outcome: result.outcome == .failed ? .failure : .success
+            )
             model?.send(.scrollMutationCompleted(result))
         case .replaceReader(let text, let revision, let reason, let generation, let anchor):
             overlayController.readerTextSystem.replaceAuthoritatively(
@@ -394,13 +440,15 @@ final class AppEffectAdapter {
                 )
             }
         case .scheduleSnapshot(let snapshot):
+            let performancePersistence = performancePersistence
             enqueuePersistence { store in
-                try await store.scheduleSave(snapshot)
+                try await performancePersistence.scheduleSave(snapshot, store: store)
             }
         case .flushSnapshot(let token, let requiredRevision):
+            let performancePersistence = performancePersistence
             enqueuePersistence { [weak self] store in
                 do {
-                    try await store.flush()
+                    try await performancePersistence.flush(store: store)
                     let status = await store.status()
                     let persistedRevision = status.persistedRevision ?? 0
                     await self?.completeClear(
@@ -417,13 +465,15 @@ final class AppEffectAdapter {
                 }
             }
         case .saveSnapshotImmediately(let snapshot):
+            let performancePersistence = performancePersistence
             enqueuePersistence(allowDuringTermination: true) { store in
-                try await store.scheduleSave(snapshot)
-                try await store.flush()
+                try await performancePersistence.scheduleSave(snapshot, store: store)
+                try await performancePersistence.flush(store: store)
             }
         case .flushPersistence:
+            let performancePersistence = performancePersistence
             enqueuePersistence { store in
-                try await store.flush()
+                try await performancePersistence.flush(store: store)
             }
         case .reconfigureHotKeys(let bindings):
             model?.send(
@@ -510,6 +560,7 @@ final class AppEffectAdapter {
     }
 
     func flushForTermination() async -> Bool {
+        let flushInterval = performanceRegistry.begin(.snapshotFlush, reason: .flush)
         isTerminationDraining = true
         while true {
             let observedGeneration = persistenceGeneration
@@ -525,7 +576,9 @@ final class AppEffectAdapter {
             didFlush = await terminationFlushOverride()
         } else {
             do {
-                try await snapshotStore.flush()
+                try await PerformancePersistenceContext.$reason.withValue(.flush) {
+                    try await snapshotStore.flush()
+                }
                 let status = await snapshotStore.status()
                 didFlush =
                     status.persistedRevision == expectedRevision
@@ -534,6 +587,10 @@ final class AppEffectAdapter {
                 didFlush = false
             }
         }
+        performanceRegistry.end(
+            flushInterval,
+            outcome: didFlush ? .success : .failure
+        )
         terminalFlushStarted = didFlush
         if !didFlush {
             isTerminationDraining = false
@@ -557,6 +614,7 @@ final class AppEffectAdapter {
         let session = ScrollSessionController(
             viewport: viewport,
             clockFactory: frameClockFactory,
+            performanceRegistry: performanceRegistry,
             onEvent: { [weak model] event in
                 switch event {
                 case .checkpoint(let checkpoint):
@@ -685,6 +743,9 @@ final class DependencyContainer {
     let overlayController: OverlayPanelController
     let displayService: SystemDisplayService
     let effectAdapter: AppEffectAdapter
+    let performanceSignposter: any PerformanceSignposting
+    let performanceRegistry: PerformanceIntervalRegistry
+    let restorePerformanceGate: RestoreInteractivePerformanceGate
     #if DEBUG
     let diagnosticRecorder: DiagnosticEvidenceRecorder?
     #endif
@@ -695,6 +756,7 @@ final class DependencyContainer {
         proofLevel: OverlayPanelLevel,
         orderingMode: OverlayPanelOrderingMode = .frontRegardless,
         diagnosticRecorder: DiagnosticEvidenceRecorder? = nil,
+        performanceSignposter: any PerformanceSignposting = PerformanceSignposter(),
         snapshotStore: SnapshotStore? = nil,
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil
     ) {
@@ -702,6 +764,7 @@ final class DependencyContainer {
             proofLevel: proofLevel,
             orderingModeObject: orderingMode,
             diagnosticRecorderObject: diagnosticRecorder,
+            performanceSignposter: performanceSignposter,
             snapshotStore: snapshotStore,
             terminationFlushOverride: terminationFlushOverride
         )
@@ -709,6 +772,7 @@ final class DependencyContainer {
     #else
     convenience init(
         proofLevel: OverlayPanelLevel,
+        performanceSignposter: any PerformanceSignposting = PerformanceSignposter(),
         snapshotStore: SnapshotStore? = nil,
         terminationFlushOverride: (@Sendable () async -> Bool)? = nil
     ) {
@@ -716,6 +780,7 @@ final class DependencyContainer {
             proofLevel: proofLevel,
             orderingModeObject: nil,
             diagnosticRecorderObject: nil,
+            performanceSignposter: performanceSignposter,
             snapshotStore: snapshotStore,
             terminationFlushOverride: terminationFlushOverride
         )
@@ -726,6 +791,7 @@ final class DependencyContainer {
         proofLevel: OverlayPanelLevel,
         orderingModeObject: Any?,
         diagnosticRecorderObject: AnyObject?,
+        performanceSignposter: any PerformanceSignposting,
         snapshotStore: SnapshotStore?,
         terminationFlushOverride: (@Sendable () async -> Bool)?
     ) {
@@ -735,25 +801,41 @@ final class DependencyContainer {
             ?? .frontRegardless
         let diagnosticRecorder = diagnosticRecorderObject as? DiagnosticEvidenceRecorder
         #endif
+        let performanceRegistry = PerformanceIntervalRegistry(
+            signposter: performanceSignposter
+        )
+        let restorePerformanceGate = RestoreInteractivePerformanceGate(
+            registry: performanceRegistry
+        )
         let resolvedStore: SnapshotStore
         if let snapshotStore {
             resolvedStore = snapshotStore
-        } else if let productionStore = try? Self.makeProductionSnapshotStore() {
+        } else if let productionStore = try? Self.makeProductionSnapshotStore(
+            performanceRegistry: performanceRegistry
+        ) {
             resolvedStore = productionStore
         } else {
             // A path-resolution failure remains fail-closed: this unusable root
             // causes content-neutral load/save failures rather than alternate storage.
             resolvedStore = SnapshotStore(
-                rootURL: URL(fileURLWithPath: "/dev/null/private-presenter-unavailable")
+                rootURL: URL(fileURLWithPath: "/dev/null/private-presenter-unavailable"),
+                fileSystem: PerformanceSnapshotFileSystem(
+                    base: LocalSnapshotFileSystem(),
+                    registry: performanceRegistry
+                )
             )
         }
 
+        self.performanceSignposter = performanceSignposter
+        self.performanceRegistry = performanceRegistry
+        self.restorePerformanceGate = restorePerformanceGate
         self.snapshotStore = resolvedStore
         #if DEBUG
         self.diagnosticRecorder = diagnosticRecorder
         overlayController = OverlayPanelController(
             proofLevel: proofLevel,
             orderingMode: orderingMode,
+            performanceRegistry: performanceRegistry,
             appliedFrameRecorder: { record in
                 diagnosticRecorder?.record(
                     kind: .panelOperation,
@@ -768,7 +850,10 @@ final class DependencyContainer {
             }
         )
         #else
-        overlayController = OverlayPanelController(proofLevel: proofLevel)
+        overlayController = OverlayPanelController(
+            proofLevel: proofLevel,
+            performanceRegistry: performanceRegistry
+        )
         #endif
         displayService = SystemDisplayService()
         #if DEBUG
@@ -776,18 +861,26 @@ final class DependencyContainer {
             snapshotStore: resolvedStore,
             overlayController: overlayController,
             diagnosticRecorder: diagnosticRecorder,
+            performanceSignposter: performanceSignposter,
+            performanceRegistry: performanceRegistry,
+            restorePerformanceGate: restorePerformanceGate,
             terminationFlushOverride: terminationFlushOverride
         )
         #else
         effectAdapter = AppEffectAdapter(
             snapshotStore: resolvedStore,
             overlayController: overlayController,
+            performanceSignposter: performanceSignposter,
+            performanceRegistry: performanceRegistry,
+            restorePerformanceGate: restorePerformanceGate,
             terminationFlushOverride: terminationFlushOverride
         )
         #endif
     }
 
-    private static func makeProductionSnapshotStore() throws -> SnapshotStore {
+    private static func makeProductionSnapshotStore(
+        performanceRegistry: PerformanceIntervalRegistry
+    ) throws -> SnapshotStore {
         let normalRoot = try SnapshotStore.productionSnapshotURL()
             .deletingLastPathComponent()
         #if DEBUG
@@ -804,7 +897,13 @@ final class DependencyContainer {
         #else
         let resolvedRoot = normalRoot
         #endif
-        return SnapshotStore(rootURL: resolvedRoot)
+        return SnapshotStore(
+            rootURL: resolvedRoot,
+            fileSystem: PerformanceSnapshotFileSystem(
+                base: LocalSnapshotFileSystem(),
+                registry: performanceRegistry
+            )
+        )
     }
 
     func makeAppModel(restorationRequired: Bool = true) -> AppModel {

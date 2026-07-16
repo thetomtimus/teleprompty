@@ -73,6 +73,15 @@ final class ReaderViewportAdapter: ReaderViewport {
         }
 
         let documentRange = textContentManager.documentRange
+        let layoutInterval: PerformanceIntervalHandle?
+        if system.performanceRegistry.isEnabled {
+            layoutInterval = system.performanceRegistry.begin(
+                .readerLayout,
+                reason: system.takeLayoutReason()
+            )
+        } else {
+            layoutInterval = nil
+        }
         textLayoutManager.ensureLayout(for: documentRange)
 
         let textContainerOrigin = system.textView.textContainerOrigin
@@ -141,6 +150,8 @@ final class ReaderViewportAdapter: ReaderViewport {
             documentHeight: CGFloat(laidOutTextBottom + Self.documentBottomPadding)
         )
         setClipOriginY(clipOriginY)
+        system.performanceRegistry.end(layoutInterval, outcome: .success)
+        system.layoutCompleted()
     }
 
     func captureAnchor(viewportFraction: Double) -> ReadingAnchor {

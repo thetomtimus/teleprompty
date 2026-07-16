@@ -133,6 +133,8 @@ final class AppRuntime {
         teardownScrollSession: { [weak self] in
             self?.model.send(.teardownScrollSession)
             self?.overlayController.teardownConnection()
+            self?.dependencies.restorePerformanceGate.cancel()
+            self?.dependencies.performanceRegistry.cancelAll()
         },
         removeStatusItem: { [weak self] in
             self?.statusItemController.remove()
@@ -224,6 +226,7 @@ final class AppRuntime {
         #if DEBUG
         let controllerWindowController = ControllerWindowController(
             model: model,
+            performanceRegistry: dependencies.performanceRegistry,
             operationRecorder: { [weak diagnosticEvidenceRecorder, weak model] operation in
                 diagnosticEvidenceRecorder?.record(
                     kind: .controllerOperation,
@@ -233,7 +236,10 @@ final class AppRuntime {
             }
         )
         #else
-        let controllerWindowController = ControllerWindowController(model: model)
+        let controllerWindowController = ControllerWindowController(
+            model: model,
+            performanceRegistry: dependencies.performanceRegistry
+        )
         #endif
 
         self.dependencies = dependencies
@@ -289,6 +295,7 @@ final class AppRuntime {
     func stopAndFlush() async -> Bool {
         startupTask?.cancel()
         startupTask = nil
+        dependencies.restorePerformanceGate.cancel()
         return await lifecycleCoordinator.stopAndFlush()
     }
 
@@ -328,13 +335,17 @@ final class AppRuntime {
         controllerWindowController.presentShieldedControllerAtStartup(on: nil)
 
         startupSeams.record(.load)
+        dependencies.restorePerformanceGate.begin(reason: .restore)
         let loadResult: SnapshotLoadResult
         if let load = startupSeams.load {
             loadResult = await load()
         } else {
             loadResult = await dependencies.snapshotStore.load()
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            dependencies.restorePerformanceGate.cancel()
+            return
+        }
 
         switch loadResult {
         case .loaded(let restored):
@@ -345,6 +356,10 @@ final class AppRuntime {
             model.send(.restoreFailed)
         }
         startupSeams.record(.restore)
+        dependencies.restorePerformanceGate.restoreCompleted()
+        if overlayController.readerTextSystem.viewportAdapter?.attachmentView?.window != nil {
+            dependencies.restorePerformanceGate.readerAttached()
+        }
         afterRestore()
 
         startupSeams.record(.observeAndQuery)

@@ -5,20 +5,36 @@ import SwiftUI
 struct ScriptEditorTextView: NSViewRepresentable {
     let text: String
     let revision: UInt64
+    let performanceRegistry: PerformanceIntervalRegistry
     let onEdit: @MainActor (ScriptTextEdit) -> Void
 
     @MainActor
     final class Coordinator {
         let system: EditorTextSystem
 
-        init(text: String, revision: UInt64, onEdit: @escaping @MainActor (ScriptTextEdit) -> Void) {
-            system = EditorTextSystem(text: text, revision: revision, onEdit: onEdit)
+        init(
+            text: String,
+            revision: UInt64,
+            performanceRegistry: PerformanceIntervalRegistry,
+            onEdit: @escaping @MainActor (ScriptTextEdit) -> Void
+        ) {
+            system = EditorTextSystem(
+                text: text,
+                revision: revision,
+                performanceRegistry: performanceRegistry,
+                onEdit: onEdit
+            )
         }
     }
 
     @MainActor
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: text, revision: revision, onEdit: onEdit)
+        Coordinator(
+            text: text,
+            revision: revision,
+            performanceRegistry: performanceRegistry,
+            onEdit: onEdit
+        )
     }
 
     @MainActor

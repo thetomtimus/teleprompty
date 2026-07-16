@@ -31,22 +31,30 @@ final class ControllerWindowController: NSWindowController {
     convenience init(
         model: AppModel,
         untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame(),
+        performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
+            signposter: DisabledPerformanceSignposter()
+        ),
         operationRecorder: @escaping (ControllerWindowOperation) -> Void = { _ in }
     ) {
         self.init(
             model: model,
             untrustedInitialFrame: untrustedInitialFrame,
+            performanceRegistry: performanceRegistry,
             operationRecorderObject: operationRecorder
         )
     }
     #else
     convenience init(
         model: AppModel,
-        untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame()
+        untrustedInitialFrame: NSRect? = ControllerWindowController.debugSeedFrame(),
+        performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
+            signposter: DisabledPerformanceSignposter()
+        )
     ) {
         self.init(
             model: model,
             untrustedInitialFrame: untrustedInitialFrame,
+            performanceRegistry: performanceRegistry,
             operationRecorderObject: nil
         )
     }
@@ -55,6 +63,7 @@ final class ControllerWindowController: NSWindowController {
     private init(
         model: AppModel,
         untrustedInitialFrame: NSRect?,
+        performanceRegistry: PerformanceIntervalRegistry,
         operationRecorderObject: Any?
     ) {
         self.model = model
@@ -74,7 +83,12 @@ final class ControllerWindowController: NSWindowController {
         )
         window.title = "Private Presenter"
         window.identifier = NSUserInterfaceItemIdentifier("privatePresenter.controller")
-        window.contentViewController = NSHostingController(rootView: ControllerView(model: model))
+        window.contentViewController = NSHostingController(
+            rootView: ControllerView(
+                model: model,
+                performanceRegistry: performanceRegistry
+            )
+        )
         window.setFrame(initialFrame, display: false)
         super.init(window: window)
     }

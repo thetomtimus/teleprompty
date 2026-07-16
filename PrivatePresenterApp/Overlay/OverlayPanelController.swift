@@ -72,6 +72,9 @@ final class OverlayPanelController: NSWindowController {
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
         proofLevel: OverlayPanelLevel = .statusBar,
         orderingMode: OverlayPanelOrderingMode = .frontRegardless,
+        performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
+            signposter: DisabledPerformanceSignposter()
+        ),
         operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in },
         appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void = { _ in }
     ) {
@@ -79,6 +82,7 @@ final class OverlayPanelController: NSWindowController {
             initialFrame: initialFrame,
             proofLevel: proofLevel,
             orderingModeObject: orderingMode,
+            performanceRegistry: performanceRegistry,
             operationRecorder: operationRecorder,
             appliedFrameRecorder: appliedFrameRecorder
         )
@@ -87,6 +91,9 @@ final class OverlayPanelController: NSWindowController {
     convenience init(
         initialFrame: NSRect = NSRect(x: 0, y: 0, width: 700, height: 350),
         proofLevel: OverlayPanelLevel = .statusBar,
+        performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
+            signposter: DisabledPerformanceSignposter()
+        ),
         operationRecorder: @escaping (OverlayPanelOperation) -> Void = { _ in },
         appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void = { _ in }
     ) {
@@ -94,6 +101,7 @@ final class OverlayPanelController: NSWindowController {
             initialFrame: initialFrame,
             proofLevel: proofLevel,
             orderingModeObject: nil,
+            performanceRegistry: performanceRegistry,
             operationRecorder: operationRecorder,
             appliedFrameRecorder: appliedFrameRecorder
         )
@@ -104,12 +112,17 @@ final class OverlayPanelController: NSWindowController {
         initialFrame: NSRect,
         proofLevel: OverlayPanelLevel,
         orderingModeObject: Any?,
+        performanceRegistry: PerformanceIntervalRegistry,
         operationRecorder: @escaping (OverlayPanelOperation) -> Void,
         appliedFrameRecorder: @escaping (OverlayAppliedFrameRecord) -> Void
     ) {
         let panel = TeleprompterPanel(contentRect: initialFrame, proofLevel: proofLevel)
         teleprompterPanel = panel
-        readerTextSystem = ReaderTextSystem(text: "", revision: 0)
+        readerTextSystem = ReaderTextSystem(
+            text: "",
+            revision: 0,
+            performanceRegistry: performanceRegistry
+        )
         #if DEBUG
         orderingMode = orderingModeObject as? OverlayPanelOrderingMode ?? .frontRegardless
         #endif

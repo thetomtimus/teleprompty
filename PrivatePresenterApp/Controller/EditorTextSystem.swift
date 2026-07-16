@@ -7,11 +7,15 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
     private var authoritativeText: String
     private var authoritativeRevision: UInt64
     private var suppressesCallbacks = false
+    private let performanceRegistry: PerformanceIntervalRegistry
     private let onEdit: @MainActor (ScriptTextEdit) -> Void
 
     init(
         text: String,
         revision: UInt64,
+        performanceRegistry: PerformanceIntervalRegistry = PerformanceIntervalRegistry(
+            signposter: DisabledPerformanceSignposter()
+        ),
         onEdit: @escaping @MainActor (ScriptTextEdit) -> Void
     ) {
         let textView = NSTextView(usingTextLayoutManager: true)
@@ -22,6 +26,7 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
         self.textStorage = textStorage
         authoritativeText = text
         authoritativeRevision = revision
+        self.performanceRegistry = performanceRegistry
         self.onEdit = onEdit
         super.init()
 
@@ -98,7 +103,9 @@ final class EditorTextSystem: NSObject, @preconcurrency NSTextStorageDelegate {
         }
         authoritativeText = textStorage.string
         authoritativeRevision = edit.revision
+        performanceRegistry.beginEditToVisible(for: edit.revision)
         onEdit(edit)
+        performanceRegistry.endEditToVisible(for: edit.revision, outcome: .failure)
     }
 
     static func deriveEdit(
