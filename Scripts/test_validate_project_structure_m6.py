@@ -133,6 +133,7 @@ EXPECTED_LEDGER_TITLES = (
     "Preserve readable structure through every contained resize",
     "Detect visual drift without a brittle snapshot dependency",
     "Keep visual acceptance reproducible and honestly host-bound",
+    "Make hosted controls match their full semantic targets",
 )
 EXPECTED_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -253,6 +254,36 @@ EXPECTED_M5_VISUAL_SOURCE_MARKERS = (
     ("pill-corruption", "case translatedPill", 1),
     ("primary-corruption", "case translatedPrimaryControl", 1),
     ("four-device-pixel-translation", "let devicePixelTranslation = 4", 1),
+)
+
+EXPECTED_REPAIR_NAMED_TESTS = (
+    "testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint",
+    "testHostedRootDispatchesEveryControlResizeAndTitleRouteAcrossTiers",
+    "testHostedSettingsPressShowsExistingControllerExactlyOnceWithoutActivation",
+    "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
+    "testDefaultUnlockedHostedHeaderOffersLockTeleprompter",
+    "testPlaybackTargetsRespectExistingPresentationEligibility",
+)
+EXPECTED_REPAIR_SOURCE_MARKERS = (
+    ("rectangular-hit-shape", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".contentShape(Rectangle())", 1),
+    ("circular-paint", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", "Circle().fill(fill(configuration:", 1),
+    ("hosted-probe", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "final class HostedRootProbe", 1),
+    ("real-window-events", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "window.sendEvent(event)", 1),
+    ("real-hit-testing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "hosting.hitTest(point)", 1),
+    ("real-ax-children", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private func directAccessibilityChildren", 1),
+    ("real-ax-press", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private func performAccessibilityPress", 1),
+    ("resize-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "resizeChanges.append((edge: edge, translation: translation))", 1),
+    ("title-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "titleChanges.append(translation)", 1),
+    ("hosted-ax-navigation", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "!accessibilityIdentifiers.intersection(chromeIdentifiers).isEmpty", 1),
+    ("controller-playback-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "let playbackPresentation = ControllerPresentation(", 1),
+    ("playing-pause-eligible", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.isPlaying || playbackPresentation.isEnabled(.start)", 1),
+    ("disabled-visual", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".opacity(accessibility.isEnabled ? 1 : 0.45)", 1),
+    ("unlocked-label-expectation", "PrivatePresenterAppTests/PresenterAccessibilityTests.swift", 'Set(["Start scrolling", "Lock teleprompter", "Show Controller"])', 1),
+)
+EXPECTED_REPAIR_FORBIDDEN_MARKERS = (
+    ("circular-hit-shape", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".contentShape(Circle())"),
+    ("caller-echoed-ax", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "chromeIsAccessibilityNavigable: state == .unlocked"),
+    ("duplicated-empty-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.scriptText.trimmingCharacters"),
 )
 
 EXPECTED_M1_REQUIRED_PATHS = (
@@ -555,6 +586,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_M5_VISUAL_REQUIRED_PATHS": EXPECTED_M5_VISUAL_REQUIRED_PATHS,
             "M6_M5_VISUAL_NAMED_TESTS": EXPECTED_M5_VISUAL_NAMED_TESTS,
             "M6_M5_VISUAL_SOURCE_MARKERS": EXPECTED_M5_VISUAL_SOURCE_MARKERS,
+            "M6_REPAIR_NAMED_TESTS": EXPECTED_REPAIR_NAMED_TESTS,
+            "M6_REPAIR_SOURCE_MARKERS": EXPECTED_REPAIR_SOURCE_MARKERS,
+            "M6_REPAIR_FORBIDDEN_MARKERS": EXPECTED_REPAIR_FORBIDDEN_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -856,6 +890,46 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                 with patch.object(VALIDATOR, "read", side_effect=replaced_read):
                     violations = VALIDATOR.validate_m6_source()
                 self.assertIn(f"visual:m5-missing-marker:{label}", violations)
+
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
+    def testM6HostedSemanticRepairContractAndMutations(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_REPAIR_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        for label, path, marker, expected_count in EXPECTED_REPAIR_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                source = VALIDATOR.read(path)
+                self.assertEqual(source.count(marker), expected_count, f"{path}:{label}")
+                original_read = VALIDATOR.read
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == path:
+                        return source.replace(marker, f"removed-{label}")
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(f"visual:repair-missing-marker:{label}", violations)
+
+        for label, path, marker in EXPECTED_REPAIR_FORBIDDEN_MARKERS:
+            with self.subTest(forbidden_marker=label):
+                source = VALIDATOR.read(path)
+                self.assertNotIn(marker, source, f"{path}:{label}")
+                original_read = VALIDATOR.read
+
+                def injected_read(candidate: str) -> str:
+                    if candidate == path:
+                        return source + "\n" + marker
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=injected_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(f"visual:repair-forbidden:{label}", violations)
 
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 

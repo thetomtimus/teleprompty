@@ -608,6 +608,163 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         }
     }
 
+    func testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint() {
+        let source = try! String(
+            contentsOf: sourceURL("OverlayQuickControlsView.swift"), encoding: .utf8
+        )
+        XCTAssertEqual(source.components(separatedBy: ".contentShape(Rectangle())").count - 1, 1)
+        XCTAssertEqual(source.components(separatedBy: "Circle().fill(fill(configuration:").count - 1, 1)
+
+        for size in M6VisualTestSupport.tierSizes {
+            let metrics = OverlayLayoutMetrics(size: size)
+            for region in metrics.quickControlRegions {
+                let corners = [
+                    CGPoint(x: region.frame.minX + 0.5, y: region.frame.minY + 0.5),
+                    CGPoint(x: region.frame.maxX - 0.5, y: region.frame.minY + 0.5),
+                    CGPoint(x: region.frame.minX + 0.5, y: region.frame.maxY - 0.5),
+                    CGPoint(x: region.frame.maxX - 0.5, y: region.frame.maxY - 0.5),
+                ]
+                for point in corners {
+                    let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+                    let before = probe.controlState
+                    probe.press(at: point)
+                    assertQuickControlMutation(
+                        region.identifier, before: before, after: probe.controlState
+                    )
+                }
+            }
+        }
+    }
+
+    func testHostedRootDispatchesEveryControlResizeAndTitleRouteAcrossTiers() {
+        for size in M6VisualTestSupport.tierSizes {
+            let metrics = OverlayLayoutMetrics(size: size)
+            for region in metrics.quickControlRegions {
+                let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+                let before = probe.controlState
+                probe.press(at: CGPoint(x: region.frame.midX, y: region.frame.midY))
+                assertQuickControlMutation(
+                    region.identifier, before: before, after: probe.controlState
+                )
+                XCTAssertTrue(probe.resizeChanges.isEmpty, region.identifier)
+                XCTAssertTrue(probe.titleChanges.isEmpty, region.identifier)
+            }
+
+            for resize in OverlayHitRegionResolver.frozenResizeProbes(size: size) {
+                let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+                probe.drag(from: resize.point, by: CGSize(width: 7, height: 5))
+                XCTAssertEqual(probe.resizeChanges.map(\.edge), [resize.edge])
+                XCTAssertEqual(probe.resizeEndCount, 1)
+                XCTAssertTrue(probe.titleChanges.isEmpty)
+                XCTAssertEqual(probe.titleEndCount, 0)
+            }
+
+            let titleProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+            let titlePoint = CGPoint(
+                x: metrics.titleDragFrame.midX, y: metrics.titleDragFrame.midY
+            )
+            titleProbe.drag(from: titlePoint, by: CGSize(width: 7, height: 5))
+            XCTAssertEqual(titleProbe.titleChanges.count, 1)
+            XCTAssertEqual(titleProbe.titleEndCount, 1)
+            XCTAssertTrue(titleProbe.resizeChanges.isEmpty)
+            XCTAssertEqual(titleProbe.resizeEndCount, 0)
+
+            let headerProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+            let playback = metrics.headerControlRegions[0]
+            headerProbe.press(at: CGPoint(x: playback.frame.midX, y: playback.frame.midY))
+            XCTAssertFalse(headerProbe.controlState.isPaused)
+            XCTAssertTrue(headerProbe.titleChanges.isEmpty)
+            XCTAssertTrue(headerProbe.resizeChanges.isEmpty)
+        }
+    }
+
+    func testHostedSettingsPressShowsExistingControllerExactlyOnceWithoutActivation() {
+        for size in M6VisualTestSupport.tierSizes {
+            let metrics = OverlayLayoutMetrics(size: size)
+            let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+            let wasActive = NSApp.isActive
+            let settings = metrics.headerControlRegions[2]
+            probe.press(at: CGPoint(x: settings.frame.midX, y: settings.frame.midY))
+            XCTAssertEqual(probe.showExistingControllerCount, 1)
+            XCTAssertEqual(NSApp.isActive, wasActive)
+            XCTAssertTrue(probe.titleChanges.isEmpty)
+            XCTAssertTrue(probe.resizeChanges.isEmpty)
+        }
+    }
+
+    func testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged() {
+        for size in M6VisualTestSupport.tierSizes {
+            let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+            let baseline = probe.readerEvidence
+            XCTAssertEqual(
+                probe.accessibilityIdentifiers.intersection(
+                    M6VisualTestSupport.HostedRootProbe.chromeIdentifiers
+                ),
+                M6VisualTestSupport.HostedRootProbe.chromeIdentifiers
+            )
+
+            for state in [
+                M6VisualTestSupport.RenderState.lockedVisible,
+                .lockedFocusHidden,
+            ] {
+                probe.setRenderState(state)
+                XCTAssertTrue(
+                    probe.accessibilityIdentifiers.intersection(
+                        M6VisualTestSupport.HostedRootProbe.chromeIdentifiers
+                    ).isEmpty
+                )
+                XCTAssertEqual(probe.readerEvidence, baseline)
+            }
+        }
+    }
+
+    func testDefaultUnlockedHostedHeaderOffersLockTeleprompter() {
+        for size in M6VisualTestSupport.tierSizes {
+            let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+            let lock = probe.accessibilityControl(
+                identifier: "privatePresenter.headerLock"
+            )
+            XCTAssertEqual(lock?.label, "Lock teleprompter")
+            XCTAssertEqual(lock?.isEnabled, true)
+        }
+    }
+
+    func testPlaybackTargetsRespectExistingPresentationEligibility() {
+        let playbackIdentifiers = [
+            "privatePresenter.headerPlayback",
+            "privatePresenter.quickPlayback",
+        ]
+        for scriptText in ["", "  \n\t  "] {
+            let probe = M6VisualTestSupport.HostedRootProbe(
+                size: CGSize(width: 700, height: 350), scriptText: scriptText
+            )
+            for identifier in playbackIdentifiers {
+                let control = probe.accessibilityControl(identifier: identifier)
+                XCTAssertEqual(control?.label, "Start scrolling")
+                XCTAssertEqual(control?.isEnabled, false)
+            }
+        }
+
+        let playing = M6VisualTestSupport.HostedRootProbe(
+            size: CGSize(width: 700, height: 350), initiallyPlaying: true
+        )
+        for identifier in playbackIdentifiers {
+            let control = playing.accessibilityControl(identifier: identifier)
+            XCTAssertEqual(control?.label, "Pause scrolling")
+            XCTAssertEqual(control?.isEnabled, true)
+        }
+
+        let source = try! String(
+            contentsOf: sourceURL("OverlayQuickControlsView.swift"), encoding: .utf8
+        )
+        XCTAssertEqual(
+            source.components(
+                separatedBy: ".opacity(accessibility.isEnabled ? 1 : 0.45)"
+            ).count - 1,
+            1
+        )
+    }
+
     func testActualOverlayRenderMatchesIndependentSemanticBaseline() throws {
         let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
         let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle()
@@ -683,6 +840,35 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertEqual(rendered.textColor.colorSpace, .sRGB)
         XCTAssertEqual(rendered.readerFrame, CGRect(x: 52, y: 124, width: 932, height: 222))
         XCTAssertEqual(rendered.toolbarFrame, CGRect(x: 324.5, y: 24, width: 387, height: 65))
+    }
+
+    private func assertQuickControlMutation(
+        _ identifier: String,
+        before: M6VisualTestSupport.HostedControlState,
+        after: M6VisualTestSupport.HostedControlState,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        var expected = before
+        switch identifier {
+        case "privatePresenter.quickSmaller":
+            expected.fontSizePoints -= PresenterAccessibility.fontSizeStep
+        case "privatePresenter.quickLarger":
+            expected.fontSizePoints += PresenterAccessibility.fontSizeStep
+        case "privatePresenter.quickAlignment":
+            expected.alignment = before.alignment == .left ? .center : .left
+        case "privatePresenter.quickSlower":
+            expected.speedPointsPerSecond -= PresenterAccessibility.speedStep
+        case "privatePresenter.quickPlayback":
+            expected.isPaused.toggle()
+        case "privatePresenter.quickFaster":
+            expected.speedPointsPerSecond += PresenterAccessibility.speedStep
+        case "privatePresenter.quickFocus":
+            expected.isFocusModeEnabled.toggle()
+        default:
+            XCTFail("Unexpected quick control: \(identifier)", file: file, line: line)
+        }
+        XCTAssertEqual(after, expected, identifier, file: file, line: line)
     }
 
     private func assertColor(
