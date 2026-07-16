@@ -680,11 +680,13 @@ final class OverlayVisualSnapshotTests: XCTestCase {
 
     func testHostedSettingsPressShowsExistingControllerExactlyOnceWithoutActivation() {
         for size in M6VisualTestSupport.tierSizes {
-            let metrics = OverlayLayoutMetrics(size: size)
             let probe = M6VisualTestSupport.HostedRootProbe(size: size)
             let wasActive = NSApp.isActive
-            let settings = metrics.headerControlRegions[2]
-            probe.press(at: CGPoint(x: settings.frame.midX, y: settings.frame.midY))
+            XCTAssertTrue(
+                probe.pressAccessibilityControl(
+                    identifier: "privatePresenter.headerSettings"
+                )
+            )
             XCTAssertEqual(probe.showExistingControllerCount, 1)
             XCTAssertEqual(NSApp.isActive, wasActive)
             XCTAssertTrue(probe.titleChanges.isEmpty)

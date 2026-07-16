@@ -37,7 +37,7 @@ struct OverlayIconButton: View {
                 : OverlayVisualTokens.readingText.swiftUIColor
         )
         .frame(width: max(44, diameter), height: max(44, diameter))
-        .contentShape(Circle())
+        .contentShape(Rectangle())
         .overlay {
             Circle()
                 .strokeBorder(

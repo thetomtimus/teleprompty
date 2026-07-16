@@ -270,9 +270,9 @@ EXPECTED_REPAIR_SOURCE_MARKERS = (
     ("hosted-probe", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "final class HostedRootProbe", 1),
     ("real-window-events", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "window.sendEvent(event)", 1),
     ("real-hit-testing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "hosting.hitTest(point)", 1),
-    ("real-ax-children", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private func directAccessibilityChildren", 1),
-    ("real-ax-press", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private func performAccessibilityPress", 1),
-    ("resize-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "resizeChanges.append((edge: edge, translation: translation))", 1),
+    ("real-ax-children", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private static func directAccessibilityChildren", 1),
+    ("real-ax-press", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private static func performAccessibilityPress", 1),
+    ("resize-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "resizeChanges.append(change)", 1),
     ("title-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "titleChanges.append(translation)", 1),
     ("hosted-ax-navigation", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "!accessibilityIdentifiers.intersection(chromeIdentifiers).isEmpty", 1),
     ("controller-playback-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "let playbackPresentation = ControllerPresentation(", 1),
@@ -1023,15 +1023,15 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                     any(item.startswith("evidence:private-surface:") for item in violations)
                 )
 
-    def testM6HistoryIsExactlySevenImmediateRedGreenPairs(self) -> None:
+    def testM6HistoryIsExactlyEightImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
         self.assertEqual(VALIDATOR.validate_m6_history_rows(rows), [])
-        self.assertEqual(len(rows), 14)
+        self.assertEqual(len(rows), len(EXPECTED_LEDGER_TITLES) * 2)
         self.assertEqual(
             [title for _, _, title in rows],
             [title for title in EXPECTED_LEDGER_TITLES for _ in range(2)],
         )
-        for index in range(7):
+        for index in range(len(EXPECTED_LEDGER_TITLES)):
             self.assertEqual(rows[index * 2 + 1][1], [rows[index * 2][0]])
             mutation = list(rows)
             green_sha, _, green_title = mutation[index * 2 + 1]

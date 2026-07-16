@@ -212,7 +212,7 @@ final class PresenterAccessibilityTests: XCTestCase {
         window.contentView = hosting
         hosting.layoutSubtreeIfNeeded()
 
-        let expectedLabels = Set(["Start scrolling", "Unlock teleprompter", "Show Controller"])
+        let expectedLabels = Set(["Start scrolling", "Lock teleprompter", "Show Controller"])
         let controls = hostedDescendants(of: hosting).filter {
             guard let label = $0.accessibilityLabel() else { return false }
             return expectedLabels.contains(label)

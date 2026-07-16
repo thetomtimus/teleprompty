@@ -82,6 +82,298 @@ enum M6VisualTestSupport {
         let chromeIsAccessibilityNavigable: Bool
     }
 
+    static let tierSizes = [
+        CGSize(width: 320, height: 180),
+        CGSize(width: 700, height: 350),
+        CGSize(width: 1_036, height: 460),
+    ]
+
+    struct HostedControlState: Equatable {
+        var fontSizePoints: Double
+        var speedPointsPerSecond: Double
+        var alignment: TeleprompterTextAlignment
+        var isPaused: Bool
+        var isFocusModeEnabled: Bool
+    }
+
+    struct HostedAccessibilityControl: Equatable {
+        let identifier: String
+        let label: String?
+        let isEnabled: Bool
+    }
+
+    struct HostedReaderEvidence: Equatable {
+        let storageIdentity: ObjectIdentifier
+        let storageText: String
+        let fullReplacementCount: Int
+        let textMutationCount: Int
+        let attachmentFrame: CGRect
+        let textFrame: CGRect
+        let hostingFrame: CGRect
+        let anchor: ReadingAnchor?
+    }
+
+    struct HostedResizeChange: Equatable {
+        let edge: ClampedPanelInteractionController.ResizeEdge
+        let translation: CGSize
+    }
+
+    @MainActor
+    final class HostedRootProbe {
+        static let chromeIdentifiers = Set(
+            OverlayChromeView.actionIdentifiers + OverlayQuickControlsView.actionIdentifiers
+        )
+
+        private final class CallbackRecorder {
+            var resizeChanges: [HostedResizeChange] = []
+            var resizeEndCount = 0
+            var titleChanges: [CGSize] = []
+            var titleEndCount = 0
+            var showExistingControllerCount = 0
+        }
+
+        private let callbacks: CallbackRecorder
+        private let model: AppModel
+        private let system: ReaderTextSystem
+        private let window: NSWindow
+        private let hosting: NSHostingView<AnyView>
+
+        init(
+            size: CGSize,
+            scriptText: String = "Hosted semantic probe",
+            initiallyPlaying: Bool = false
+        ) {
+            let callbacks = CallbackRecorder()
+            self.callbacks = callbacks
+            system = ReaderTextSystem(text: scriptText, revision: 0)
+            model = AppModel(
+                overlayController: OverlayPanelController(),
+                document: ScriptDocument(
+                    title: "Hosted Presenter", text: scriptText
+                ),
+                restorationRequired: false,
+                effectHandler: { effect in
+                    if effect == .showExistingController {
+                        callbacks.showExistingControllerCount += 1
+                    }
+                }
+            )
+            if initiallyPlaying {
+                model.send(.start)
+            }
+
+            let root = AnyView(
+                OverlayRootView(
+                    model: model,
+                    readerSystem: system,
+                    onDragChanged: { translation in
+                        if callbacks.titleChanges.isEmpty {
+                            callbacks.titleChanges.append(translation)
+                        } else {
+                            callbacks.titleChanges[callbacks.titleChanges.index(before: callbacks.titleChanges.endIndex)] = translation
+                        }
+                    },
+                    onDragEnded: { callbacks.titleEndCount += 1 },
+                    onResizeChanged: { edge, translation in
+                        let change = HostedResizeChange(edge: edge, translation: translation)
+                        if callbacks.resizeChanges.last?.edge == edge {
+                            callbacks.resizeChanges[callbacks.resizeChanges.index(before: callbacks.resizeChanges.endIndex)] = change
+                        } else {
+                            callbacks.resizeChanges.append(change)
+                        }
+                    },
+                    onResizeEnded: { callbacks.resizeEndCount += 1 }
+                )
+                .frame(width: size.width, height: size.height)
+            )
+            hosting = NSHostingView(rootView: root)
+            hosting.frame = CGRect(origin: .zero, size: size)
+            window = NSWindow(
+                contentRect: CGRect(origin: .zero, size: size),
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.isReleasedWhenClosed = false
+            window.ignoresMouseEvents = false
+            window.contentView = hosting
+            layout()
+        }
+
+        var controlState: HostedControlState {
+            HostedControlState(
+                fontSizePoints: model.preferences.fontSizePoints,
+                speedPointsPerSecond: model.preferences.speedPointsPerSecond,
+                alignment: model.preferences.textAlignment,
+                isPaused: model.isPaused,
+                isFocusModeEnabled: model.preferences.isFocusModeEnabled
+            )
+        }
+
+        var resizeChanges: [HostedResizeChange] { callbacks.resizeChanges }
+        var resizeEndCount: Int { callbacks.resizeEndCount }
+        var titleChanges: [CGSize] { callbacks.titleChanges }
+        var titleEndCount: Int { callbacks.titleEndCount }
+        var showExistingControllerCount: Int { callbacks.showExistingControllerCount }
+
+        var accessibilityIdentifiers: Set<String> {
+            Self.accessibilityIdentifiers(in: hosting)
+        }
+
+        var chromeIsAccessibilityNavigable: Bool {
+            !accessibilityIdentifiers.intersection(chromeIdentifiers).isEmpty
+        }
+
+        var readerEvidence: HostedReaderEvidence {
+            let adapter = system.viewportAdapter
+            return HostedReaderEvidence(
+                storageIdentity: ObjectIdentifier(system.textStorage),
+                storageText: system.textStorage.string,
+                fullReplacementCount: system.fullReplacementCount,
+                textMutationCount: system.textMutationCount,
+                attachmentFrame: adapter?.attachmentView?.frame ?? .zero,
+                textFrame: system.textView.frame,
+                hostingFrame: hosting.frame,
+                anchor: adapter?.captureAnchor(viewportFraction: 0.5)
+            )
+        }
+
+        func setRenderState(_ state: RenderState) {
+            switch state {
+            case .unlocked:
+                model.send(.setLocked(false))
+                model.send(.focusChromeStateChanged(.unlocked))
+            case .lockedVisible:
+                model.send(.setLocked(true))
+                model.send(.focusChromeStateChanged(.lockedChromeVisible))
+            case .lockedFocusHidden:
+                model.send(.setLocked(true))
+                model.send(.focusChromeStateChanged(.lockedFocusChromeHidden))
+            }
+            layout()
+        }
+
+        func accessibilityControl(identifier: String) -> HostedAccessibilityControl? {
+            guard let element = Self.accessibilityElements(in: hosting).first(where: {
+                Self.accessibilityIdentifier(of: $0) == identifier
+            }) else { return nil }
+            return HostedAccessibilityControl(
+                identifier: identifier,
+                label: Self.accessibilityLabel(of: element),
+                isEnabled: Self.accessibilityEnabled(of: element)
+            )
+        }
+
+        @discardableResult
+        func pressAccessibilityControl(identifier: String) -> Bool {
+            guard let element = Self.accessibilityElements(in: hosting).first(where: {
+                Self.accessibilityIdentifier(of: $0) == identifier
+            }) else { return false }
+            let performed = Self.performAccessibilityPress(on: element)
+            layout()
+            return performed
+        }
+
+        func press(at point: CGPoint) {
+            guard hosting.bounds.contains(point), hostedHitTest(point) != nil else { return }
+            send(type: .leftMouseDown, location: point, clickCount: 1)
+            send(type: .leftMouseUp, location: point, clickCount: 1)
+            layout()
+        }
+
+        func drag(from point: CGPoint, by translation: CGSize) {
+            guard hosting.bounds.contains(point), hostedHitTest(point) != nil else { return }
+            let destination = CGPoint(
+                x: point.x + translation.width, y: point.y + translation.height
+            )
+            send(type: .leftMouseDown, location: point, clickCount: 1)
+            send(type: .leftMouseDragged, location: destination, clickCount: 1)
+            send(type: .leftMouseUp, location: destination, clickCount: 1)
+            layout()
+        }
+
+        private func hostedHitTest(_ point: CGPoint) -> NSView? {
+            hosting.hitTest(point)
+        }
+
+        private func layout() {
+            hosting.layoutSubtreeIfNeeded()
+            hosting.displayIfNeeded()
+        }
+
+        private func send(
+            type: NSEvent.EventType, location: CGPoint, clickCount: Int
+        ) {
+            guard let event = NSEvent.mouseEvent(
+                with: type,
+                location: location,
+                modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber,
+                context: nil,
+                eventNumber: 0,
+                clickCount: clickCount,
+                pressure: type == .leftMouseUp ? 0 : 1
+            ) else { return }
+            window.sendEvent(event)
+        }
+
+        fileprivate static func accessibilityIdentifiers(in root: NSView) -> Set<String> {
+            Set(accessibilityElements(in: root).compactMap { accessibilityIdentifier(of: $0) })
+        }
+
+        private static func accessibilityElements(in root: NSView) -> [AnyObject] {
+            var result: [AnyObject] = []
+            var pending: [AnyObject] = [root]
+            var visited: Set<ObjectIdentifier> = []
+            while let element = pending.popLast() {
+                let identity = ObjectIdentifier(element)
+                guard visited.insert(identity).inserted else { continue }
+                result.append(element)
+                pending.append(contentsOf: directAccessibilityChildren(of: element))
+            }
+            return result
+        }
+
+        private static func directAccessibilityChildren(of element: AnyObject) -> [AnyObject] {
+            if let view = element as? NSView {
+                return (view.accessibilityChildren() ?? []).map { $0 as AnyObject }
+            }
+            if let accessibilityElement = element as? NSAccessibilityElement {
+                return (accessibilityElement.accessibilityChildren() ?? []).map { $0 as AnyObject }
+            }
+            return []
+        }
+
+        private static func accessibilityIdentifier(of element: AnyObject) -> String? {
+            if let view = element as? NSView {
+                return view.accessibilityIdentifier()
+            }
+            return (element as? NSAccessibilityElement)?.accessibilityIdentifier()
+        }
+
+        private static func accessibilityLabel(of element: AnyObject) -> String? {
+            if let view = element as? NSView {
+                return view.accessibilityLabel()
+            }
+            return (element as? NSAccessibilityElement)?.accessibilityLabel()
+        }
+
+        private static func accessibilityEnabled(of element: AnyObject) -> Bool {
+            if let view = element as? NSView {
+                return view.isAccessibilityEnabled()
+            }
+            return (element as? NSAccessibilityElement)?.isAccessibilityEnabled() ?? false
+        }
+
+        private static func performAccessibilityPress(on element: AnyObject) -> Bool {
+            if let view = element as? NSView {
+                return view.accessibilityPerformPress()
+            }
+            return (element as? NSAccessibilityElement)?.accessibilityPerformPress() ?? false
+        }
+    }
+
     struct PixelMask: Equatable {
         let width: Int
         let height: Int
@@ -354,7 +646,9 @@ enum M6VisualTestSupport {
             readerFingerprint: readerFingerprint,
             interiorIsOpaque: interiorIsOpaque,
             structuresAreContained: structuresAreContained,
-            chromeIsAccessibilityNavigable: state == .unlocked
+            chromeIsAccessibilityNavigable: !HostedRootProbe.accessibilityIdentifiers(
+                in: hosting
+            ).intersection(HostedRootProbe.chromeIdentifiers).isEmpty
         )
     }
 

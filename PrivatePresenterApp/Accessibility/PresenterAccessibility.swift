@@ -126,6 +126,13 @@ enum PresenterAccessibility {
         let focusState = state.isFocusModeEnabled ? "On" : "Off"
         let safetyState = genericSafetyState(state.topologyStatus)
         let overlayTarget = CGSize(width: 44, height: 44)
+        let playbackPresentation = ControllerPresentation(
+            scriptText: state.scriptText,
+            isPanelVisible: state.isVisible,
+            isClearConfirmationRequired: false
+        )
+        let overlayPlaybackIsEnabled =
+            state.isPlaying || playbackPresentation.isEnabled(.start)
 
         return [
             Entry(
@@ -275,7 +282,7 @@ enum PresenterAccessibility {
                 help: state.isPlaying
                     ? "Pause continuous teleprompter scrolling"
                     : "Start continuous teleprompter scrolling",
-                isEnabled: !state.isLocked,
+                isEnabled: !state.isLocked && overlayPlaybackIsEnabled,
                 target: overlayTarget
             ),
             overlayEntry(
@@ -344,7 +351,7 @@ enum PresenterAccessibility {
                 help: state.isPlaying
                     ? "Pause continuous teleprompter scrolling"
                     : "Start continuous teleprompter scrolling",
-                isEnabled: !state.isLocked,
+                isEnabled: !state.isLocked && overlayPlaybackIsEnabled,
                 target: overlayTarget
             ),
             overlayEntry(
