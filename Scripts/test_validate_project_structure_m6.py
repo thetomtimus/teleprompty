@@ -143,6 +143,7 @@ EXPECTED_LEDGER_TITLES = (
     "Import the native signposter module with its real name",
     "Keep teardown on the main actor under Swift 6",
     "Record the actor teardown path in final scope",
+    "Return every accessibility retry decision explicitly",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1414,6 +1415,16 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "performanceRegistry.end(scrollSessionInterval, outcome: .cancelled)",
             deinit_source,
         )
+
+    def testM6AccessibilityRetryHelperReturnsEveryDecision(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterApp/Accessibility/PresenterAccessibility.swift")
+        start = source.index("    private static func retryShortcutsVisible(")
+        end = source.index("    private static func publicMenuEntry(", start)
+        helper = source[start:end]
+        self.assertIn("            return true\n", helper)
+        self.assertIn("            return false\n", helper)
+        self.assertNotIn("\n            true\n", helper)
+        self.assertNotIn("\n            false\n", helper)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
