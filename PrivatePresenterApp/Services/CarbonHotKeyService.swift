@@ -96,6 +96,10 @@ final class CarbonHotKeyRegistrar: HotKeyRegistering {
     }
 
     fileprivate nonisolated func receive(_ identifier: ProductHotKeyIdentifier) -> Int32 {
+        // GetApplicationEventTarget delivers on the application's main event loop.
+        // Reject any unexpected executor before entering the synchronous commit gate;
+        // the controlled-Mac build/runtime gate must still validate this Carbon contract.
+        guard Thread.isMainThread else { return Int32(eventNotHandledErr) }
         MainActor.assumeIsolated {
             callback?(identifier) ?? Int32(eventNotHandledErr)
         }
@@ -121,7 +125,22 @@ struct HotKeyFailure: Equatable, Sendable {
     let action: ShortcutAction
     let shortcut: KeyboardShortcut
     let status: Int32
+    let attempts: [HotKeyAttemptStatus]
     let cleanup: [HotKeyCleanupStatus]
+
+    init(
+        action: ShortcutAction,
+        shortcut: KeyboardShortcut,
+        status: Int32,
+        attempts: [HotKeyAttemptStatus] = [],
+        cleanup: [HotKeyCleanupStatus]
+    ) {
+        self.action = action
+        self.shortcut = shortcut
+        self.status = status
+        self.attempts = attempts
+        self.cleanup = cleanup
+    }
 }
 
 enum HotKeyTransactionResult: Equatable, Sendable {
@@ -181,6 +200,7 @@ final class CarbonHotKeyService {
     private var handlerToken: HotKeyHandlerToken?
     private var desiredBindings = ShortcutValidator.defaultBindings
     private var cachedShutdown: HotKeyShutdownReport?
+    private var dispatchGeneration: UInt64 = 0
     private(set) var state: CarbonHotKeyServiceState = .unregistered
 
     init(
@@ -217,6 +237,9 @@ final class CarbonHotKeyService {
         if case .registered(let committed) = state, committed == bindings {
             return .committed(committed)
         }
+        if case .registered = state {
+            return reconfigure(bindings)
+        }
 
         let canonical: [ShortcutBinding]
         do {
@@ -232,6 +255,7 @@ final class CarbonHotKeyService {
         active.removeAll()
         uncertain.removeAll()
         handlerToken = nil
+        dispatchGeneration &+= 1
         state = .registering
 
         let installed: HotKeyHandlerToken
@@ -247,6 +271,7 @@ final class CarbonHotKeyService {
                 action: failed.action,
                 shortcut: failed.shortcut,
                 status: status,
+                attempts: [attempt(.installHandler, failed, status)],
                 cleanup: []
             )
             state = .unregistered
@@ -267,6 +292,7 @@ final class CarbonHotKeyService {
                     action: binding.action,
                     shortcut: binding.shortcut,
                     status: status,
+                    attempts: [attempt(.initialRegistration, binding, status)],
                     cleanup: cleanup.records
                 )
                 active.removeAll()
@@ -304,6 +330,7 @@ final class CarbonHotKeyService {
         }
         guard proposed != oldBindings else { return .committed(oldBindings) }
 
+        dispatchGeneration &+= 1
         state = .reconfiguring(oldBindings)
         let oldByAction = Dictionary(uniqueKeysWithValues: oldBindings.map { ($0.action, $0) })
         let proposedByAction = Dictionary(uniqueKeysWithValues: proposed.map { ($0.action, $0) })
@@ -322,6 +349,7 @@ final class CarbonHotKeyService {
                         action: entry.binding.action,
                         shortcut: entry.binding.shortcut,
                         status: status,
+                        attempts: [attempt(.oldUnregistration, entry.binding, status)],
                         cleanup: []
                     )
                 )
@@ -344,6 +372,7 @@ final class CarbonHotKeyService {
                     action: action,
                     shortcut: binding.shortcut,
                     status: status,
+                    attempts: [attempt(.proposedRegistration, binding, status)],
                     cleanup: proposalCleanup.records
                 )
                 guard proposalCleanup.succeeded else {
@@ -379,6 +408,7 @@ final class CarbonHotKeyService {
 
     func shutdown() -> HotKeyShutdownReport {
         if let cachedShutdown { return cachedShutdown }
+        dispatchGeneration &+= 1
         let entries = orderedEntries(active, reversed: true) + Array(uncertain.reversed())
         active.removeAll()
         uncertain.removeAll()
@@ -430,7 +460,16 @@ final class CarbonHotKeyService {
             case .registered = state,
             active[action] != nil
         else { return Int32(eventNotHandledErr) }
-        dispatch(action)
+        let generation = dispatchGeneration
+        Task { @MainActor [weak self] in
+            guard
+                let self,
+                self.dispatchGeneration == generation,
+                case .registered = self.state,
+                self.active[action] != nil
+            else { return }
+            self.dispatch(action)
+        }
         return noErr
     }
 
@@ -439,6 +478,19 @@ final class CarbonHotKeyService {
             keyCode: binding.shortcut.virtualKeyCode,
             carbonModifiers: carbonModifiers(binding.shortcut.modifiers),
             identifier: ProductHotKeyIdentifier(action: binding.action)
+        )
+    }
+
+    private func attempt(
+        _ operation: HotKeyAttemptOperation,
+        _ binding: ShortcutBinding,
+        _ status: Int32
+    ) -> HotKeyAttemptStatus {
+        HotKeyAttemptStatus(
+            operation: operation,
+            action: binding.action,
+            shortcut: binding.shortcut,
+            status: status
         )
     }
 
@@ -469,6 +521,8 @@ final class CarbonHotKeyService {
                     action: oldEntry.binding.action,
                     shortcut: oldEntry.binding.shortcut,
                     status: rollbackStatus,
+                    attempts: proposalFailure.attempts
+                        + [attempt(.rollbackRegistration, oldEntry.binding, rollbackStatus)],
                     cleanup: proposalFailure.cleanup + teardown.records
                 )
                 if teardown.succeeded {
@@ -502,6 +556,7 @@ final class CarbonHotKeyService {
             action: primary.action,
             shortcut: primary.shortcut,
             status: primary.status,
+            attempts: primary.attempts,
             cleanup: primary.cleanup + cleanup.records
         )
         state = .cleanupUnknown(failure)

@@ -31,6 +31,7 @@ final class AppModel {
     private(set) var snapshotRevision: UInt64
     private(set) var hotKeyStatus: HotKeyTransactionResult?
     private(set) var focusChromeState: FocusChromeState
+    private(set) var focusChromeTransitionDuration: TimeInterval
 
     private(set) var displays: [RuntimeDisplay] = []
     private(set) var selectedDisplayID: UInt32?
@@ -149,6 +150,7 @@ final class AppModel {
         snapshotRevision = 0
         hotKeyStatus = nil
         focusChromeState = .unlocked
+        focusChromeTransitionDuration = 0.18
         restorationCompleted = !restorationRequired
         isPersistenceLoadSafe = !restorationRequired
         proofConfigurationSnapshot = overlayController.configurationSnapshot
@@ -316,6 +318,8 @@ final class AppModel {
             effectHandler(.updateFocusMode(focusModeConfiguration))
         case .focusChromeStateChanged(let state):
             focusChromeState = state
+        case .focusChromeTransitionDurationChanged(let duration):
+            focusChromeTransitionDuration = max(duration, 0)
         case .toggleVisibility:
             performShortcut(.toggleVisibility)
         case .toggleLock:
@@ -1424,7 +1428,7 @@ final class AppModel {
             return true
         case .prepareForTermination, .stagePausedTerminationSnapshot,
             .cancelTerminationAttempt, .enterTerminationQuiescence,
-            .focusChromeStateChanged:
+            .focusChromeStateChanged, .focusChromeTransitionDurationChanged:
             return true
         case .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
             .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,

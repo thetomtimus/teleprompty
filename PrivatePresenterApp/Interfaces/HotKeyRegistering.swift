@@ -9,6 +9,21 @@ struct HotKeyToken: Equatable, Hashable, Sendable {
     let rawValue: UInt64
 }
 
+enum HotKeyAttemptOperation: Equatable, Sendable {
+    case installHandler
+    case initialRegistration
+    case oldUnregistration
+    case proposedRegistration
+    case rollbackRegistration
+}
+
+struct HotKeyAttemptStatus: Equatable, Sendable {
+    let operation: HotKeyAttemptOperation
+    let action: ShortcutAction
+    let shortcut: KeyboardShortcut
+    let status: Int32
+}
+
 enum HotKeyCallResult<Value> {
     case success(Value)
     case failure(Int32)

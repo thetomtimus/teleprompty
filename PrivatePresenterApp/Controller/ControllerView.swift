@@ -213,19 +213,7 @@ struct ControllerView: View {
     }
 
     private var globalShortcutStatusText: String {
-        guard let status = model.hotKeyStatus else { return "Global shortcuts are starting." }
-        switch status {
-        case .committed:
-            return "All seven global shortcuts are ready."
-        case .conflict(let failure):
-            return "Global shortcut conflict for \(failure.action.rawValue), key \(failure.shortcut.virtualKeyCode), status \(failure.status)."
-        case .degradedClean(let failure):
-            return "No global shortcuts are active after status \(failure.status). Resolve the conflict and Retry."
-        case .cleanupUnknown:
-            return CarbonHotKeyService.cleanupUnknownMessage
-        case .invalid:
-            return "The shortcut configuration is invalid. Defaults remain selected."
-        }
+        ControllerPresentation.globalShortcutStatusText(model.hotKeyStatus)
     }
 
     private var canRetryGlobalShortcuts: Bool {

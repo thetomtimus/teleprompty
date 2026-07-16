@@ -1,4 +1,5 @@
 import Foundation
+import TeleprompterCore
 
 enum ControllerTopologyStatus: String, CaseIterable, Equatable, Sendable {
     case extended
@@ -118,5 +119,43 @@ struct ControllerPresentation: Equatable, Sendable {
         case .queryFailure:
             "Display safety could not be verified"
         }
+    }
+
+    static func globalShortcutStatusText(_ status: HotKeyTransactionResult?) -> String {
+        guard let status else { return "Global shortcuts are starting." }
+        switch status {
+        case .committed:
+            return "All seven global shortcuts are ready."
+        case .conflict(let failure):
+            return "Global shortcut conflict for \(failure.action.rawValue) "
+                + "(\(shortcutDescription(failure.shortcut))), status \(failure.status)."
+        case .degradedClean(let failure):
+            return "No global shortcuts are active after status \(failure.status). "
+                + "Resolve the conflict and Retry."
+        case .cleanupUnknown:
+            return CarbonHotKeyService.cleanupUnknownMessage
+        case .invalid:
+            return "The shortcut configuration is invalid. Defaults remain selected."
+        }
+    }
+
+    private static func shortcutDescription(_ shortcut: KeyboardShortcut) -> String {
+        let modifierOrder: [ShortcutModifier] = [.control, .option, .shift, .command]
+        let modifiers = modifierOrder
+            .filter(shortcut.modifiers.contains)
+            .map(\.rawValue)
+        let key: String
+        switch shortcut.virtualKeyCode {
+        case 4: key = "H"
+        case 5: key = "G"
+        case 37: key = "L"
+        case 49: key = "Space"
+        case 123: key = "Left"
+        case 124: key = "Right"
+        case 125: key = "Down"
+        case 126: key = "Up"
+        default: key = "Key-\(shortcut.virtualKeyCode)"
+        }
+        return (modifiers + [key]).joined(separator: "-")
     }
 }

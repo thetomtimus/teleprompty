@@ -81,6 +81,7 @@ struct OverlayRootView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .animation(chromeAnimation, value: isChromeVisible)
         .overlay(alignment: .top) {
             interactionZone(edge: nil).frame(height: Self.readerHeaderHeight)
         }
@@ -112,6 +113,11 @@ struct OverlayRootView: View {
 
     private var isChromeVisible: Bool {
         model?.focusChromeState != .lockedFocusChromeHidden
+    }
+
+    private var chromeAnimation: Animation? {
+        guard let model, model.focusChromeTransitionDuration > 0 else { return nil }
+        return .easeInOut(duration: model.focusChromeTransitionDuration)
     }
 
     private func interactionZone(

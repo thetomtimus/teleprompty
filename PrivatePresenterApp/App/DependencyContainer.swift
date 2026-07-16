@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TeleprompterCore
 
@@ -39,7 +40,9 @@ final class AppEffectAdapter {
         reduceMotionProvider: {
             NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         },
-        setChromeVisible: { _, _ in },
+        setChromeVisible: { [weak self] _, duration in
+            self?.model?.send(.focusChromeTransitionDurationChanged(duration))
+        },
         stateChanged: { [weak self] state in
             self?.model?.send(.focusChromeStateChanged(state))
         }
