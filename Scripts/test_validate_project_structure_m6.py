@@ -136,6 +136,7 @@ EXPECTED_LEDGER_TITLES = (
     "Make hosted controls match their full semantic targets",
     "Keep the active band current without rebuilding text",
     "Make the semantic oracle deterministic without sharing product state",
+    "Make hosted evidence prove the real private presenter",
 )
 EXPECTED_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -350,6 +351,45 @@ EXPECTED_ORACLE_REPAIR_FORBIDDEN_MARKERS = (
     ("nonpremultiplied-alpha", ".alphaNonpremultiplied"),
     ("screen-dependent-scale", "NSScreen"),
     ("fixed-band-formula", "2 * (42 * 1.42) + 12"),
+)
+
+EXPECTED_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS = (
+    "testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint",
+    "testHostedProbeConfirmsPrivatePresenterBeforePlaybackMutation",
+    "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
+)
+EXPECTED_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS = (
+    ("real-inventory-command", "model.send(.displayInventoryLoaded(", 1),
+    ("real-confirm-command", "model.send(.confirmSelectedDisplay)", 1),
+    (
+        "real-shielded-move-completion",
+        "model.send(.completeShieldedMove(screenID: display.id))",
+        1,
+    ),
+    ("real-show-command", "model.send(.showOverlay)", 1),
+    ("eligible-playback-command", "model.send(.togglePlayback)", 1),
+    (
+        "hosted-hit-identifier",
+        "func hostedIdentifier(at point: CGPoint) -> String?",
+        1,
+    ),
+    (
+        "actual-ax-frame-cache",
+        "private func cacheHostedAccessibilityControlFrames()",
+        1,
+    ),
+    ("active-band-frame-evidence", "activeBandFrame: system.activeBandView.frame", 1),
+    (
+        "text-container-inset-evidence",
+        "textContainerInset: system.textView.textContainerInset",
+        1,
+    ),
+    ("panel-window-frame-evidence", "panelWindowFrame: window.frame", 1),
+)
+EXPECTED_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS = (
+    ("fabricated-shield-state", "model.isShielded ="),
+    ("fabricated-confirmation-state", "model.isSelectionConfirmed ="),
+    ("synthetic-hit-identifier", "OverlayHitRegionResolver(metrics:"),
 )
 
 EXPECTED_M1_REQUIRED_PATHS = (
@@ -661,6 +701,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_ORACLE_REPAIR_NAMED_TESTS": EXPECTED_ORACLE_REPAIR_NAMED_TESTS,
             "M6_ORACLE_REPAIR_SOURCE_MARKERS": EXPECTED_ORACLE_REPAIR_SOURCE_MARKERS,
             "M6_ORACLE_REPAIR_FORBIDDEN_MARKERS": EXPECTED_ORACLE_REPAIR_FORBIDDEN_MARKERS,
+            "M6_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS": EXPECTED_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS,
+            "M6_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS": EXPECTED_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS,
+            "M6_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS": EXPECTED_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -1088,6 +1131,52 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
 
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
+    def testM6HostedEvidenceRepairContractAndMutations(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        support_path = "PrivatePresenterAppTests/M6VisualTestSupport.swift"
+        support = VALIDATOR.read(support_path)
+        for label, marker, expected_count in EXPECTED_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                self.assertEqual(support.count(marker), expected_count, label)
+                original_read = VALIDATOR.read
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == support_path:
+                        return support.replace(marker, f"removed-{label}")
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(
+                    f"visual:hosted-evidence-repair-missing-marker:{label}",
+                    violations,
+                )
+
+        for label, marker in EXPECTED_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS:
+            with self.subTest(forbidden_marker=label):
+                self.assertNotIn(marker, support, label)
+                original_read = VALIDATOR.read
+
+                def injected_read(candidate: str) -> str:
+                    if candidate == support_path:
+                        return support + "\n" + marker
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=injected_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(
+                    f"visual:hosted-evidence-repair-forbidden:{label}",
+                    violations,
+                )
+
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
     def testM6DeterministicSemanticOracleRepairContractAndMutations(self) -> None:
         test_source = VALIDATOR.read(
             "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
@@ -1251,7 +1340,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                     any(item.startswith("evidence:private-surface:") for item in violations)
                 )
 
-    def testM6HistoryIsExactlyTenImmediateRedGreenPairs(self) -> None:
+    def testM6HistoryIsExactlyElevenImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
         self.assertEqual(VALIDATOR.validate_m6_history_rows(rows), [])
         self.assertEqual(len(rows), len(EXPECTED_LEDGER_TITLES) * 2)

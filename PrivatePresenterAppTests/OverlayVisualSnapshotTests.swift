@@ -617,23 +617,50 @@ final class OverlayVisualSnapshotTests: XCTestCase {
 
         for size in M6VisualTestSupport.tierSizes {
             let metrics = OverlayLayoutMetrics(size: size)
+            let samplingProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+            let beforeSampling = samplingProbe.controlState
+            let dispatchesBeforeSampling = samplingProbe.commandDispatchCount
+            assertDenseHostedIdentifierCoverage(
+                metrics.quickControlRegions + metrics.headerControlRegions,
+                in: samplingProbe
+            )
+            XCTAssertEqual(samplingProbe.controlState, beforeSampling)
+            XCTAssertEqual(samplingProbe.commandDispatchCount, dispatchesBeforeSampling)
+
             for region in metrics.quickControlRegions {
-                let corners = [
-                    CGPoint(x: region.frame.minX + 0.5, y: region.frame.minY + 0.5),
-                    CGPoint(x: region.frame.maxX - 0.5, y: region.frame.minY + 0.5),
-                    CGPoint(x: region.frame.minX + 0.5, y: region.frame.maxY - 0.5),
-                    CGPoint(x: region.frame.maxX - 0.5, y: region.frame.maxY - 0.5),
-                ]
-                for point in corners {
-                    let probe = M6VisualTestSupport.HostedRootProbe(size: size)
-                    let before = probe.controlState
-                    probe.press(at: point)
-                    assertQuickControlMutation(
-                        region.identifier, before: before, after: probe.controlState
-                    )
-                }
+                let actionProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+                let before = actionProbe.controlState
+                let dispatchesBeforePress = actionProbe.commandDispatchCount
+                actionProbe.press(
+                    at: CGPoint(x: region.frame.midX, y: region.frame.midY)
+                )
+                assertQuickControlMutation(
+                    region.identifier, before: before, after: actionProbe.controlState
+                )
+                XCTAssertEqual(
+                    actionProbe.commandDispatchCount, dispatchesBeforePress + 1,
+                    region.identifier
+                )
             }
         }
+    }
+
+    func testHostedProbeConfirmsPrivatePresenterBeforePlaybackMutation() {
+        let probe = M6VisualTestSupport.HostedRootProbe(
+            size: CGSize(width: 700, height: 350)
+        )
+        XCTAssertTrue(probe.isPrivatePresenterConfirmed)
+        XCTAssertFalse(probe.isShielded)
+        XCTAssertTrue(probe.controlState.isPaused)
+
+        let dispatchesBeforePress = probe.commandDispatchCount
+        XCTAssertTrue(
+            probe.pressAccessibilityControl(
+                identifier: "privatePresenter.quickPlayback"
+            )
+        )
+        XCTAssertFalse(probe.controlState.isPaused)
+        XCTAssertEqual(probe.commandDispatchCount, dispatchesBeforePress + 1)
     }
 
     func testHostedRootDispatchesEveryControlResizeAndTitleRouteAcrossTiers() {
@@ -697,7 +724,12 @@ final class OverlayVisualSnapshotTests: XCTestCase {
     func testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged() {
         for size in M6VisualTestSupport.tierSizes {
             let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+            probe.setRenderState(.unlocked)
             let baseline = probe.readerEvidence
+            XCTAssertNotEqual(baseline.activeBandFrame, .zero)
+            XCTAssertNotEqual(baseline.textContainerInset, .zero)
+            XCTAssertEqual(baseline.hostingFrame.size, size)
+            XCTAssertEqual(baseline.panelWindowFrame.size, size)
             XCTAssertEqual(
                 probe.accessibilityIdentifiers.intersection(
                     M6VisualTestSupport.HostedRootProbe.chromeIdentifiers
@@ -717,6 +749,16 @@ final class OverlayVisualSnapshotTests: XCTestCase {
                 )
                 XCTAssertEqual(probe.readerEvidence, baseline)
             }
+
+            let rootSource = try! String(
+                contentsOf: sourceURL("OverlayRootView.swift"), encoding: .utf8
+            )
+            XCTAssertEqual(
+                rootSource.components(separatedBy: ".opacity(presentation.opacity)")
+                    .count - 1,
+                2
+            )
+            XCTAssertFalse(rootSource.contains("if isChromeVisible"))
         }
     }
 
@@ -1177,6 +1219,34 @@ final class OverlayVisualSnapshotTests: XCTestCase {
             XCTFail("Unexpected quick control: \(identifier)", file: file, line: line)
         }
         XCTAssertEqual(after, expected, identifier, file: file, line: line)
+    }
+
+    private func assertDenseHostedIdentifierCoverage(
+        _ regions: [OverlayLayoutMetrics.ControlRegion],
+        in probe: M6VisualTestSupport.HostedRootProbe,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        var failures: [String] = []
+        for region in regions {
+            for y in Int(region.frame.minY)..<Int(region.frame.maxY) {
+                for x in Int(region.frame.minX)..<Int(region.frame.maxX) {
+                    let point = CGPoint(x: CGFloat(x) + 0.5, y: CGFloat(y) + 0.5)
+                    let actual = probe.hostedIdentifier(at: point)
+                    if actual != region.identifier, failures.count < 12 {
+                        failures.append(
+                            "\(region.identifier) at \(x),\(y): \(actual ?? \"nil\")"
+                        )
+                    }
+                }
+            }
+        }
+        XCTAssertTrue(
+            failures.isEmpty,
+            "Dense NSHostingView hit/identifier failures: \(failures.joined(separator: \"; \"))",
+            file: file,
+            line: line
+        )
     }
 
     private func assertColor(

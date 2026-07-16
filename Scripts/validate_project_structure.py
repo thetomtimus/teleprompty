@@ -1541,6 +1541,7 @@ M6_LEDGER_TITLES = (
     "Make hosted controls match their full semantic targets",
     "Keep the active band current without rebuilding text",
     "Make the semantic oracle deterministic without sharing product state",
+    "Make hosted evidence prove the real private presenter",
 )
 M6_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -1757,6 +1758,45 @@ M6_ORACLE_REPAIR_FORBIDDEN_MARKERS = (
     ("nonpremultiplied-alpha", ".alphaNonpremultiplied"),
     ("screen-dependent-scale", "NSScreen"),
     ("fixed-band-formula", "2 * (42 * 1.42) + 12"),
+)
+
+M6_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS = (
+    "testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint",
+    "testHostedProbeConfirmsPrivatePresenterBeforePlaybackMutation",
+    "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
+)
+M6_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS = (
+    ("real-inventory-command", "model.send(.displayInventoryLoaded(", 1),
+    ("real-confirm-command", "model.send(.confirmSelectedDisplay)", 1),
+    (
+        "real-shielded-move-completion",
+        "model.send(.completeShieldedMove(screenID: display.id))",
+        1,
+    ),
+    ("real-show-command", "model.send(.showOverlay)", 1),
+    ("eligible-playback-command", "model.send(.togglePlayback)", 1),
+    (
+        "hosted-hit-identifier",
+        "func hostedIdentifier(at point: CGPoint) -> String?",
+        1,
+    ),
+    (
+        "actual-ax-frame-cache",
+        "private func cacheHostedAccessibilityControlFrames()",
+        1,
+    ),
+    ("active-band-frame-evidence", "activeBandFrame: system.activeBandView.frame", 1),
+    (
+        "text-container-inset-evidence",
+        "textContainerInset: system.textView.textContainerInset",
+        1,
+    ),
+    ("panel-window-frame-evidence", "panelWindowFrame: window.frame", 1),
+)
+M6_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS = (
+    ("fabricated-shield-state", "model.isShielded ="),
+    ("fabricated-confirmation-state", "model.isSelectionConfirmed ="),
+    ("synthetic-hit-identifier", "OverlayHitRegionResolver(metrics:"),
 )
 
 M6_M1_REQUIRED_PATHS = (
@@ -3249,7 +3289,7 @@ def validate_m6_continuation_guide(
         if len(rows) == 2
     ]
     pair_pattern = re.compile(
-        r"^\| M6\.(\d) \| `([0-9a-f]{40})` \| `([0-9a-f]{40})` \| "
+        r"^\| M6\.(\d+) \| `([0-9a-f]{40})` \| `([0-9a-f]{40})` \| "
         r"`python3 -B Scripts/test_validate_project_structure_m6\.py` \| ([^|]+) \|$",
         re.MULTILINE,
     )
@@ -3482,6 +3522,7 @@ def validate_m6_source() -> list[str]:
         ("repair", M6_REPAIR_NAMED_TESTS),
         ("band-repair", M6_BAND_REPAIR_NAMED_TESTS),
         ("oracle-repair", M6_ORACLE_REPAIR_NAMED_TESTS),
+        ("hosted-evidence-repair", M6_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS),
     ):
         for name in names:
             if visual_tests.count(f"func {name}()") != 1:
@@ -3520,6 +3561,12 @@ def validate_m6_source() -> list[str]:
     for label, marker in M6_ORACLE_REPAIR_FORBIDDEN_MARKERS:
         if marker in m5_support:
             violations.append(f"visual:oracle-repair-forbidden:{label}")
+    for label, marker, expected_count in M6_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS:
+        if m5_support.count(marker) != expected_count:
+            violations.append(f"visual:hosted-evidence-repair-missing-marker:{label}")
+    for label, marker in M6_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS:
+        if marker in m5_support:
+            violations.append(f"visual:hosted-evidence-repair-forbidden:{label}")
     mask_source = m5_support.split(
         "private static func makeLiteralCardMask", 1
     )[-1].split("private static func drawLiteralSurface", 1)[0]
