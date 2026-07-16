@@ -144,6 +144,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep teardown on the main actor under Swift 6",
     "Record the actor teardown path in final scope",
     "Return every accessibility retry decision explicitly",
+    "Make Carbon callbacks and messages isolation-correct",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -682,6 +683,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Overlay/ReaderTextView.swift",
     "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift",
     "PrivatePresenterApp/Overlay/ScrollSessionController.swift",
+    "PrivatePresenterApp/Services/CarbonHotKeyService.swift",
     "PrivatePresenterApp/Services/PerformanceSignposter.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
@@ -1425,6 +1427,13 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("            return false\n", helper)
         self.assertNotIn("\n            true\n", helper)
         self.assertNotIn("\n            false\n", helper)
+
+    def testM6CarbonIsolationReturnsCallbackAndExposesImmutableMessage(self) -> None:
+        service = VALIDATOR.read("PrivatePresenterApp/Services/CarbonHotKeyService.swift")
+        presentation = VALIDATOR.read("PrivatePresenterApp/Controller/ControllerPresentation.swift")
+        self.assertIn("return MainActor.assumeIsolated {", service)
+        self.assertIn("nonisolated static let cleanupUnknownMessage", service)
+        self.assertIn("return CarbonHotKeyService.cleanupUnknownMessage", presentation)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
