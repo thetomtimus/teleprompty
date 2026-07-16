@@ -227,6 +227,75 @@ final class SystemDisplayServiceTests: XCTestCase {
         }
     }
 
+    func testObservationAndTopologyGenerationsAreMonotonicAndRuntimeOnly() throws {
+        let source = M5ManualDisplayObservationSource()
+        let service = SystemDisplayService(
+            drawableDisplayQuery: { [self.display(id: 1)] },
+            onlineDisplayQuery: { [1] },
+            hardwareFactsQuery: { self.facts(id: $0) },
+            observationSeams: DisplayObservationSeams(
+                install: { source.install($0) },
+                remove: { source.remove() }
+            )
+        )
+
+        try service.startObserving()
+        let firstObservation = service.observationGeneration
+        source.fire(.beginConfigurationFlag)
+        let firstTopology = service.topologyGeneration
+        source.fire([])
+        source.fire(.beginConfigurationFlag)
+        let secondTopology = service.topologyGeneration
+        service.stopObserving()
+        let stoppedObservation = service.observationGeneration
+        try service.startObserving()
+        let secondObservation = service.observationGeneration
+
+        XCTAssertGreaterThan(firstObservation.rawValue, 0)
+        XCTAssertGreaterThan(secondTopology.rawValue, firstTopology.rawValue)
+        XCTAssertGreaterThan(stoppedObservation.rawValue, firstObservation.rawValue)
+        XCTAssertGreaterThan(secondObservation.rawValue, stoppedObservation.rawValue)
+
+        let persistedSource = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(
+                    "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/PersistedSnapshot.swift"
+                ),
+            encoding: .utf8
+        )
+        XCTAssertFalse(persistedSource.contains("DisplayObservationGeneration"))
+        XCTAssertFalse(persistedSource.contains("TopologyTransactionGeneration"))
+        service.stopObserving()
+    }
+
+    func testQueuedDisplayCallbackAfterStopIsIgnored() throws {
+        let source = M5ManualDisplayObservationSource()
+        var deliveries: [Result<RuntimeDisplayInventory, Error>] = []
+        var service: SystemDisplayService? = SystemDisplayService(
+            drawableDisplayQuery: { [self.display(id: 1)] },
+            onlineDisplayQuery: { [1] },
+            hardwareFactsQuery: { self.facts(id: $0) },
+            observationSeams: DisplayObservationSeams(
+                install: { source.install($0) },
+                remove: { source.remove() }
+            )
+        )
+        weak var weakService = service
+        service?.onScreensChanged = { deliveries.append($0) }
+        try service?.startObserving()
+        let queued = try XCTUnwrap(source.latestInstalledCallback)
+
+        service?.stopObserving()
+        service = nil
+        queued([])
+
+        XCTAssertTrue(deliveries.isEmpty)
+        XCTAssertNil(weakService)
+        XCTAssertEqual(source.removeCount, 1)
+    }
+
     private func inventory(
         drawable: [RuntimeDisplay],
         online: [UInt32],
@@ -296,5 +365,28 @@ final class SystemDisplayServiceTests: XCTestCase {
             modelID: id,
             serialNumber: id
         )
+    }
+}
+
+@MainActor
+private final class M5ManualDisplayObservationSource {
+    typealias Callback = @MainActor (CGDisplayChangeSummaryFlags) -> Void
+
+    private var installedCallback: Callback?
+    private(set) var latestInstalledCallback: Callback?
+    private(set) var removeCount = 0
+
+    func install(_ callback: @escaping Callback) {
+        installedCallback = callback
+        latestInstalledCallback = callback
+    }
+
+    func remove() {
+        installedCallback = nil
+        removeCount += 1
+    }
+
+    func fire(_ flags: CGDisplayChangeSummaryFlags) {
+        installedCallback?(flags)
     }
 }

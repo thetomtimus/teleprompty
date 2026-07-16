@@ -421,6 +421,31 @@ final class SnapshotStoreTests: XCTestCase {
         let diagnostics = await store.diagnostics()
         XCTAssertFalse(diagnostics.map(\.description).joined().contains(privateFixture))
     }
+
+    func testCrashRestoreIsPaused() async throws {
+        let fileSystem = RecordingSnapshotFileSystem()
+        let store = makeStore(fileSystem: fileSystem)
+        var snapshot = makeSnapshot(revision: 41, text: "synthetic crash fixture")
+        snapshot.readingAnchor = ReadingAnchor(
+            utf16Offset: 7,
+            viewportFraction: 0.4,
+            document: snapshot.document.text
+        )
+
+        try await store.scheduleSave(snapshot)
+        try await store.flush()
+
+        guard case .loaded(let restored) = await store.load() else {
+            return XCTFail("Expected the last committed atomic snapshot")
+        }
+        XCTAssertEqual(restored.snapshot.revision, 41)
+        XCTAssertEqual(restored.overlaySession.playbackPhase, .paused)
+        XCTAssertEqual(restored.overlaySession.visibility, .hidden)
+        XCTAssertNil(restored.overlaySession.currentSessionDisplayID)
+        XCTAssertEqual(restored.overlaySession.recoveryConfirmationState, .required)
+        XCTAssertEqual(restored.overlaySession.readingAnchor.utf16Offset, 7)
+        XCTAssertTrue(restored.requiresPrivacyReassessment)
+    }
 }
 
 extension SnapshotStoreTests {

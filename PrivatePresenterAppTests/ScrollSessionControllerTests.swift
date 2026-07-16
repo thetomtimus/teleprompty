@@ -977,6 +977,32 @@ extension ScrollSessionControllerTests {
         }
     }
 
+    func testDisconnectDuringTickPersistsAnchorThenHides() throws {
+        let observation = try m5DisconnectObservation()
+
+        XCTAssertEqual(Array(observation.events.prefix(3)), ["stop", "enqueue", "orderOut"])
+        XCTAssertEqual(observation.snapshot.readingAnchor.utf16Offset, 7)
+        XCTAssertEqual(observation.snapshot.revision, observation.revisionAfterDisconnect)
+        XCTAssertEqual(observation.model.overlaySession.playbackPhase, .paused)
+        XCTAssertEqual(observation.model.overlaySession.visibility, .hidden)
+        XCTAssertTrue(observation.model.isShielded)
+    }
+
+    func testDisconnectEnqueuesCapturedAnchorBeforeOrderOutWithoutAwaitingDisk() throws {
+        let observation = try m5DisconnectObservation()
+        let enqueue = try XCTUnwrap(observation.events.firstIndex(of: "enqueue"))
+        let orderOut = try XCTUnwrap(observation.events.firstIndex(of: "orderOut"))
+
+        XCTAssertLessThan(enqueue, orderOut)
+        XCTAssertTrue(observation.persistenceWriteIsStillPending)
+        XCTAssertTrue(observation.didOrderOutWhilePersistenceWasPending)
+        XCTAssertEqual(observation.snapshot.readingAnchor.utf16Offset, 7)
+        XCTAssertGreaterThan(
+            observation.revisionAfterDisconnect,
+            observation.revisionBeforeDisconnect
+        )
+    }
+
     private func issuedM3Generation() -> ScrollSessionGeneration {
         AppModel(
             overlayController: OverlayPanelController(),
@@ -1021,6 +1047,118 @@ extension ScrollSessionControllerTests {
         return h
     }
 
+    private func m5DisconnectObservation() throws -> M5DisconnectObservation {
+        let reference = M5ScrollModelReference()
+        var shouldCaptureDisconnect = false
+        var events: [String] = []
+        var enqueuedSnapshot: PersistedSnapshot?
+        var persistenceWriteIsStillPending = false
+        var didOrderOutWhilePersistenceWasPending = false
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            document: ScriptDocument(text: "synthetic disconnect fixture"),
+            effectHandler: { effect in
+                switch effect {
+                case .stopScrollSession(
+                    let retiring,
+                    let replacement,
+                    let reason,
+                    _,
+                    _
+                ):
+                    guard shouldCaptureDisconnect else { return }
+                    events.append("stop")
+                    shouldCaptureDisconnect = false
+                    reference.value?.send(
+                        .scrollTerminalCapture(
+                            ScrollTerminalCapture(
+                                retiringGeneration: retiring,
+                                replacementGeneration: replacement,
+                                reason: reason,
+                                anchor: ReadingAnchor(
+                                    utf16Offset: 7,
+                                    viewportFraction: 0.4,
+                                    document: "synthetic disconnect fixture"
+                                ),
+                                pixelOffset: 91
+                            )
+                        )
+                    )
+                case .scheduleSnapshot(let snapshot):
+                    guard events.contains("stop") else { return }
+                    events.append("enqueue")
+                    enqueuedSnapshot = snapshot
+                    persistenceWriteIsStillPending = true
+                case .hidePanel:
+                    guard events.contains("stop") else { return }
+                    events.append("orderOut")
+                    didOrderOutWhilePersistenceWasPending = persistenceWriteIsStillPending
+                default:
+                    break
+                }
+            }
+        )
+        reference.value = model
+        let privateDisplay = m5Display(id: 1, builtIn: true, x: 0)
+        let audience = m5Display(id: 2, builtIn: false, x: 1_440)
+        model.refreshDisplays(.success([privateDisplay, audience]))
+        model.selectDisplay(privateDisplay.id)
+        model.confirmSelectedDisplay()
+        model.send(.completeShieldedMove(screenID: privateDisplay.id))
+        model.showOverlay()
+        model.send(.start)
+        model.send(
+            .scrollCheckpoint(
+                ScrollCheckpoint(
+                    generation: model.currentScrollGeneration,
+                    anchor: ReadingAnchor(
+                        utf16Offset: 5,
+                        viewportFraction: 0.4,
+                        document: model.document.text
+                    ),
+                    pixelOffset: 75,
+                    uptime: 1
+                )
+            )
+        )
+        events.removeAll()
+        enqueuedSnapshot = nil
+        persistenceWriteIsStillPending = false
+        let revisionBeforeDisconnect = model.snapshotRevision
+        shouldCaptureDisconnect = true
+
+        model.topologyWillChange()
+
+        return M5DisconnectObservation(
+            model: model,
+            events: events,
+            snapshot: try XCTUnwrap(enqueuedSnapshot),
+            revisionBeforeDisconnect: revisionBeforeDisconnect,
+            revisionAfterDisconnect: model.snapshotRevision,
+            persistenceWriteIsStillPending: persistenceWriteIsStillPending,
+            didOrderOutWhilePersistenceWasPending: didOrderOutWhilePersistenceWasPending
+        )
+    }
+
+    private func m5Display(id: UInt32, builtIn: Bool, x: CGFloat) -> RuntimeDisplay {
+        RuntimeDisplay(
+            id: id,
+            localizedName: builtIn ? "Built-in Display" : "Audience Display",
+            isBuiltIn: builtIn,
+            isMain: builtIn,
+            isOnline: true,
+            frame: NSRect(x: x, y: 0, width: 1_440, height: 900),
+            visibleFrame: NSRect(x: x, y: 0, width: 1_440, height: 860),
+            scale: 2,
+            persistentUUID: "m5-display-\(id)",
+            mirrorSourceID: nil,
+            isInMirrorSet: false,
+            vendorID: 1,
+            modelID: id,
+            serialNumber: id
+        )
+    }
+
     private func m3OverlaySource(_ name: String) -> String { m3Source("Overlay/\(name)") }
     private func m3AppSource(_ name: String) -> String { m3Source("App/\(name)") }
     private func m3ControllerSource(_ name: String) -> String { m3Source("Controller/\(name)") }
@@ -1040,6 +1178,22 @@ extension ScrollSessionControllerTests {
         }
         return result
     }
+}
+
+@MainActor
+private struct M5DisconnectObservation {
+    let model: AppModel
+    let events: [String]
+    let snapshot: PersistedSnapshot
+    let revisionBeforeDisconnect: UInt64
+    let revisionAfterDisconnect: UInt64
+    let persistenceWriteIsStillPending: Bool
+    let didOrderOutWhilePersistenceWasPending: Bool
+}
+
+@MainActor
+private final class M5ScrollModelReference {
+    weak var value: AppModel?
 }
 
 @MainActor

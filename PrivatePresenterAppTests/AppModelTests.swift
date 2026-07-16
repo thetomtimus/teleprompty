@@ -1540,6 +1540,167 @@ final class AppModelTests: XCTestCase {
     }
 }
 
+// MARK: - M5.2 generation, reconnect, and crash RED contract
+
+extension AppModelTests {
+    func testReconnectRequiresConfirmation() {
+        let panel = OverlayPanelController()
+        let model = AppModel(overlayController: panel)
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+
+        let first = model.beginTopologyTransaction()
+        model.acceptDisplayInventory(
+            RuntimeDisplayInventory(displays: [privateDisplay, audience]),
+            generation: first
+        )
+        model.selectDisplay(privateDisplay.id)
+        model.confirmSelectedDisplay(generation: first)
+        model.completeShieldedMove(screenID: privateDisplay.id, generation: first)
+        model.showOverlay()
+
+        let disconnected = model.beginTopologyTransaction()
+        model.acceptDisplayInventory(
+            RuntimeDisplayInventory(displays: [audience]),
+            generation: disconnected
+        )
+        let reconnected = model.beginTopologyTransaction()
+        model.acceptDisplayInventory(
+            RuntimeDisplayInventory(displays: [privateDisplay, audience]),
+            generation: reconnected
+        )
+        model.showOverlay()
+        model.send(.start)
+
+        XCTAssertTrue(model.isShielded)
+        XCTAssertFalse(model.isSelectionConfirmed)
+        XCTAssertEqual(model.overlaySession.recoveryConfirmationState, .required)
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+        XCTAssertFalse(panel.teleprompterPanel.isVisible)
+    }
+
+    func testStaleTopologyResultCannotMoveRevealOrResume() {
+        var effects: [AppEffect] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            document: ScriptDocument(text: "synthetic lifecycle fixture"),
+            effectHandler: { effects.append($0) }
+        )
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        let stale = model.beginTopologyTransaction()
+        let staleInventory = RuntimeDisplayInventory(displays: [privateDisplay, audience])
+        model.acceptDisplayInventory(staleInventory, generation: stale)
+
+        let current = model.beginTopologyTransaction()
+        let replacementWithSameSessionID = RuntimeDisplay(
+            id: privateDisplay.id,
+            localizedName: "Replacement Display",
+            isBuiltIn: true,
+            isMain: true,
+            isOnline: true,
+            frame: privateDisplay.frame,
+            visibleFrame: privateDisplay.visibleFrame,
+            scale: privateDisplay.scale,
+            persistentUUID: "replacement-display-1",
+            mirrorSourceID: nil,
+            isInMirrorSet: false,
+            vendorID: 99,
+            modelID: 99,
+            serialNumber: 99
+        )
+        model.acceptDisplayInventory(
+            RuntimeDisplayInventory(displays: [replacementWithSameSessionID, audience]),
+            generation: current
+        )
+        effects.removeAll()
+
+        model.acceptDisplayInventory(staleInventory, generation: stale)
+        model.confirmSelectedDisplay(generation: stale)
+        model.completeShieldedMove(screenID: privateDisplay.id, generation: stale)
+        model.showOverlay()
+        model.send(.start)
+
+        XCTAssertTrue(effects.isEmpty)
+        XCTAssertTrue(model.isShielded)
+        XCTAssertFalse(model.isSelectionConfirmed)
+        XCTAssertEqual(model.displays.first?.localizedName, "Replacement Display")
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
+    }
+
+    func testReconnectConfirmationMustMatchCurrentGeneration() {
+        let model = AppModel(overlayController: OverlayPanelController())
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        let stale = model.beginTopologyTransaction()
+        model.acceptDisplayInventory(
+            RuntimeDisplayInventory(displays: [audience]),
+            generation: stale
+        )
+        let current = model.beginTopologyTransaction()
+        model.acceptDisplayInventory(
+            RuntimeDisplayInventory(displays: [privateDisplay, audience]),
+            generation: current
+        )
+        model.selectDisplay(privateDisplay.id)
+
+        model.confirmSelectedDisplay(generation: stale)
+        model.completeShieldedMove(screenID: privateDisplay.id, generation: stale)
+        XCTAssertFalse(model.isSelectionConfirmed)
+        XCTAssertTrue(model.isShielded)
+
+        model.confirmSelectedDisplay(generation: current)
+        XCTAssertTrue(model.isSelectionConfirmed)
+        XCTAssertTrue(model.isShielded)
+        model.completeShieldedMove(screenID: privateDisplay.id, generation: current)
+        XCTAssertFalse(model.isShielded)
+    }
+
+    func testCrashRestoreClearsRuntimeDisplayAndNeverShowsOrStarts() {
+        let privateDisplay = display(id: 1, builtIn: true, x: 0)
+        let audience = display(id: 2, builtIn: false, x: 1_440)
+        var effects: [AppEffect] = []
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            document: ScriptDocument(text: "synthetic crash restore"),
+            effectHandler: { effects.append($0) }
+        )
+        let generation = model.beginTopologyTransaction()
+        model.acceptDisplayInventory(
+            RuntimeDisplayInventory(displays: [privateDisplay, audience]),
+            generation: generation
+        )
+        model.selectDisplay(privateDisplay.id)
+        model.confirmSelectedDisplay(generation: generation)
+        model.completeShieldedMove(screenID: privateDisplay.id, generation: generation)
+        effects.removeAll()
+
+        let snapshot = PersistedSnapshot(
+            revision: 9,
+            document: ScriptDocument(text: "synthetic crash restore", revision: 9),
+            readingAnchor: ReadingAnchor(
+                utf16Offset: 5,
+                viewportFraction: 0.4,
+                document: "synthetic crash restore"
+            ),
+            preferences: model.preferences
+        )
+        model.send(.restore(snapshot))
+
+        XCTAssertTrue(model.isPaused)
+        XCTAssertEqual(model.overlaySession.visibility, .hidden)
+        XCTAssertNil(model.overlaySession.currentSessionDisplayID)
+        XCTAssertNil(model.selectedDisplayID)
+        XCTAssertTrue(model.displays.isEmpty)
+        XCTAssertFalse(model.isSelectionConfirmed)
+        XCTAssertTrue(model.isShielded)
+        XCTAssertFalse(effects.contains { if case .showPanel = $0 { true } else { false } })
+        XCTAssertFalse(effects.contains { if case .startScrollSession = $0 { true } else { false } })
+    }
+}
+
 @MainActor
 private final class AppModelReference {
     weak var value: AppModel?
