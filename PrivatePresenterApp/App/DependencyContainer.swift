@@ -482,9 +482,17 @@ final class AppEffectAdapter {
         case .moveControllerWhileShielded(let display):
             controllerWindowController?.placeControllerWhileShielded(on: display)
             let model = model
+            let topologyGeneration = model?.activeTopologyGeneration
             Task { @MainActor in
                 await Task.yield()
-                model?.send(.completeShieldedMove(screenID: display.id))
+                if let topologyGeneration {
+                    model?.completeShieldedMove(
+                        screenID: display.id,
+                        generation: topologyGeneration
+                    )
+                } else {
+                    model?.send(.completeShieldedMove(screenID: display.id))
+                }
             }
         case .resetViewport(let generation):
             scrollSession?.restart(generation: generation)

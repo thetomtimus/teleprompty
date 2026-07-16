@@ -167,6 +167,17 @@ final class OverlayPanelController: NSWindowController {
         connectedModel.map(ObjectIdentifier.init)
     }
 
+    func teardownConnection() {
+        hide()
+        onAppliedFrame = nil
+        onReaderAttachmentChanged = nil
+        onReaderScreenChanged = nil
+        onReaderBoundsWillChange = nil
+        onReaderBoundsChanged = nil
+        teleprompterPanel.contentViewController = nil
+        connectedModel = nil
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")

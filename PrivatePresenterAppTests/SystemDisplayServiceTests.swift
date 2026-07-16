@@ -238,18 +238,29 @@ final class SystemDisplayServiceTests: XCTestCase {
                 remove: { source.remove() }
             )
         )
+        var nextTopologyRawValue: UInt64 = 2
+        service.onReconfigurationBegan = { _ in
+            defer { nextTopologyRawValue += 1 }
+            return RuntimeDisplayGeneration(rawValue: nextTopologyRawValue)
+        }
 
-        try service.startObserving()
-        let firstObservation = service.observationGeneration
+        try service.startObserving(
+            generation: RuntimeDisplayGeneration(rawValue: 1)
+        )
+        let firstObservation = try XCTUnwrap(service.observationGeneration)
         source.fire(.beginConfigurationFlag)
-        let firstTopology = service.topologyGeneration
+        let firstTopology = try XCTUnwrap(service.topologyGeneration)
         source.fire([])
         source.fire(.beginConfigurationFlag)
-        let secondTopology = service.topologyGeneration
-        service.stopObserving()
-        let stoppedObservation = service.observationGeneration
-        try service.startObserving()
-        let secondObservation = service.observationGeneration
+        let secondTopology = try XCTUnwrap(service.topologyGeneration)
+        service.stopObserving(
+            invalidatedBy: RuntimeDisplayGeneration(rawValue: 4)
+        )
+        let stoppedObservation = try XCTUnwrap(service.observationGeneration)
+        try service.startObserving(
+            generation: RuntimeDisplayGeneration(rawValue: 5)
+        )
+        let secondObservation = try XCTUnwrap(service.observationGeneration)
 
         XCTAssertGreaterThan(firstObservation.rawValue, 0)
         XCTAssertGreaterThan(secondTopology.rawValue, firstTopology.rawValue)
@@ -267,7 +278,18 @@ final class SystemDisplayServiceTests: XCTestCase {
         )
         XCTAssertFalse(persistedSource.contains("DisplayObservationGeneration"))
         XCTAssertFalse(persistedSource.contains("TopologyTransactionGeneration"))
-        service.stopObserving()
+        let runtimeSource = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("PrivatePresenterApp/App/AppRuntime.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(runtimeSource.contains("addingReportingOverflow(1)"))
+        XCTAssertTrue(runtimeSource.contains("issueDisplayGeneration()"))
+        service.stopObserving(
+            invalidatedBy: RuntimeDisplayGeneration(rawValue: 6)
+        )
     }
 
     func testQueuedDisplayCallbackAfterStopIsIgnored() throws {
@@ -283,11 +305,18 @@ final class SystemDisplayServiceTests: XCTestCase {
             )
         )
         weak var weakService = service
-        service?.onScreensChanged = { deliveries.append($0) }
-        try service?.startObserving()
+        service?.onReconfigurationBegan = { _ in
+            RuntimeDisplayGeneration(rawValue: 2)
+        }
+        service?.onScreensChanged = { _, _, result in deliveries.append(result) }
+        try service?.startObserving(
+            generation: RuntimeDisplayGeneration(rawValue: 1)
+        )
         let queued = try XCTUnwrap(source.latestInstalledCallback)
 
-        service?.stopObserving()
+        service?.stopObserving(
+            invalidatedBy: RuntimeDisplayGeneration(rawValue: 3)
+        )
         service = nil
         queued([])
 

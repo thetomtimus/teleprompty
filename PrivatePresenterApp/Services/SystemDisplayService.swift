@@ -181,34 +181,75 @@ enum DisplayObservationError: Error {
 }
 
 @MainActor
+struct DisplayObservationSeams {
+    typealias Callback = @MainActor (CGDisplayChangeSummaryFlags) -> Void
+
+    let install: (@escaping Callback) throws -> Void
+    let remove: () -> Void
+}
+
+private final class DisplayReconfigurationCallbackContext: @unchecked Sendable {
+    let lifetimeRawValue: UInt64
+    let enqueue: @Sendable (UInt32) -> Void
+
+    @MainActor
+    init(service: SystemDisplayService, generation: RuntimeDisplayGeneration) {
+        let lifetimeRawValue = generation.rawValue
+        self.lifetimeRawValue = lifetimeRawValue
+        enqueue = { [weak service] rawFlags in
+            DispatchQueue.main.async { [weak service] in
+                MainActor.assumeIsolated {
+                    service?.receiveReconfiguration(
+                        flags: CGDisplayChangeSummaryFlags(rawValue: rawFlags),
+                        observationGeneration: RuntimeDisplayGeneration(
+                            rawValue: lifetimeRawValue
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@MainActor
 final class SystemDisplayService {
     typealias DrawableDisplayQuery = @MainActor () throws -> [RuntimeDisplay]
     typealias OnlineDisplayQuery = @MainActor () throws -> [UInt32]
     typealias HardwareFactsQuery = @MainActor (UInt32) throws -> DisplayHardwareFacts
 
-    var onReconfigurationBegan: (() -> Void)?
-    var onScreensChanged: ((Result<RuntimeDisplayInventory, Error>) -> Void)?
+    var onReconfigurationBegan:
+        ((RuntimeDisplayGeneration) -> RuntimeDisplayGeneration?)?
+    var onScreensChanged:
+        ((RuntimeDisplayGeneration, RuntimeDisplayGeneration,
+          Result<RuntimeDisplayInventory, Error>) -> Void)?
     private var isObserving = false
     private let drawableDisplayQuery: DrawableDisplayQuery
     private let onlineDisplayQuery: OnlineDisplayQuery
     private let hardwareFactsQuery: HardwareFactsQuery
+    private let observationSeams: DisplayObservationSeams?
+    private var callbackContext: DisplayReconfigurationCallbackContext?
+    private(set) var observationGeneration: RuntimeDisplayGeneration?
+    private(set) var topologyGeneration: RuntimeDisplayGeneration?
 
     convenience init() {
         self.init(
             drawableDisplayQuery: { try Self.queryDrawableDisplays() },
             onlineDisplayQuery: { try Self.queryOnlineDisplayIDs() },
-            hardwareFactsQuery: { Self.hardwareFacts(for: $0) }
+            hardwareFactsQuery: { Self.hardwareFacts(for: $0) },
+            observationSeams: nil
         )
     }
 
     init(
         drawableDisplayQuery: @escaping DrawableDisplayQuery,
         onlineDisplayQuery: @escaping OnlineDisplayQuery,
-        hardwareFactsQuery: @escaping HardwareFactsQuery
+        hardwareFactsQuery: @escaping HardwareFactsQuery,
+        observationSeams: DisplayObservationSeams? = nil
     ) {
         self.drawableDisplayQuery = drawableDisplayQuery
         self.onlineDisplayQuery = onlineDisplayQuery
         self.hardwareFactsQuery = hardwareFactsQuery
+        self.observationSeams = observationSeams
     }
 
     func currentDisplays() throws -> [RuntimeDisplay] {
@@ -266,36 +307,79 @@ final class SystemDisplayService {
         )
     }
 
-    func startObserving() throws {
+    func startObserving(generation: RuntimeDisplayGeneration) throws {
         guard !isObserving else { return }
-        let status = CGDisplayRegisterReconfigurationCallback(
-            displayReconfigurationCallback,
-            Unmanaged.passUnretained(self).toOpaque()
-        )
-        guard status == .success else {
-            throw DisplayObservationError.registrationFailed(status)
+        if let observationSeams {
+            try observationSeams.install { [weak self] flags in
+                self?.receiveReconfiguration(
+                    flags: flags,
+                    observationGeneration: generation
+                )
+            }
+        } else {
+            let context = DisplayReconfigurationCallbackContext(
+                service: self,
+                generation: generation
+            )
+            let status = CGDisplayRegisterReconfigurationCallback(
+                displayReconfigurationCallback,
+                Unmanaged.passUnretained(context).toOpaque()
+            )
+            guard status == .success else {
+                throw DisplayObservationError.registrationFailed(status)
+            }
+            callbackContext = context
         }
+        observationGeneration = generation
+        topologyGeneration = nil
         isObserving = true
     }
 
-    func stopObserving() {
+    func stopObserving(invalidatedBy generation: RuntimeDisplayGeneration) {
         guard isObserving else { return }
-        CGDisplayRemoveReconfigurationCallback(
-            displayReconfigurationCallback,
-            Unmanaged.passUnretained(self).toOpaque()
-        )
+        observationGeneration = generation
+        topologyGeneration = nil
         isObserving = false
+        if let observationSeams {
+            observationSeams.remove()
+        } else if let callbackContext {
+            CGDisplayRemoveReconfigurationCallback(
+                displayReconfigurationCallback,
+                Unmanaged.passUnretained(callbackContext).toOpaque()
+            )
+        }
+        callbackContext = nil
     }
 
-    fileprivate func receiveReconfiguration(flags: CGDisplayChangeSummaryFlags) {
+    fileprivate func receiveReconfiguration(
+        flags: CGDisplayChangeSummaryFlags,
+        observationGeneration: RuntimeDisplayGeneration
+    ) {
+        guard
+            isObserving,
+            observationGeneration == self.observationGeneration
+        else { return }
         if flags.contains(.beginConfigurationFlag) {
-            onReconfigurationBegan?()
+            guard let onReconfigurationBegan else {
+                topologyGeneration = nil
+                return
+            }
+            topologyGeneration = onReconfigurationBegan(observationGeneration)
             return
         }
+        guard let topologyGeneration else { return }
         do {
-            onScreensChanged?(.success(try currentInventory()))
+            onScreensChanged?(
+                observationGeneration,
+                topologyGeneration,
+                .success(try currentInventory())
+            )
         } catch {
-            onScreensChanged?(.failure(error))
+            onScreensChanged?(
+                observationGeneration,
+                topologyGeneration,
+                .failure(error)
+            )
         }
     }
 
@@ -409,8 +493,8 @@ private func displayReconfigurationCallback(
     _ userInfo: UnsafeMutableRawPointer?
 ) {
     guard let userInfo else { return }
-    let service = Unmanaged<SystemDisplayService>.fromOpaque(userInfo).takeUnretainedValue()
-    DispatchQueue.main.async {
-        service.receiveReconfiguration(flags: flags)
-    }
+    let context = Unmanaged<DisplayReconfigurationCallbackContext>
+        .fromOpaque(userInfo)
+        .takeUnretainedValue()
+    context.enqueue(flags.rawValue)
 }

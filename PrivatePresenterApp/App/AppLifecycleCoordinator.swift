@@ -8,6 +8,7 @@ enum AppLifecycleEvent: Equatable, Sendable {
     case flushPausedSnapshot
     case flushFailed
     case enterQuiescence
+    case closeCarbonDispatch
     case unregisterHotKeys
     case stopFocusPointerDisplay
     case teardownScrollSession
@@ -20,6 +21,7 @@ enum AppLifecycleEvent: Equatable, Sendable {
 final class AppLifecycleCoordinator {
     private let model: AppModel
     private let flushPausedSnapshot: @MainActor () async -> Bool
+    private let closeCarbonDispatch: @MainActor () async -> Void
     private let unregisterHotKeys: @MainActor () async -> Void
     private let stopFocusPointerDisplay: @MainActor () async -> Void
     private let teardownScrollSession: @MainActor () async -> Void
@@ -27,11 +29,13 @@ final class AppLifecycleCoordinator {
     private let closeController: @MainActor () async -> Void
     private let record: @MainActor (AppLifecycleEvent) -> Void
     private var completed = false
-    private var inFlight = false
+    private var nextAttemptID: UInt64 = 0
+    private var inFlight: (id: UInt64, task: Task<Bool, Never>)?
 
     init(
         model: AppModel,
         flushPausedSnapshot: @escaping @MainActor () async -> Bool,
+        closeCarbonDispatch: @escaping @MainActor () async -> Void = {},
         unregisterHotKeys: @escaping @MainActor () async -> Void,
         stopFocusPointerDisplay: @escaping @MainActor () async -> Void,
         teardownScrollSession: @escaping @MainActor () async -> Void,
@@ -41,6 +45,7 @@ final class AppLifecycleCoordinator {
     ) {
         self.model = model
         self.flushPausedSnapshot = flushPausedSnapshot
+        self.closeCarbonDispatch = closeCarbonDispatch
         self.unregisterHotKeys = unregisterHotKeys
         self.stopFocusPointerDisplay = stopFocusPointerDisplay
         self.teardownScrollSession = teardownScrollSession
@@ -51,10 +56,20 @@ final class AppLifecycleCoordinator {
 
     func stopAndFlush() async -> Bool {
         if completed { return true }
-        guard !inFlight else { return false }
-        inFlight = true
-        defer { inFlight = false }
+        if let inFlight { return await inFlight.task.value }
+        let (attemptID, overflow) = nextAttemptID.addingReportingOverflow(1)
+        precondition(!overflow, "Lifecycle attempt generation exhausted")
+        nextAttemptID = attemptID
+        let task = Task { @MainActor [weak self] in
+            await self?.performStopAndFlush() ?? false
+        }
+        inFlight = (attemptID, task)
+        let result = await task.value
+        if inFlight?.id == attemptID { inFlight = nil }
+        return result
+    }
 
+    private func performStopAndFlush() async -> Bool {
         record(.rejectMutations)
         model.send(.beginTerminationAttempt)
         record(.pauseAndCapture)
@@ -71,6 +86,8 @@ final class AppLifecycleCoordinator {
 
         model.send(.enterTerminationQuiescence)
         record(.enterQuiescence)
+        record(.closeCarbonDispatch)
+        await closeCarbonDispatch()
         record(.unregisterHotKeys)
         await unregisterHotKeys()
         record(.stopFocusPointerDisplay)

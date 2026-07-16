@@ -1549,7 +1549,8 @@ extension AppModelTests {
         let privateDisplay = display(id: 1, builtIn: true, x: 0)
         let audience = display(id: 2, builtIn: false, x: 1_440)
 
-        let first = model.beginTopologyTransaction()
+        let first = RuntimeDisplayGeneration(rawValue: 1)
+        model.beginTopologyTransaction(generation: first)
         model.acceptDisplayInventory(
             RuntimeDisplayInventory(displays: [privateDisplay, audience]),
             generation: first
@@ -1559,12 +1560,14 @@ extension AppModelTests {
         model.completeShieldedMove(screenID: privateDisplay.id, generation: first)
         model.showOverlay()
 
-        let disconnected = model.beginTopologyTransaction()
+        let disconnected = RuntimeDisplayGeneration(rawValue: 2)
+        model.beginTopologyTransaction(generation: disconnected)
         model.acceptDisplayInventory(
             RuntimeDisplayInventory(displays: [audience]),
             generation: disconnected
         )
-        let reconnected = model.beginTopologyTransaction()
+        let reconnected = RuntimeDisplayGeneration(rawValue: 3)
+        model.beginTopologyTransaction(generation: reconnected)
         model.acceptDisplayInventory(
             RuntimeDisplayInventory(displays: [privateDisplay, audience]),
             generation: reconnected
@@ -1589,11 +1592,13 @@ extension AppModelTests {
         )
         let privateDisplay = display(id: 1, builtIn: true, x: 0)
         let audience = display(id: 2, builtIn: false, x: 1_440)
-        let stale = model.beginTopologyTransaction()
+        let stale = RuntimeDisplayGeneration(rawValue: 1)
+        model.beginTopologyTransaction(generation: stale)
         let staleInventory = RuntimeDisplayInventory(displays: [privateDisplay, audience])
         model.acceptDisplayInventory(staleInventory, generation: stale)
 
-        let current = model.beginTopologyTransaction()
+        let current = RuntimeDisplayGeneration(rawValue: 2)
+        model.beginTopologyTransaction(generation: current)
         let replacementWithSameSessionID = RuntimeDisplay(
             id: privateDisplay.id,
             localizedName: "Replacement Display",
@@ -1634,12 +1639,14 @@ extension AppModelTests {
         let model = AppModel(overlayController: OverlayPanelController())
         let privateDisplay = display(id: 1, builtIn: true, x: 0)
         let audience = display(id: 2, builtIn: false, x: 1_440)
-        let stale = model.beginTopologyTransaction()
+        let stale = RuntimeDisplayGeneration(rawValue: 1)
+        model.beginTopologyTransaction(generation: stale)
         model.acceptDisplayInventory(
             RuntimeDisplayInventory(displays: [audience]),
             generation: stale
         )
-        let current = model.beginTopologyTransaction()
+        let current = RuntimeDisplayGeneration(rawValue: 2)
+        model.beginTopologyTransaction(generation: current)
         model.acceptDisplayInventory(
             RuntimeDisplayInventory(displays: [privateDisplay, audience]),
             generation: current
@@ -1667,7 +1674,8 @@ extension AppModelTests {
             document: ScriptDocument(text: "synthetic crash restore"),
             effectHandler: { effects.append($0) }
         )
-        let generation = model.beginTopologyTransaction()
+        let generation = RuntimeDisplayGeneration(rawValue: 1)
+        model.beginTopologyTransaction(generation: generation)
         model.acceptDisplayInventory(
             RuntimeDisplayInventory(displays: [privateDisplay, audience]),
             generation: generation

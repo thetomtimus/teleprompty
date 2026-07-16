@@ -202,6 +202,7 @@ final class CarbonHotKeyService {
     private var cachedShutdown: HotKeyShutdownReport?
     private var dispatchGeneration: UInt64 = 0
     private(set) var state: CarbonHotKeyServiceState = .unregistered
+    private(set) var isDispatchClosed = false
 
     init(
         registrar: HotKeyRegistering,
@@ -233,6 +234,9 @@ final class CarbonHotKeyService {
     func register(_ bindings: [ShortcutBinding]) -> HotKeyTransactionResult {
         if case .cleanupUnknown(let failure) = state {
             return .cleanupUnknown(failure)
+        }
+        guard !isDispatchClosed else {
+            return .invalid([.unknownActionCoverage])
         }
         if case .registered(let committed) = state, committed == bindings {
             return .committed(committed)
@@ -315,6 +319,9 @@ final class CarbonHotKeyService {
     func reconfigure(_ proposedBindings: [ShortcutBinding]) -> HotKeyTransactionResult {
         if case .cleanupUnknown(let failure) = state {
             return .cleanupUnknown(failure)
+        }
+        guard !isDispatchClosed else {
+            return .invalid([.unknownActionCoverage])
         }
         guard case .registered(let oldBindings) = state else {
             return register(proposedBindings)
@@ -399,6 +406,9 @@ final class CarbonHotKeyService {
         if case .cleanupUnknown(let failure) = state {
             return .cleanupUnknown(failure)
         }
+        guard !isDispatchClosed else {
+            return .invalid([.unknownActionCoverage])
+        }
         guard active.isEmpty else {
             if case .registered(let bindings) = state { return .committed(bindings) }
             return register(desiredBindings)
@@ -406,9 +416,15 @@ final class CarbonHotKeyService {
         return register(desiredBindings)
     }
 
+    func closeDispatch() {
+        guard !isDispatchClosed else { return }
+        isDispatchClosed = true
+        dispatchGeneration &+= 1
+    }
+
     func shutdown() -> HotKeyShutdownReport {
         if let cachedShutdown { return cachedShutdown }
-        dispatchGeneration &+= 1
+        closeDispatch()
         let entries = orderedEntries(active, reversed: true) + Array(uncertain.reversed())
         active.removeAll()
         uncertain.removeAll()
@@ -456,6 +472,7 @@ final class CarbonHotKeyService {
 
     private func receive(identifier: ProductHotKeyIdentifier) -> Int32 {
         guard
+            !isDispatchClosed,
             let action = identifier.action,
             case .registered = state,
             active[action] != nil

@@ -1,5 +1,13 @@
 import AppKit
 
+struct RuntimeDisplayGeneration: Equatable, Comparable, Sendable {
+    let rawValue: UInt64
+
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
 enum AppRuntimeStartupEvent: Equatable {
     case shieldController
     case load
@@ -96,6 +104,10 @@ final class AppRuntime {
 
     private let startupSeams: AppRuntimeStartupSeams
     private var startupTask: Task<Void, Never>?
+    private var nextDisplayGenerationRawValue: UInt64 = 0
+    private(set) var observationGeneration: RuntimeDisplayGeneration?
+    private(set) var topologyGeneration: RuntimeDisplayGeneration?
+    private(set) var hotKeyShutdownReport: HotKeyShutdownReport?
     lazy var lifecycleCoordinator = AppLifecycleCoordinator(
         model: model,
         flushPausedSnapshot: { [weak self] in
@@ -103,15 +115,24 @@ final class AppRuntime {
             self.startupSeams.record(.flushPersistence)
             return await self.dependencies.effectAdapter.flushForTermination()
         },
+        closeCarbonDispatch: { [weak self] in
+            guard let self, self.hotKeyStartupMode == .product else { return }
+            self.dependencies.effectAdapter.carbonHotKeyService.closeDispatch()
+        },
         unregisterHotKeys: { [weak self] in
             await self?.unregisterSelectedHotKeys()
         },
         stopFocusPointerDisplay: { [weak self] in
-            self?.dependencies.effectAdapter.handle(.teardownFocusMode)
-            self?.displayService.stopObserving()
+            guard let self else { return }
+            self.dependencies.effectAdapter.handle(.teardownFocusMode)
+            let invalidation = self.issueDisplayGeneration()
+            self.observationGeneration = nil
+            self.topologyGeneration = nil
+            self.displayService.stopObserving(invalidatedBy: invalidation)
         },
         teardownScrollSession: { [weak self] in
             self?.model.send(.teardownScrollSession)
+            self?.overlayController.teardownConnection()
         },
         removeStatusItem: { [weak self] in
             self?.statusItemController.remove()
@@ -242,11 +263,15 @@ final class AppRuntime {
             model: model,
             controller: controllerWindowController
         )
-        displayService.onReconfigurationBegan = { [weak self] in
-            self?.receiveTopologyWillChange()
+        displayService.onReconfigurationBegan = { [weak self] observation in
+            self?.receiveTopologyWillChange(observation: observation)
         }
-        displayService.onScreensChanged = { [weak self] result in
-            self?.receive(result)
+        displayService.onScreensChanged = { [weak self] observation, topology, result in
+            self?.receive(
+                result,
+                observation: observation,
+                topology: topology
+            )
         }
     }
 
@@ -270,7 +295,7 @@ final class AppRuntime {
     private func unregisterSelectedHotKeys() async {
         switch hotKeyStartupMode {
         case .product:
-            _ = dependencies.effectAdapter.carbonHotKeyService.shutdown()
+            hotKeyShutdownReport = dependencies.effectAdapter.carbonHotKeyService.shutdown()
         case .legacyDiagnostic:
             #if DEBUG
             diagnosticHotKeyService.unregister()
@@ -323,18 +348,27 @@ final class AppRuntime {
         afterRestore()
 
         startupSeams.record(.observeAndQuery)
+        let observation = issueDisplayGeneration()
+        observationGeneration = observation
+        let topology = beginTopologyTransaction(observation: observation)
         let inventoryResult: Result<RuntimeDisplayInventory, Error>
         if let observeAndQuery = startupSeams.observeAndQuery {
             inventoryResult = observeAndQuery()
         } else {
             do {
-                try displayService.startObserving()
+                try displayService.startObserving(generation: observation)
                 inventoryResult = .success(try displayService.currentInventory())
             } catch {
                 inventoryResult = .failure(error)
             }
         }
-        receive(inventoryResult)
+        if let topology {
+            receive(
+                inventoryResult,
+                observation: observation,
+                topology: topology
+            )
+        }
         startupSeams.record(.evaluatePrivacy)
 
         switch hotKeyStartupMode {
@@ -371,18 +405,27 @@ final class AppRuntime {
         statusItemController.setActionsReady(true)
     }
 
-    private func receive(_ result: Result<RuntimeDisplayInventory, Error>) {
+    private func receive(
+        _ result: Result<RuntimeDisplayInventory, Error>,
+        observation: RuntimeDisplayGeneration,
+        topology: RuntimeDisplayGeneration
+    ) {
+        guard
+            observation == observationGeneration,
+            topology == topologyGeneration
+        else { return }
         #if DEBUG
         if let topologyDiagnosticCorrelationID {
             switch result {
             case .success(let inventory):
-                model.send(
-                    .displayInventoryLoaded(inventory),
+                model.acceptDisplayInventory(
+                    inventory,
+                    generation: topology,
                     correlationID: topologyDiagnosticCorrelationID
                 )
             case .failure:
-                model.send(
-                    .displayInventoryFailed,
+                model.acceptDisplayInventoryFailure(
+                    generation: topology,
                     correlationID: topologyDiagnosticCorrelationID
                 )
             }
@@ -390,17 +433,48 @@ final class AppRuntime {
             return
         }
         #endif
-        model.refreshDisplayInventory(result)
+        switch result {
+        case .success(let inventory):
+            model.acceptDisplayInventory(inventory, generation: topology)
+        case .failure:
+            model.acceptDisplayInventoryFailure(generation: topology)
+        }
     }
 
-    private func receiveTopologyWillChange() {
+    private func receiveTopologyWillChange(
+        observation: RuntimeDisplayGeneration
+    ) -> RuntimeDisplayGeneration? {
+        beginTopologyTransaction(observation: observation)
+    }
+
+    private func beginTopologyTransaction(
+        observation: RuntimeDisplayGeneration
+    ) -> RuntimeDisplayGeneration? {
+        guard
+            observation == observationGeneration,
+            !model.isTerminationAttempting,
+            !model.isTerminationQuiescing
+        else { return nil }
+        let generation = issueDisplayGeneration()
+        topologyGeneration = generation
         #if DEBUG
         let correlationID = UUID()
         topologyDiagnosticCorrelationID = correlationID
-        model.send(.topologyWillChange, correlationID: correlationID)
+        model.beginTopologyTransaction(
+            generation: generation,
+            correlationID: correlationID
+        )
         #else
-        model.send(.topologyWillChange)
+        model.beginTopologyTransaction(generation: generation)
         #endif
+        return generation
+    }
+
+    private func issueDisplayGeneration() -> RuntimeDisplayGeneration {
+        let (next, overflow) = nextDisplayGenerationRawValue.addingReportingOverflow(1)
+        precondition(!overflow, "Runtime display generation exhausted")
+        nextDisplayGenerationRawValue = next
+        return RuntimeDisplayGeneration(rawValue: next)
     }
 
     #if DEBUG

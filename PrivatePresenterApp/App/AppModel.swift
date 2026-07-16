@@ -59,12 +59,15 @@ final class AppModel {
     @ObservationIgnored private let topologyEvaluator = DisplayTopologyEvaluator()
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let effectHandler: @MainActor (AppEffect) -> Void
+    @ObservationIgnored private(set) var activeTopologyGeneration: RuntimeDisplayGeneration?
     @ObservationIgnored private var latestTopology: DisplayTopologySnapshot?
     @ObservationIgnored private var candidateFingerprint: DisplayFingerprint?
     @ObservationIgnored private var pendingClear: PendingClear?
     @ObservationIgnored private var pendingShieldedMoveDisplayID: UInt32?
+    @ObservationIgnored private var pendingShieldedMoveGeneration: RuntimeDisplayGeneration?
     @ObservationIgnored private var pendingCommands: [AppCommand] = []
     @ObservationIgnored private var isDrainingCommands = false
+    @ObservationIgnored private var isAwaitingSynchronousScrollCapture = false
     @ObservationIgnored private(set) var currentScrollGeneration = ScrollSessionGeneration()
     @ObservationIgnored private var isReaderAttached = false
     @ObservationIgnored private var pendingScrollRetirement: PendingScrollRetirement?
@@ -75,6 +78,7 @@ final class AppModel {
         let retiring: ScrollSessionGeneration
         let replacement: ScrollSessionGeneration
         let reason: ScrollRetirementReason
+        let forceSnapshot: Bool
     }
 
     private struct PendingClear {
@@ -342,6 +346,8 @@ final class AppModel {
         case .enterTerminationQuiescence:
             isTerminationAttempting = false
             isTerminationQuiescing = true
+            activeTopologyGeneration = nil
+            pendingShieldedMoveGeneration = nil
         case .showOverlay:
             showOverlayCommand()
         case .hideOverlay:
@@ -356,6 +362,7 @@ final class AppModel {
             effectHandler(.flushPersistence)
         case .topologyWillChange:
             pendingShieldedMoveDisplayID = nil
+            pendingShieldedMoveGeneration = nil
             let stop = retireScrollSessionEffect(reason: .topology)
             emit([stop] + applyPrivacyDirectives(privacyCoordinator.topologyWillChange()))
         case .displayInventoryLoaded(let inventory):
@@ -378,6 +385,76 @@ final class AppModel {
         let previousCorrelationID = diagnosticCorrelationID
         diagnosticCorrelationID = correlationID
         send(command)
+        diagnosticCorrelationID = previousCorrelationID
+    }
+    #endif
+
+    func beginTopologyTransaction(generation: RuntimeDisplayGeneration) {
+        guard
+            !isTerminationAttempting,
+            !isTerminationQuiescing,
+            generation.rawValue > 0,
+            activeTopologyGeneration.map({ generation > $0 }) ?? true
+        else { return }
+        activeTopologyGeneration = generation
+        send(.topologyWillChange)
+    }
+
+    func acceptDisplayInventory(
+        _ inventory: RuntimeDisplayInventory,
+        generation: RuntimeDisplayGeneration
+    ) {
+        guard generation == activeTopologyGeneration else { return }
+        send(.displayInventoryLoaded(inventory))
+    }
+
+    func acceptDisplayInventoryFailure(generation: RuntimeDisplayGeneration) {
+        guard generation == activeTopologyGeneration else { return }
+        send(.displayInventoryFailed)
+    }
+
+    func confirmSelectedDisplay(generation: RuntimeDisplayGeneration) {
+        guard generation == activeTopologyGeneration else { return }
+        send(.confirmSelectedDisplay)
+    }
+
+    func completeShieldedMove(
+        screenID: UInt32,
+        generation: RuntimeDisplayGeneration
+    ) {
+        guard generation == activeTopologyGeneration else { return }
+        send(.completeShieldedMove(screenID: screenID))
+    }
+
+    #if DEBUG
+    func beginTopologyTransaction(
+        generation: RuntimeDisplayGeneration,
+        correlationID: UUID
+    ) {
+        let previousCorrelationID = diagnosticCorrelationID
+        diagnosticCorrelationID = correlationID
+        beginTopologyTransaction(generation: generation)
+        diagnosticCorrelationID = previousCorrelationID
+    }
+
+    func acceptDisplayInventory(
+        _ inventory: RuntimeDisplayInventory,
+        generation: RuntimeDisplayGeneration,
+        correlationID: UUID
+    ) {
+        let previousCorrelationID = diagnosticCorrelationID
+        diagnosticCorrelationID = correlationID
+        acceptDisplayInventory(inventory, generation: generation)
+        diagnosticCorrelationID = previousCorrelationID
+    }
+
+    func acceptDisplayInventoryFailure(
+        generation: RuntimeDisplayGeneration,
+        correlationID: UUID
+    ) {
+        let previousCorrelationID = diagnosticCorrelationID
+        diagnosticCorrelationID = correlationID
+        acceptDisplayInventoryFailure(generation: generation)
         diagnosticCorrelationID = previousCorrelationID
     }
     #endif
@@ -411,7 +488,11 @@ final class AppModel {
     }
 
     func confirmSelectedDisplay() {
-        send(.confirmSelectedDisplay)
+        if let activeTopologyGeneration {
+            confirmSelectedDisplay(generation: activeTopologyGeneration)
+        } else {
+            send(.confirmSelectedDisplay)
+        }
     }
 
     func keepScriptHidden() {
@@ -852,12 +933,13 @@ final class AppModel {
 
     private func prepareForTermination() {
         guard isTerminationAttempting else { return }
+        let stop = retireScrollSessionEffect(reason: .teardown)
         pendingShowGeneration += 1
         isShielded = true
         overlaySession.visibility = .hidden
         pointerPresent = false
         emit([
-            retireScrollSessionEffect(reason: .teardown),
+            stop,
             .hidePanel,
             .updateFocusMode(focusModeConfiguration),
         ])
@@ -914,6 +996,8 @@ final class AppModel {
         warning = nil
         pendingClear = nil
         pendingShieldedMoveDisplayID = nil
+        pendingShieldedMoveGeneration = nil
+        activeTopologyGeneration = nil
         emit([
             .reassessPrivacy,
             .setPanelLocked(preferences.isLocked),
@@ -951,6 +1035,8 @@ final class AppModel {
         localError = .snapshotLoadFailed
         pendingClear = nil
         pendingShieldedMoveDisplayID = nil
+        pendingShieldedMoveGeneration = nil
+        activeTopologyGeneration = nil
         emit([
             .reassessPrivacy,
             .setPanelLocked(preferences.isLocked),
@@ -1027,6 +1113,7 @@ final class AppModel {
         overlaySession.currentSessionDisplayID = nil
         overlaySession.recoveryConfirmationState = .required
         pendingShieldedMoveDisplayID = nil
+        pendingShieldedMoveGeneration = nil
         var effects: [AppEffect] = [stop, .hidePanel]
         selectedDisplayID = id
         guard
@@ -1089,6 +1176,7 @@ final class AppModel {
             + applyPrivacyDirectives(directives)
         warning = warningMessage(for: evaluation.assessment)
         pendingShieldedMoveDisplayID = selectedDisplayID
+        pendingShieldedMoveGeneration = activeTopologyGeneration
 
         let persistableFingerprint = candidateFingerprint.flatMap { fingerprint in
             topologyEvaluator.isPersistenceEligible(
@@ -1109,11 +1197,13 @@ final class AppModel {
         guard
             isPersistenceLoadSafe,
             pendingShieldedMoveDisplayID == screenID,
+            pendingShieldedMoveGeneration == activeTopologyGeneration,
             selectedDisplayID == screenID,
             isSelectionConfirmed,
             overlaySession.recoveryConfirmationState == .confirmed
         else { return }
         pendingShieldedMoveDisplayID = nil
+        pendingShieldedMoveGeneration = nil
         isShielded = false
     }
 
@@ -1127,6 +1217,7 @@ final class AppModel {
         overlaySession.currentSessionDisplayID = nil
         overlaySession.recoveryConfirmationState = .required
         pendingShieldedMoveDisplayID = nil
+        pendingShieldedMoveGeneration = nil
         emit([stop, .hidePanel, .updateFocusMode(focusModeConfiguration)])
     }
 
@@ -1243,6 +1334,7 @@ final class AppModel {
             case .requestConfirmation:
                 isSelectionConfirmed = false
                 pendingShieldedMoveDisplayID = nil
+                pendingShieldedMoveGeneration = nil
                 overlaySession.currentSessionDisplayID = nil
                 overlaySession.recoveryConfirmationState = .required
             case .publishSafeState:
@@ -1314,13 +1406,18 @@ final class AppModel {
     private func retireScrollSessionEffect(
         reason: ScrollRetirementReason
     ) -> AppEffect {
+        let shouldForcePrivacySnapshot =
+            (reason == .topology || reason == .privacy || reason == .teardown)
+            && (overlaySession.visibility == .visible
+                || overlaySession.playbackPhase == .playing)
         let retiring = currentScrollGeneration
         let replacement = ScrollSessionGeneration()
         currentScrollGeneration = replacement
         pendingScrollRetirement = PendingScrollRetirement(
             retiring: retiring,
             replacement: replacement,
-            reason: reason
+            reason: reason,
+            forceSnapshot: shouldForcePrivacySnapshot
         )
         lastAcceptedScrollCheckpointUptime = nil
         overlaySession.playbackPhase = .paused
@@ -1388,7 +1485,11 @@ final class AppModel {
             return
         case .commandPause, .hide, .topology, .privacy,
             .readerAttributes, .resize, .attachment, .screenMove, .teardown:
-            acceptPosition(anchor: capture.anchor, offset: capture.pixelOffset)
+            acceptPosition(
+                anchor: capture.anchor,
+                offset: capture.pixelOffset,
+                forceSnapshot: pending.forceSnapshot
+            )
         }
     }
 
@@ -1404,33 +1505,44 @@ final class AppModel {
         }
     }
 
-    private func acceptPosition(anchor: ReadingAnchor, offset: Double) {
+    private func acceptPosition(
+        anchor: ReadingAnchor,
+        offset: Double,
+        forceSnapshot: Bool = false
+    ) {
         let normalizedAnchor = anchor.clamped(to: document.text)
         let normalizedOffset = offset.isFinite ? max(offset, 0) : 0
-        guard
-            overlaySession.readingAnchor != normalizedAnchor
-                || overlaySession.pixelOffset != normalizedOffset
-        else { return }
-        overlaySession.readingAnchor = normalizedAnchor
-        overlaySession.pixelOffset = normalizedOffset
+        let positionChanged = overlaySession.readingAnchor != normalizedAnchor
+            || overlaySession.pixelOffset != normalizedOffset
+        guard positionChanged || forceSnapshot else { return }
+        if positionChanged {
+            overlaySession.readingAnchor = normalizedAnchor
+            overlaySession.pixelOffset = normalizedOffset
+        }
         snapshotRevision += 1
         effectHandler(.scheduleSnapshot(snapshot()))
     }
 
     private func acceptsDuringTermination(_ command: AppCommand) -> Bool {
-        guard isTerminationAttempting || isTerminationQuiescing else { return true }
+        if isTerminationQuiescing {
+            if case .teardownScrollSession = command { return true }
+            return false
+        }
+        guard isTerminationAttempting else { return true }
         switch command {
-        case .completePreClearFlush, .pause, .hideOverlay, .flushPersistence,
+        case .scrollTerminalCapture:
+            return isAwaitingSynchronousScrollCapture
+        case .flushPersistence, .prepareForTermination,
+            .stagePausedTerminationSnapshot, .cancelTerminationAttempt,
+            .enterTerminationQuiescence:
+            return true
+        case .completePreClearFlush, .pause, .hideOverlay,
             .topologyWillChange, .displayInventoryLoaded, .displayInventoryFailed,
             .keepScriptHidden, .completeShieldedMove, .readerResyncRequested,
-            .scrollCheckpoint, .scrollTerminal, .scrollTerminalCapture,
-            .scrollMutationCompleted, .teardownScrollSession:
-            return true
-        case .prepareForTermination, .stagePausedTerminationSnapshot,
-            .cancelTerminationAttempt, .enterTerminationQuiescence,
-            .focusChromeStateChanged, .focusChromeTransitionDurationChanged:
-            return true
-        case .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
+            .scrollCheckpoint, .scrollTerminal, .scrollMutationCompleted,
+            .teardownScrollSession,
+            .focusChromeStateChanged, .focusChromeTransitionDurationChanged,
+            .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
             .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,
             .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .setSpeed, .moveBackward, .moveForward,
@@ -1462,8 +1574,24 @@ final class AppModel {
                 payload: DiagnosticEventPayload(effect: effect.diagnosticName)
             )
             #endif
+            if case .stopScrollSession = effect {
+                isAwaitingSynchronousScrollCapture = true
+            }
             effectHandler(effect)
+            consumeSynchronousScrollCapture(after: effect)
+            isAwaitingSynchronousScrollCapture = false
         }
+    }
+
+    private func consumeSynchronousScrollCapture(after effect: AppEffect) {
+        guard case .stopScrollSession = effect,
+            let first = pendingCommands.first,
+            case .scrollTerminalCapture(let capture) = first,
+            acceptsDuringTermination(first)
+        else { return }
+        pendingCommands.removeFirst()
+        commandDispatchCount += 1
+        accept(capture)
     }
 
     private static func applyDefault(
