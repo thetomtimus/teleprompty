@@ -141,6 +141,7 @@ EXPECTED_LEDGER_TITLES = (
     "Accept only the verified reconstructed M5 handoff",
     "Make the recovered source compile before packaging",
     "Import the native signposter module with its real name",
+    "Keep teardown on the main actor under Swift 6",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1401,6 +1402,16 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         source = VALIDATOR.read("PrivatePresenterApp/Services/PerformanceSignposter.swift")
         self.assertIn("import os\n", source)
         self.assertNotIn("import OS\n", source)
+
+    def testM6ScrollTeardownUsesExplicitMainActorIsolation(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterApp/Overlay/ScrollSessionController.swift")
+        deinit_source = source[source.index("    deinit {"):]
+        self.assertIn("MainActor.assumeIsolated {", deinit_source)
+        self.assertIn("clock?.invalidate()", deinit_source)
+        self.assertIn(
+            "performanceRegistry.end(scrollSessionInterval, outcome: .cancelled)",
+            deinit_source,
+        )
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
