@@ -145,6 +145,7 @@ EXPECTED_LEDGER_TITLES = (
     "Record the actor teardown path in final scope",
     "Return every accessibility retry decision explicitly",
     "Make Carbon callbacks and messages isolation-correct",
+    "Keep the display-link target and teardown actor-safe",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -675,6 +676,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/App/AppEffect.swift",
     "PrivatePresenterApp/App/AppModel.swift",
     "PrivatePresenterApp/App/DependencyContainer.swift",
+    "PrivatePresenterApp/Overlay/DisplayLinkFrameClock.swift",
     "PrivatePresenterApp/Overlay/OverlayRootView.swift",
     "PrivatePresenterApp/Overlay/OverlayChromeView.swift",
     "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
@@ -1434,6 +1436,18 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("return MainActor.assumeIsolated {", service)
         self.assertIn("nonisolated static let cleanupUnknownMessage", service)
         self.assertIn("return CarbonHotKeyService.cleanupUnknownMessage", presentation)
+
+    def testM6DisplayLinkTargetAndTeardownStayActorSafe(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterApp/Overlay/DisplayLinkFrameClock.swift")
+        self.assertIn("    @MainActor\n    private final class Target: NSObject", source)
+        self.assertIn(
+            "        @objc func displayLinkDidFire(_ link: CADisplayLink) {\n"
+            "            onTick(link.timestamp)\n"
+            "        }",
+            source,
+        )
+        self.assertNotIn("MainActor.assumeIsolated", source)
+        self.assertNotIn("    deinit {", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
