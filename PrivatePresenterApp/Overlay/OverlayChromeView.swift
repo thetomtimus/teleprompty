@@ -14,24 +14,70 @@ struct OverlayChromeView: View {
     let metrics: OverlayLayoutMetrics
     let onDragChanged: (CGSize) -> Void
     let onDragEnded: () -> Void
+    let onResizeChanged: (ClampedPanelInteractionController.ResizeEdge, CGSize) -> Void
+    let onResizeEnded: () -> Void
 
     init(
         model: AppModel,
         metrics: OverlayLayoutMetrics = OverlayLayoutMetrics(
-            size: CGSize(width: 700, height: 350)
+            size: CGSize(width: 640, height: 80)
         ),
         onDragChanged: @escaping (CGSize) -> Void = { _ in },
-        onDragEnded: @escaping () -> Void = {}
+        onDragEnded: @escaping () -> Void = {},
+        onResizeChanged:
+            @escaping (
+                ClampedPanelInteractionController.ResizeEdge,
+                CGSize
+            ) -> Void = { _, _ in },
+        onResizeEnded: @escaping () -> Void = {}
     ) {
         self.model = model
         self.metrics = metrics
         self.onDragChanged = onDragChanged
         self.onDragEnded = onDragEnded
+        self.onResizeChanged = onResizeChanged
+        self.onResizeEnded = onResizeEnded
     }
 
     var body: some View {
-        HStack(spacing: metrics.headerActionSpacing) {
+        ZStack(alignment: .topLeading) {
             titleDragRegion
+                .frame(
+                    width: metrics.titleDragFrame.width,
+                    height: metrics.titleDragFrame.height
+                )
+                .position(
+                    x: metrics.titleDragFrame.midX,
+                    y: metrics.size.height - metrics.titleDragFrame.midY
+                )
+                .zIndex(0)
+
+            OverlayResizeInteractionLayer(
+                metrics: metrics,
+                onResizeChanged: onResizeChanged,
+                onResizeEnded: onResizeEnded
+            )
+            .frame(width: metrics.size.width, height: metrics.size.height)
+            .zIndex(1)
+
+            headerActions
+                .frame(width: headerActionFrame.width, height: metrics.headerHeight)
+                .position(x: headerActionFrame.midX, y: metrics.headerHeight / 2)
+                .zIndex(2)
+
+            Rectangle()
+                .fill(OverlayVisualTokens.headerDivider.swiftUIColor)
+                .frame(width: metrics.size.width, height: 1)
+                .position(x: metrics.size.width / 2, y: metrics.headerHeight - 0.5)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+        .frame(width: metrics.size.width, height: metrics.size.height)
+        .foregroundStyle(OverlayVisualTokens.readingText.swiftUIColor)
+    }
+
+    private var headerActions: some View {
+        HStack(spacing: metrics.headerActionSpacing) {
             iconButton(index: 0) {
                 model.send(.togglePlayback)
             }
@@ -42,15 +88,12 @@ struct OverlayChromeView: View {
                 model.send(.showController)
             }
         }
-        .padding(.horizontal, metrics.headerHorizontalPadding)
-        .foregroundStyle(OverlayVisualTokens.readingText.swiftUIColor)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(OverlayVisualTokens.headerDivider.swiftUIColor)
-                .frame(height: 1)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-        }
+    }
+
+    private var headerActionFrame: CGRect {
+        let frames = metrics.headerControlRegions.map(\.frame)
+        guard let first = frames.first, let last = frames.last else { return .zero }
+        return first.union(last)
     }
 
     static func title(model: AppModel) -> String {
@@ -114,7 +157,7 @@ struct OverlayChromeView: View {
         OverlayIconButton(
             symbol: symbols[index],
             iconSize: Self.iconSize(for: metrics.tier),
-            diameter: 44,
+            diameter: metrics.headerControlDiameter,
             isPrimary: false,
             isSelected: false,
             accessibility: PresenterAccessibility.entry(
@@ -122,6 +165,5 @@ struct OverlayChromeView: View {
             ),
             action: action
         )
-        .zIndex(1)
     }
 }

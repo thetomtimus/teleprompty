@@ -62,7 +62,11 @@ final class ReaderViewportAdapter: ReaderViewport {
         let priorDocumentHeight = laidOutTextBottom > 0
             ? CGFloat(laidOutTextBottom + Self.documentBottomPadding)
             : nil
-        system.configureViewport(clipSize, documentHeight: priorDocumentHeight)
+        system.configureViewport(
+            clipSize,
+            documentHeight: priorDocumentHeight,
+            layoutSize: hostedView?.bounds.size
+        )
         guard
             let textLayoutManager = system.textView.textLayoutManager,
             let textContentManager = textLayoutManager.textContentManager
@@ -147,7 +151,8 @@ final class ReaderViewportAdapter: ReaderViewport {
         laidOutTextBottom = textBottom
         system.configureViewport(
             clipSize,
-            documentHeight: CGFloat(laidOutTextBottom + Self.documentBottomPadding)
+            documentHeight: CGFloat(laidOutTextBottom + Self.documentBottomPadding),
+            layoutSize: hostedView?.bounds.size
         )
         setClipOriginY(clipOriginY)
         system.performanceRegistry.end(layoutInterval, outcome: .success)

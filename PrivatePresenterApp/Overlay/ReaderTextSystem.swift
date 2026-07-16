@@ -176,10 +176,14 @@ final class ReaderTextSystem {
         }
     }
 
-    func configureViewport(_ size: NSSize, documentHeight: CGFloat? = nil) {
+    func configureViewport(
+        _ size: NSSize,
+        documentHeight: CGFloat? = nil,
+        layoutSize: NSSize? = nil
+    ) {
         let width = max(size.width, 1)
         let height = max(size.height, 1)
-        let metrics = OverlayLayoutMetrics(size: NSSize(width: width, height: height))
+        let metrics = OverlayLayoutMetrics(size: layoutSize ?? size)
         let contentHeight = max(height, documentHeight ?? height)
         textView.textContainerInset = NSSize(
             width: metrics.effectiveReadingSideInset,

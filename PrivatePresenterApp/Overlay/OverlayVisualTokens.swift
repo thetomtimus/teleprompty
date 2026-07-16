@@ -101,6 +101,16 @@ struct OverlayLayoutMetrics: Equatable {
         case spacious
     }
 
+    struct ControlRegion: Equatable {
+        let identifier: String
+        let frame: CGRect
+    }
+
+    struct ResizeRegion: Equatable {
+        let edge: ClampedPanelInteractionController.ResizeEdge
+        let frame: CGRect
+    }
+
     let size: CGSize
     let tier: Tier
     let headerHeight: CGFloat
@@ -192,8 +202,180 @@ struct OverlayLayoutMetrics: Equatable {
     }
 
     var maximumActiveBandHeight: CGFloat {
-        let reservedHeight = size.height - readingTopReserve - readingBottomReserve
-        let compactFloor: CGFloat = tier == .compact ? 34 : 0
-        return min(size.height, max(compactFloor, reservedHeight))
+        readingFrame.height
+    }
+
+    var cardBounds: CGRect {
+        CGRect(origin: .zero, size: size)
+    }
+
+    /// Bottom-origin frame used by deterministic layout and hit-test oracles.
+    var headerFrame: CGRect {
+        CGRect(
+            x: 0,
+            y: max(0, size.height - headerHeight),
+            width: max(0, size.width),
+            height: min(max(0, size.height), headerHeight)
+        )
+    }
+
+    /// Bottom-origin text/final-line bounds. Chrome visibility never changes it.
+    var readingFrame: CGRect {
+        CGRect(
+            x: effectiveReadingSideInset,
+            y: readingBottomReserve,
+            width: readableLineWidth,
+            height: max(0, size.height - readingTopReserve - readingBottomReserve)
+        )
+    }
+
+    /// Top-origin AppKit viewport frame within the flipped reader container.
+    var readerViewportFrame: CGRect {
+        CGRect(
+            x: 0,
+            y: readingTopReserve,
+            width: max(0, size.width),
+            height: readingFrame.height
+        )
+    }
+
+    var toolbarFrame: CGRect {
+        CGRect(
+            x: (size.width - toolbarWidth) / 2,
+            y: toolbarBottomInset,
+            width: toolbarWidth,
+            height: toolbarHeight
+        )
+    }
+
+    var quickControlRegions: [ControlRegion] {
+        let identifiers = [
+            "privatePresenter.quickSmaller",
+            "privatePresenter.quickLarger",
+            "privatePresenter.quickAlignment",
+            "privatePresenter.quickSlower",
+            "privatePresenter.quickPlayback",
+            "privatePresenter.quickFaster",
+            "privatePresenter.quickFocus",
+        ]
+        let controlY = toolbarFrame.minY + (toolbarHeight - controlDiameter) / 2
+        return identifiers.enumerated().map { index, identifier in
+            ControlRegion(
+                identifier: identifier,
+                frame: CGRect(
+                    x: toolbarFrame.minX + toolbarHorizontalPadding
+                        + CGFloat(index) * (controlDiameter + toolbarActionSpacing),
+                    y: controlY,
+                    width: controlDiameter,
+                    height: controlDiameter
+                )
+            )
+        }
+    }
+
+    var headerControlRegions: [ControlRegion] {
+        let identifiers = [
+            "privatePresenter.headerPlayback",
+            "privatePresenter.headerLock",
+            "privatePresenter.headerSettings",
+        ]
+        let diameter = headerControlDiameter
+        let groupWidth = CGFloat(identifiers.count) * diameter
+            + CGFloat(identifiers.count - 1) * headerActionSpacing
+        let startX = size.width - headerHorizontalPadding - groupWidth
+        let controlY = headerFrame.minY + (headerHeight - diameter) / 2
+        return identifiers.enumerated().map { index, identifier in
+            ControlRegion(
+                identifier: identifier,
+                frame: CGRect(
+                    x: startX + CGFloat(index) * (diameter + headerActionSpacing),
+                    y: controlY,
+                    width: diameter,
+                    height: diameter
+                )
+            )
+        }
+    }
+
+    var controlRegions: [ControlRegion] {
+        quickControlRegions + headerControlRegions
+    }
+
+    var headerControlDiameter: CGFloat { 44 }
+
+    var titleDragFrame: CGRect {
+        let actionStart = headerControlRegions.first?.frame.minX
+            ?? size.width - headerHorizontalPadding
+        return CGRect(
+            x: headerHorizontalPadding,
+            y: headerFrame.minY,
+            width: max(0, actionStart - headerActionSpacing - headerHorizontalPadding),
+            height: headerFrame.height
+        )
+    }
+
+    var cornerResizeRegions: [ResizeRegion] {
+        let extent: CGFloat = 18
+        return [
+            ResizeRegion(
+                edge: .bottomLeft,
+                frame: CGRect(x: 0, y: 0, width: extent, height: extent)
+            ),
+            ResizeRegion(
+                edge: .bottomRight,
+                frame: CGRect(
+                    x: max(0, size.width - extent), y: 0,
+                    width: extent, height: extent
+                )
+            ),
+            ResizeRegion(
+                edge: .topLeft,
+                frame: CGRect(
+                    x: 0, y: max(0, size.height - extent),
+                    width: extent, height: extent
+                )
+            ),
+            ResizeRegion(
+                edge: .topRight,
+                frame: CGRect(
+                    x: max(0, size.width - extent),
+                    y: max(0, size.height - extent),
+                    width: extent,
+                    height: extent
+                )
+            ),
+        ]
+    }
+
+    var edgeResizeRegions: [ResizeRegion] {
+        let thickness: CGFloat = 10
+        return [
+            ResizeRegion(
+                edge: .bottom,
+                frame: CGRect(x: 0, y: 0, width: size.width, height: thickness)
+            ),
+            ResizeRegion(
+                edge: .top,
+                frame: CGRect(
+                    x: 0, y: max(0, size.height - thickness),
+                    width: size.width, height: thickness
+                )
+            ),
+            ResizeRegion(
+                edge: .left,
+                frame: CGRect(x: 0, y: 0, width: thickness, height: size.height)
+            ),
+            ResizeRegion(
+                edge: .right,
+                frame: CGRect(
+                    x: max(0, size.width - thickness), y: 0,
+                    width: thickness, height: size.height
+                )
+            ),
+        ]
+    }
+
+    var resizeRegions: [ResizeRegion] {
+        cornerResizeRegions + edgeResizeRegions
     }
 }

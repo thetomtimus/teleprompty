@@ -165,8 +165,19 @@ final class ReaderViewportContainerView: NSView {
     override func layout() {
         super.layout()
         backgroundView.frame = bounds
-        scrollView.frame = bounds
         guard bounds.width > 1, bounds.height > 1 else {
+            scrollView.frame = .zero
+            resolvedBandFragments = []
+            resolvedActiveBandHeight = 0
+            maximumActiveBandHeight = 0
+            system.activeBandView.frame = .zero
+            return
+        }
+
+        let metrics = OverlayLayoutMetrics(size: bounds.size)
+        let readingFrame = metrics.readerViewportFrame
+        scrollView.frame = readingFrame
+        guard readingFrame.width > 1, readingFrame.height > 1 else {
             resolvedBandFragments = []
             resolvedActiveBandHeight = 0
             maximumActiveBandHeight = 0
@@ -178,7 +189,6 @@ final class ReaderViewportContainerView: NSView {
         resolvedBandFragments = viewportAdapter.cachedActiveBandLineFragments(
             viewportFraction: viewportFraction
         )
-        let metrics = OverlayLayoutMetrics(size: bounds.size)
         maximumActiveBandHeight = metrics.maximumActiveBandHeight
         let backingScale = window?.backingScaleFactor
             ?? NSScreen.main?.backingScaleFactor ?? 1
@@ -196,10 +206,11 @@ final class ReaderViewportContainerView: NSView {
             bounds.width,
             metrics.effectiveReadingSideInset + metrics.readableLineWidth + 18
         )
-        let targetMidY = bounds.height * CGFloat(viewportFraction)
+        let targetMidY = readingFrame.minY
+            + readingFrame.height * CGFloat(viewportFraction)
         let bandY = min(
-            max(0, targetMidY - resolvedActiveBandHeight / 2),
-            max(0, bounds.height - resolvedActiveBandHeight)
+            max(readingFrame.minY, targetMidY - resolvedActiveBandHeight / 2),
+            max(readingFrame.minY, readingFrame.maxY - resolvedActiveBandHeight)
         )
         system.activeBandView.frame = NSRect(
             x: bandMinX,

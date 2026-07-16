@@ -1,6 +1,147 @@
 import SwiftUI
 import TeleprompterCore
 
+/// Pure, bottom-origin half-open hit routing shared by geometry tests and the
+/// rendered interaction layers. The ordering is the interaction contract.
+struct OverlayHitRegionResolver {
+    enum Route: Equatable {
+        case control(String)
+        case resize(ClampedPanelInteractionController.ResizeEdge)
+        case titleDrag
+        case none
+    }
+
+    struct ResizeProbe: Equatable {
+        let edge: ClampedPanelInteractionController.ResizeEdge
+        let point: CGPoint
+    }
+
+    let metrics: OverlayLayoutMetrics
+
+    func resolve(point: CGPoint) -> Route {
+        guard Self.contains(point, in: metrics.cardBounds) else { return .none }
+        for region in metrics.controlRegions {
+            if Self.contains(point, in: region.frame) {
+                return .control(region.identifier)
+            }
+        }
+        for region in metrics.cornerResizeRegions {
+            if Self.contains(point, in: region.frame) {
+                return .resize(region.edge)
+            }
+        }
+        for region in metrics.edgeResizeRegions {
+            if Self.contains(point, in: region.frame) {
+                return .resize(region.edge)
+            }
+        }
+        if Self.contains(point, in: metrics.titleDragFrame) {
+            return .titleDrag
+        }
+        return .none
+    }
+
+    static func frozenResizeProbes(size: CGSize) -> [ResizeProbe] {
+        let horizontal = max(110, min(size.width - 110, size.width / 3))
+        let vertical = max(105, min(size.height - 75, size.height * 7 / 12))
+        return [
+            ResizeProbe(edge: .bottomLeft, point: CGPoint(x: 9, y: 9)),
+            ResizeProbe(edge: .bottom, point: CGPoint(x: horizontal, y: 5)),
+            ResizeProbe(
+                edge: .bottomRight, point: CGPoint(x: size.width - 9, y: 9)
+            ),
+            ResizeProbe(edge: .left, point: CGPoint(x: 5, y: vertical)),
+            ResizeProbe(
+                edge: .right, point: CGPoint(x: size.width - 5, y: vertical)
+            ),
+            ResizeProbe(
+                edge: .topLeft, point: CGPoint(x: 9, y: size.height - 9)
+            ),
+            ResizeProbe(
+                edge: .top, point: CGPoint(x: horizontal, y: size.height - 5)
+            ),
+            ResizeProbe(
+                edge: .topRight,
+                point: CGPoint(x: size.width - 9, y: size.height - 9)
+            ),
+        ]
+    }
+
+    private static func contains(_ point: CGPoint, in rect: CGRect) -> Bool {
+        point.x >= rect.minX && point.x < rect.maxX
+            && point.y >= rect.minY && point.y < rect.maxY
+    }
+}
+
+/// The resize layer is deliberately separate from header title drag and
+/// controls so SwiftUI renders the same precedence as the pure resolver.
+@MainActor
+struct OverlayResizeInteractionLayer: View {
+    let metrics: OverlayLayoutMetrics
+    let onResizeChanged: (ClampedPanelInteractionController.ResizeEdge, CGSize) -> Void
+    let onResizeEnded: () -> Void
+
+    var body: some View {
+        ZStack {
+            ForEach(metrics.resizeRegions, id: \.edge) { region in
+                interactionZone(edge: region.edge)
+                    .frame(width: region.frame.width, height: region.frame.height)
+                    .position(swiftUICenter(for: region.frame))
+                    .zIndex(isCorner(region.edge) ? 1 : 0)
+            }
+        }
+    }
+
+    private func swiftUICenter(for bottomOriginFrame: CGRect) -> CGPoint {
+        CGPoint(
+            x: bottomOriginFrame.midX,
+            y: metrics.size.height - bottomOriginFrame.midY
+        )
+    }
+
+    private func interactionZone(
+        edge: ClampedPanelInteractionController.ResizeEdge
+    ) -> some View {
+        Color.clear
+            .accessibilityIdentifier(interactionIdentifier(edge))
+            .accessibilityHidden(true)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in
+                        onResizeChanged(edge, value.translation)
+                    }
+                    .onEnded { _ in
+                        onResizeEnded()
+                    }
+            )
+    }
+
+    private func isCorner(
+        _ edge: ClampedPanelInteractionController.ResizeEdge
+    ) -> Bool {
+        switch edge {
+        case .topLeft, .topRight, .bottomLeft, .bottomRight: true
+        case .top, .bottom, .left, .right: false
+        }
+    }
+
+    private func interactionIdentifier(
+        _ edge: ClampedPanelInteractionController.ResizeEdge
+    ) -> String {
+        switch edge {
+        case .top: "privatePresenter.resizeTop"
+        case .bottom: "privatePresenter.resizeBottom"
+        case .left: "privatePresenter.resizeLeft"
+        case .right: "privatePresenter.resizeRight"
+        case .topLeft: "privatePresenter.resizeTopLeft"
+        case .topRight: "privatePresenter.resizeTopRight"
+        case .bottomLeft: "privatePresenter.resizeBottomLeft"
+        case .bottomRight: "privatePresenter.resizeBottomRight"
+        }
+    }
+}
+
 /// Opaque, nonactivating reader surface. Reader and chrome are siblings so a
 /// Focus fade never inserts, removes, or resizes the TextKit viewport.
 @MainActor
@@ -14,7 +155,6 @@ struct OverlayRootView: View {
     }
 
     static let cornerRadius = OverlayVisualTokens.cardRadius
-    static let readerHeaderHeight: CGFloat = 36
     static let interiorIsFullyOpaque = true
     static let resizeZones = ClampedPanelInteractionController.ResizeEdge.allCases
 
@@ -121,30 +261,6 @@ struct OverlayRootView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
-        .overlay(alignment: .top) {
-            interactionZone(edge: .top).frame(height: 10)
-        }
-        .overlay(alignment: .bottom) {
-            interactionZone(edge: .bottom).frame(height: 10)
-        }
-        .overlay(alignment: .leading) {
-            interactionZone(edge: .left).frame(width: 10)
-        }
-        .overlay(alignment: .trailing) {
-            interactionZone(edge: .right).frame(width: 10)
-        }
-        .overlay(alignment: .topLeading) {
-            interactionZone(edge: .topLeft).frame(width: 18, height: 18)
-        }
-        .overlay(alignment: .topTrailing) {
-            interactionZone(edge: .topRight).frame(width: 18, height: 18)
-        }
-        .overlay(alignment: .bottomLeading) {
-            interactionZone(edge: .bottomLeft).frame(width: 18, height: 18)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            interactionZone(edge: .bottomRight).frame(width: 18, height: 18)
-        }
         .overlay {
             if let model {
                 let presentation = Self.chromePresentation(
@@ -158,10 +274,10 @@ struct OverlayRootView: View {
                         model: model,
                         metrics: metrics,
                         onDragChanged: onDragChanged,
-                        onDragEnded: onDragEnded
+                        onDragEnded: onDragEnded,
+                        onResizeChanged: onResizeChanged,
+                        onResizeEnded: onResizeEnded
                     )
-                    .frame(height: metrics.headerHeight)
-                    .frame(maxHeight: .infinity, alignment: .top)
                     .opacity(presentation.opacity)
                     .allowsHitTesting(presentation.allowsInteraction)
                     .accessibilityHidden(presentation.isAccessibilityHidden)
@@ -189,37 +305,4 @@ struct OverlayRootView: View {
         duration > 0 ? .easeInOut(duration: duration) : nil
     }
 
-    private func interactionZone(
-        edge: ClampedPanelInteractionController.ResizeEdge
-    ) -> some View {
-        Color.clear
-            .accessibilityIdentifier(interactionIdentifier(edge))
-            .accessibilityHidden(true)
-            .contentShape(Rectangle())
-            .allowsHitTesting(model?.isLocked == false)
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { value in
-                        onResizeChanged(edge, value.translation)
-                    }
-                    .onEnded { _ in
-                        onResizeEnded()
-                    }
-            )
-    }
-
-    private func interactionIdentifier(
-        _ edge: ClampedPanelInteractionController.ResizeEdge
-    ) -> String {
-        switch edge {
-        case .top: "privatePresenter.resizeTop"
-        case .bottom: "privatePresenter.resizeBottom"
-        case .left: "privatePresenter.resizeLeft"
-        case .right: "privatePresenter.resizeRight"
-        case .topLeft: "privatePresenter.resizeTopLeft"
-        case .topRight: "privatePresenter.resizeTopRight"
-        case .bottomLeft: "privatePresenter.resizeBottomLeft"
-        case .bottomRight: "privatePresenter.resizeBottomRight"
-        }
-    }
 }
