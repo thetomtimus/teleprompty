@@ -1548,6 +1548,7 @@ M6_LEDGER_TITLES = (
     "Import the native signposter module with its real name",
     "Keep teardown on the main actor under Swift 6",
     "Record the actor teardown path in final scope",
+    "Return every accessibility retry decision explicitly",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",

@@ -545,9 +545,9 @@ enum PresenterAccessibility {
         guard let status else { return false }
         switch status {
         case .conflict, .degradedClean:
-            true
+            return true
         case .committed, .cleanupUnknown, .invalid:
-            false
+            return false
         }
     }
 
