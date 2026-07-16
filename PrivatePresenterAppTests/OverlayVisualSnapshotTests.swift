@@ -767,6 +767,195 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         )
     }
 
+    func testCompactActiveBandUsesReservedReadingRectMidpoint() {
+        let size = NSSize(width: 480, height: 300)
+        let viewport = makeReader(
+            text: (1...30).map { "Compact line \($0)" }.joined(separator: "\n"),
+            size: size
+        )
+        let metrics = OverlayLayoutMetrics(size: size)
+        XCTAssertEqual(metrics.tier, .compact)
+        let expectedMidpoint = metrics.readerViewportFrame.minY
+            + metrics.readerViewportFrame.height * 0.5
+        XCTAssertEqual(
+            viewport.system.activeBandView.frame.midY, expectedMidpoint, accuracy: 1e-9
+        )
+        XCTAssertNotEqual(
+            viewport.system.activeBandView.frame.midY, viewport.container.bounds.midY
+        )
+    }
+
+    func testAttachedAttributeReconciliationRefreshesCachedBandWithoutReaderMutation() {
+        let text = (1...80).map { "Attribute line \($0)" }.joined(separator: "\n")
+        let viewport = makeReader(
+            text: text, size: NSSize(width: 700, height: 350), fontSize: 42
+        )
+        let storage = viewport.system.textStorage
+        let replacements = viewport.system.fullReplacementCount
+        let mutations = viewport.system.textMutationCount
+        let resyncs = viewport.system.resyncRequestCount
+        let anchor = viewport.adapter.captureAnchor(viewportFraction: 0.5)
+        let initialFrames = viewport.container.resolvedBandFragments.map(\.frame)
+
+        for (fontSize, weight) in [
+            (96.0, TeleprompterFontWeight.regular),
+            (96.0, .medium),
+            (96.0, .semibold),
+        ] {
+            viewport.system.updateAttributes(
+                fontSize: fontSize, fontWeight: weight, alignment: .left
+            )
+            _ = viewport.adapter.restore(anchor: anchor)
+            viewport.system.refreshActiveBandAfterAttributeChange()
+
+            XCTAssertEqual(viewport.container.resolvedBandFragments.count, 2)
+            let expectedHeight = ReaderViewportContainerView.resolvedActiveBandHeight(
+                fragments: viewport.container.resolvedBandFragments,
+                fallbackLineHeight: viewport.system.fallbackLineHeight(
+                    backingScaleFactor: 2
+                ),
+                maximumHeight: viewport.container.maximumActiveBandHeight
+            )
+            XCTAssertEqual(
+                viewport.container.resolvedActiveBandHeight, expectedHeight, accuracy: 1
+            )
+            XCTAssertEqual(
+                viewport.system.activeBandView.frame.height, expectedHeight, accuracy: 1
+            )
+            XCTAssertEqual(viewport.system.effectiveFont.pointSize, fontSize)
+            let expectedWeight: NSFont.Weight
+            switch weight {
+            case .regular: expectedWeight = .regular
+            case .medium: expectedWeight = .medium
+            case .semibold: expectedWeight = .semibold
+            }
+            XCTAssertEqual(ReaderTextSystem.appKitWeight(for: weight), expectedWeight)
+            XCTAssertTrue(viewport.system.textStorage === storage)
+            XCTAssertEqual(viewport.system.textStorage.string, text)
+            XCTAssertEqual(viewport.system.fullReplacementCount, replacements)
+            XCTAssertEqual(viewport.system.textMutationCount, mutations)
+            XCTAssertEqual(viewport.system.resyncRequestCount, resyncs)
+            XCTAssertFalse(viewport.system.isAwaitingResync)
+            XCTAssertEqual(viewport.adapter.lastRestoredAnchor?.utf16Offset, anchor.utf16Offset)
+            XCTAssertEqual(viewport.adapter.lastRestoredAnchor?.document, anchor.document)
+        }
+
+        XCTAssertNotEqual(viewport.container.resolvedBandFragments.map(\.frame), initialFrames)
+    }
+
+    func testClipOriginRefreshUsesExactCachedTargetAndCoalescesAtLineBoundaries() {
+        let lines = (1...60).map { "Cached height line \($0)" }
+        let text = lines.joined(separator: "\n")
+        let viewport = makeReader(
+            text: text, size: NSSize(width: 700, height: 350), fontSize: 24
+        )
+        let nsText = text as NSString
+        for (index, line) in lines.enumerated() {
+            viewport.system.textStorage.addAttribute(
+                .font,
+                value: NSFont.systemFont(
+                    ofSize: (index + 1).isMultiple(of: 3) ? 60 : 24
+                ),
+                range: nsText.range(of: line)
+            )
+        }
+        viewport.container.needsLayout = true
+        viewport.container.layoutSubtreeIfNeeded()
+        viewport.container.refreshActiveBandLayoutFromCachedMetrics(force: true)
+
+        let cached = viewport.adapter.cachedLineFragmentEvidence
+        XCTAssertGreaterThan(Set(cached.map { Int($0.frame.height.rounded()) }).count, 1)
+        let fraction = 0.5
+        let samples = stride(
+            from: 0.0, through: floor(viewport.adapter.maximumOffset), by: 1
+        ).map { offset -> (Double, [Range<Int>], CGFloat) in
+            let target = offset + Double(viewport.adapter.clipSize.height) * fraction
+            let selected = ReaderViewportAdapter.selectActiveBandLineFragments(
+                from: cached, targetY: target
+            )
+            return (
+                offset, selected.map(\.utf16Range),
+                selected.reduce(12) { $0 + $1.frame.height }
+            )
+        }
+        guard let first = samples.first,
+            let samePair = samples.dropFirst().first(where: { $0.1 == first.1 }),
+            let changedPair = samples.first(where: {
+                $0.1 != first.1 && abs($0.2 - first.2) > 0.5
+            })
+        else {
+            XCTFail("Expected cached same-pair and unequal-height boundary samples")
+            return
+        }
+
+        var completedLayouts = 0
+        viewport.system.onLayoutCompleted = { completedLayouts += 1 }
+        let storage = viewport.system.textStorage
+        let mutations = viewport.system.textMutationCount
+
+        viewport.adapter.setClipOriginY(first.0)
+        assertCachedBandMatchesExactTarget(viewport, fraction: fraction)
+        let firstFrame = viewport.system.activeBandView.frame
+        viewport.adapter.setClipOriginY(samePair.0)
+        assertCachedBandMatchesExactTarget(viewport, fraction: fraction)
+        XCTAssertEqual(viewport.system.activeBandView.frame, firstFrame)
+
+        viewport.adapter.setClipOriginY(changedPair.0)
+        assertCachedBandMatchesExactTarget(viewport, fraction: fraction)
+        XCTAssertEqual(
+            viewport.container.resolvedBandFragments.map(\.utf16Range), changedPair.1
+        )
+        XCTAssertNotEqual(viewport.system.activeBandView.frame.height, firstFrame.height)
+        XCTAssertEqual(completedLayouts, 0)
+        XCTAssertTrue(viewport.system.textStorage === storage)
+        XCTAssertEqual(viewport.system.textStorage.string, text)
+        XCTAssertEqual(viewport.system.textMutationCount, mutations)
+
+        let source = try! String(
+            contentsOf: sourceURL("ReaderViewportAdapter.swift"), encoding: .utf8
+        )
+        let start = source.range(of: "func setClipOriginY")!.lowerBound
+        let end = source.range(of: "func threeCompleteLineStep")!.lowerBound
+        let clipRefresh = source[start..<end]
+        XCTAssertFalse(clipRefresh.contains("ensureLayout("))
+        XCTAssertFalse(clipRefresh.contains("model"))
+        XCTAssertFalse(clipRefresh.contains(".send("))
+    }
+
+    func testCachedBandSelectionPreservesSortedMetricsAndFollowingTieBreakWithoutResort() {
+        let lines = [
+            ReaderViewportAdapter.LineFragmentEvidence(
+                utf16Range: 0..<1, frame: NSRect(x: 0, y: 0, width: 100, height: 20)
+            ),
+            ReaderViewportAdapter.LineFragmentEvidence(
+                utf16Range: 1..<2, frame: NSRect(x: 0, y: 30, width: 100, height: 30)
+            ),
+            ReaderViewportAdapter.LineFragmentEvidence(
+                utf16Range: 2..<3, frame: NSRect(x: 0, y: 70, width: 100, height: 40)
+            ),
+        ]
+        let target = (Double(lines[0].frame.midY) + Double(lines[1].frame.midY)) / 2
+        XCTAssertEqual(
+            ReaderViewportAdapter.selectActiveBandLineFragments(
+                from: lines, targetY: target
+            ).map(\.utf16Range),
+            [0..<1, 1..<2]
+        )
+
+        let source = try! String(
+            contentsOf: sourceURL("ReaderViewportAdapter.swift"), encoding: .utf8
+        )
+        let start = source.range(of: "static func selectActiveBandLineFragments")!.lowerBound
+        let end = source.range(of: "func captureAnchor")!.lowerBound
+        let selectionSource = source[start..<end]
+        XCTAssertFalse(selectionSource.contains(".sorted"))
+        XCTAssertTrue(
+            selectionSource.contains(
+                "candidates[lhs].frame.midY > candidates[rhs].frame.midY"
+            )
+        )
+    }
+
     func testActualOverlayRenderMatchesIndependentSemanticBaseline() throws {
         let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
         let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle()
@@ -842,6 +1031,40 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertEqual(rendered.textColor.colorSpace, .sRGB)
         XCTAssertEqual(rendered.readerFrame, CGRect(x: 52, y: 124, width: 932, height: 222))
         XCTAssertEqual(rendered.toolbarFrame, CGRect(x: 324.5, y: 24, width: 387, height: 65))
+    }
+
+    private func assertCachedBandMatchesExactTarget(
+        _ viewport: (
+            system: ReaderTextSystem,
+            container: ReaderViewportContainerView,
+            adapter: ReaderViewportAdapter
+        ),
+        fraction: Double,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let exactTarget = viewport.adapter.clipOriginY
+            + Double(viewport.adapter.clipSize.height) * fraction
+        let expected = ReaderViewportAdapter.selectActiveBandLineFragments(
+            from: viewport.adapter.cachedLineFragmentEvidence, targetY: exactTarget
+        )
+        XCTAssertEqual(
+            viewport.container.resolvedBandFragments.map(\.utf16Range),
+            expected.map(\.utf16Range),
+            file: file, line: line
+        )
+        XCTAssertEqual(
+            viewport.container.resolvedActiveBandHeight,
+            ReaderViewportContainerView.resolvedActiveBandHeight(
+                fragments: expected,
+                fallbackLineHeight: viewport.system.fallbackLineHeight(
+                    backingScaleFactor: 2
+                ),
+                maximumHeight: viewport.container.maximumActiveBandHeight
+            ),
+            accuracy: 1,
+            file: file, line: line
+        )
     }
 
     private func assertQuickControlMutation(

@@ -1539,6 +1539,7 @@ M6_LEDGER_TITLES = (
     "Detect visual drift without a brittle snapshot dependency",
     "Keep visual acceptance reproducible and honestly host-bound",
     "Make hosted controls match their full semantic targets",
+    "Keep the active band current without rebuilding text",
 )
 M6_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -1691,6 +1692,28 @@ M6_REPAIR_FORBIDDEN_MARKERS = (
     ("circular-hit-shape", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".contentShape(Circle())"),
     ("caller-echoed-ax", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "chromeIsAccessibilityNavigable: state == .unlocked"),
     ("duplicated-empty-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.scriptText.trimmingCharacters"),
+)
+
+M6_BAND_REPAIR_NAMED_TESTS = (
+    "testCompactActiveBandUsesReservedReadingRectMidpoint",
+    "testAttachedAttributeReconciliationRefreshesCachedBandWithoutReaderMutation",
+    "testClipOriginRefreshUsesExactCachedTargetAndCoalescesAtLineBoundaries",
+    "testCachedBandSelectionPreservesSortedMetricsAndFollowingTieBreakWithoutResort",
+)
+M6_BAND_REPAIR_SOURCE_MARKERS = (
+    ("attribute-invalidates-band-cache", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "viewportAdapter?.invalidateActiveBandLineMetrics()", 1),
+    ("attribute-refresh-entry", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "func refreshActiveBandAfterAttributeChange()", 1),
+    ("attribute-refresh-delegation", "PrivatePresenterApp/Overlay/ReaderTextSystem.swift", "viewportAdapter?.refreshActiveBandAfterAttributeChange()", 1),
+    ("effect-refresh-after-reconcile", "PrivatePresenterApp/App/DependencyContainer.swift", "readerTextSystem.refreshActiveBandAfterAttributeChange()", 1),
+    ("band-cache-current-flag", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "private var activeBandLineMetricsAreCurrent = false", 1),
+    ("band-cache-invalidation", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "func invalidateActiveBandLineMetrics()", 1),
+    ("band-attribute-reconciliation", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "func refreshActiveBandAfterAttributeChange()", 1),
+    ("cached-evidence-view", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "var cachedLineFragmentEvidence: [LineFragmentEvidence]", 1),
+    ("clip-cache-refresh", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "refreshActiveBandLayoutFromCachedMetrics()", 1),
+    ("forced-attribute-band-refresh", "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", "refreshActiveBandLayoutFromCachedMetrics(force: true)", 1),
+    ("cache-only-band-refresh", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "func refreshActiveBandLayoutFromCachedMetrics(force: Bool = false)", 1),
+    ("selected-pair-coalescing", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "guard force || signature != resolvedBandSignature else { return }", 1),
+    ("legacy-reserved-rect-test", "PrivatePresenterAppTests/ScrollSessionControllerTests.swift", "func testBandUsesPersistedViewportFractionInsideReservedReadingRect()", 1),
 )
 
 M6_M1_REQUIRED_PATHS = (
@@ -3413,6 +3436,7 @@ def validate_m6_source() -> list[str]:
         ("m4", M6_M4_NAMED_TESTS),
         ("m5", M6_M5_VISUAL_NAMED_TESTS),
         ("repair", M6_REPAIR_NAMED_TESTS),
+        ("band-repair", M6_BAND_REPAIR_NAMED_TESTS),
     ):
         for name in names:
             if visual_tests.count(f"func {name}()") != 1:
@@ -3440,6 +3464,32 @@ def validate_m6_source() -> list[str]:
     for label, path, marker in M6_REPAIR_FORBIDDEN_MARKERS:
         if (ROOT / path).is_file() and marker in read(path):
             violations.append(f"visual:repair-forbidden:{label}")
+
+    for label, path, marker, expected_count in M6_BAND_REPAIR_SOURCE_MARKERS:
+        if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
+            violations.append(f"visual:band-repair-missing-marker:{label}")
+
+    adapter_source = production_sources.get(
+        "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", ""
+    )
+    selection_source = adapter_source.split(
+        "static func selectActiveBandLineFragments", 1
+    )[-1].split("func captureAnchor", 1)[0]
+    if ".sorted" in selection_source:
+        violations.append("visual:band-repair-selection-resort")
+    clip_source = adapter_source.split("func setClipOriginY", 1)[-1].split(
+        "func threeCompleteLineStep", 1
+    )[0]
+    if any(marker in clip_source for marker in ("ensureLayout(", "model", ".send(")):
+        violations.append("visual:band-repair-clip-owner-creep")
+    container_source = production_sources.get(
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift", ""
+    )
+    cache_refresh_source = container_source.split(
+        "func refreshActiveBandLayoutFromCachedMetrics", 1
+    )[-1].split("static func resolvedActiveBandHeight", 1)[0]
+    if any(marker in cache_refresh_source for marker in ("ensureLayout(", "NSTextLayoutManager(")):
+        violations.append("visual:band-repair-cache-owner-creep")
 
     for marker in (
         "OverlayVisualTokens",
