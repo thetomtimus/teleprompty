@@ -1,6 +1,7 @@
 name: Build M6 macOS DMG
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - build/m6-dmg
@@ -15,7 +16,7 @@ jobs:
 
     steps:
       - name: Check out build trigger branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -31,7 +32,7 @@ jobs:
       - name: Pin the exact verified M6 source candidate
         run: |
           set -euo pipefail
-          expected='2d2dc0898b17acfa263d1b719c2114a027f114af'
+          expected='3b599298ec8410c9c01697df27147f66af486ce3'
           git checkout --detach "$expected"
           mkdir -p .omx/handoff
           ditto /tmp/private-presenter-handoff/private-presenter-m6 \
@@ -52,9 +53,14 @@ jobs:
           test "$(xcodegen --version)" = "Version: 2.45.4"
 
       - name: Run the complete automated macOS gate
+        id: mac_gate
+        continue-on-error: true
         run: ./Scripts/verify-macos.sh
 
       - name: Ad-hoc sign and package the arm64 DMG
+        id: package
+        if: steps.mac_gate.outcome == 'success'
+        continue-on-error: true
         run: |
           set -euo pipefail
           app='.build/DerivedData-Release/Build/Products/Release/Private Presenter.app'
@@ -89,7 +95,7 @@ jobs:
           This build is not notarized. It still needs the physical Keynote,
           extended-display, VoiceOver, Instruments, and visual acceptance checks.
           TXT
-          printf '%s\n' '2d2dc0898b17acfa263d1b719c2114a027f114af' > dist/SOURCE-SHA.txt
+          printf '%s\n' '3b599298ec8410c9c01697df27147f66af486ce3' > dist/SOURCE-SHA.txt
 
           hdiutil create \
             -volname 'Private Presenter M6 Test' \
@@ -101,6 +107,7 @@ jobs:
             > dist/Private-Presenter-M6-macOS-arm64.dmg.sha256
 
       - name: Upload downloadable DMG
+        if: steps.package.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: Private-Presenter-M6-macOS-arm64-DMG
@@ -110,3 +117,16 @@ jobs:
             dist/SOURCE-SHA.txt
           if-no-files-found: error
           retention-days: 7
+
+      - name: Record controlled diagnostic outcome
+        if: always()
+        env:
+          MAC_GATE_OUTCOME: ${{ steps.mac_gate.outcome }}
+          PACKAGE_OUTCOME: ${{ steps.package.outcome }}
+        run: |
+          printf 'mac_gate=%s\npackage=%s\n' "$MAC_GATE_OUTCOME" "$PACKAGE_OUTCOME"
+          if [ "$MAC_GATE_OUTCOME" != success ]; then
+            echo '::warning::Native gate did not pass; no DMG was published from this controlled diagnostic run.'
+          elif [ "$PACKAGE_OUTCOME" != success ]; then
+            echo '::warning::Native gate passed but DMG packaging did not; no DMG was published.'
+          fi
