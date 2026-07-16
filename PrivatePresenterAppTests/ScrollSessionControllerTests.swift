@@ -84,7 +84,7 @@ final class ScrollSessionControllerTests: XCTestCase {
         XCTAssertFalse(viewport.container.scrollView.drawsBackground)
         XCTAssertFalse(viewport.container.scrollView.contentView.drawsBackground)
         XCTAssertFalse(viewport.system.textView.drawsBackground)
-        XCTAssertEqual(viewport.container.backgroundView.layer?.backgroundColor?.alpha, 1)
+        XCTAssertEqual(viewport.container.backgroundView.layer?.backgroundColor?.alpha, 0)
     }
 
     func testBottomDocumentPaddingIsExactlySixtyFourPoints() {

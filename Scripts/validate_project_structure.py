@@ -1460,16 +1460,93 @@ M6_PROTECTED_PATHS = (
 )
 
 M6_PHASE_ZERO_FUTURE_PATHS = (
-    "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
     "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
-    "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
     ".omx/handoff/private-presenter-m6/m6-artifacts.sha256",
     ".omx/handoff/private-presenter-m6/m6-source-files.sha256",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-source.tar",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-wsl.bundle",
+)
+
+M6_M1_REQUIRED_PATHS = (
+    "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+    "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
+)
+
+M6_M1_NAMED_TESTS = (
+    "testReferenceSurfaceUsesExactOpaqueNavyTokens",
+    "testRoundedInteriorIsOpaqueOverWhiteAndBlack",
+    "testNoTitleBarScrollbarGlowOrCompetingReaderFill",
+)
+
+M6_M1_SOURCE_MARKERS = (
+    (
+        "named-swiftui-srgb",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "Color(.sRGB, red: red, green: green, blue: blue, opacity: opacity)",
+    ),
+    (
+        "named-appkit-srgb",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "NSColor(srgbRed: red, green: green, blue: blue, alpha: opacity)",
+    ),
+    (
+        "opaque-card-top",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 52.0 / 255, green: 70.0 / 255, blue: 111.0 / 255, opacity: 1",
+    ),
+    (
+        "opaque-card-middle",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 44.0 / 255, green: 61.0 / 255, blue: 99.0 / 255, opacity: 1",
+    ),
+    (
+        "opaque-card-bottom",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 32.0 / 255, green: 43.0 / 255, blue: 75.0 / 255, opacity: 1",
+    ),
+    (
+        "reading-text",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 247.0 / 255, green: 248.0 / 255, blue: 252.0 / 255, opacity: 1",
+    ),
+    (
+        "card-radius",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "static let cardRadius: CGFloat = 30",
+    ),
+    (
+        "card-border-width",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "static let cardBorderWidth: CGFloat = 1",
+    ),
+    (
+        "root-gradient",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        "LinearGradient(",
+    ),
+    (
+        "continuous-card",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        "RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)",
+    ),
+    (
+        "inset-card-border",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        ".strokeBorder(",
+    ),
+    (
+        "background-accessibility-id",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        '.accessibilityIdentifier("privatePresenter.readerBackground")',
+    ),
+    (
+        "transparent-appkit-reader",
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+        "backgroundView.layer?.backgroundColor = NSColor.clear.cgColor",
+    ),
 )
 
 M6_PREDECESSOR_PENDING_CLAIMS = (
@@ -1498,6 +1575,11 @@ M6_M5_HANDOFF_FILES = (
 )
 
 M6_PHASE_ZERO_ALLOWED_CHANGES = (
+    "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+    "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+    "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+    "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
+    "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
     "Scripts/test_validate_project_structure_m6.py",
     "Scripts/validate_project_structure.py",
     "Scripts/verify-wsl.sh",
@@ -2643,7 +2725,10 @@ def validate_m6_path_inventory(
 def validate_m6_source() -> list[str]:
     """Validate the M6 phase-zero source and its exact predecessor evidence epoch."""
     violations = validate_m6_path_inventory(
-        required_paths=("Scripts/test_validate_project_structure_m6.py",),
+        required_paths=(
+            "Scripts/test_validate_project_structure_m6.py",
+            *M6_M1_REQUIRED_PATHS,
+        ),
         absent_paths=M6_PHASE_ZERO_FUTURE_PATHS,
     )
 
@@ -2691,6 +2776,37 @@ def validate_m6_source() -> list[str]:
     ]
     production_sources = {path: read(path) for path in production_paths}
     joined_sources = "\n".join(production_sources.values())
+
+    visual_tests_path = "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+    visual_tests = read(visual_tests_path) if (ROOT / visual_tests_path).is_file() else ""
+    for name in M6_M1_NAMED_TESTS:
+        if visual_tests.count(f"func {name}()") != 1:
+            violations.append(f"visual:m1-missing-test:{name}")
+    for label, path, marker in M6_M1_SOURCE_MARKERS:
+        if not (ROOT / path).is_file() or read(path).count(marker) != 1:
+            violations.append(f"visual:m1-missing-marker:{label}")
+
+    root_source = production_sources.get(
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift", ""
+    )
+    reader_source = production_sources.get(
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift", ""
+    )
+    panel_source = production_sources.get(
+        "PrivatePresenterApp/Overlay/TeleprompterPanel.swift", ""
+    )
+    for label, source, marker in (
+        ("old-root-fill", root_source, "Color(red: 0.05, green: 0.06, blue: 0.09)"),
+        ("old-reader-fill", reader_source, "red: 0.05,\n            green: 0.06"),
+        ("card-glow", root_source, ".shadow("),
+    ):
+        if marker in source:
+            violations.append(f"visual:m1-forbidden:{label}")
+    if "hasShadow = true" not in panel_source:
+        violations.append("visual:m1-panel-shadow")
+    if "isOpaque = false" not in panel_source:
+        violations.append("visual:m1-window-curved-alpha")
+
     prohibited = (
         "addGlobalMonitorForEvents",
         "addLocalMonitorForEvents",

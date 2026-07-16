@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 
 sys.dont_write_bytecode = True
@@ -54,16 +55,91 @@ EXPECTED_PROTECTED_PATHS = (
 )
 
 EXPECTED_FUTURE_M6_PATHS = (
-    "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
     "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
-    "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "docs/validation/visual-result.md",
     ".omx/handoff/private-presenter-m6/MAC-CONTINUATION.md",
     ".omx/handoff/private-presenter-m6/m6-artifacts.sha256",
     ".omx/handoff/private-presenter-m6/m6-source-files.sha256",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-source.tar",
     ".omx/handoff/private-presenter-m6/private-presenter-m6-wsl.bundle",
+)
+
+EXPECTED_M1_REQUIRED_PATHS = (
+    "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+    "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
+)
+EXPECTED_M1_NAMED_TESTS = (
+    "testReferenceSurfaceUsesExactOpaqueNavyTokens",
+    "testRoundedInteriorIsOpaqueOverWhiteAndBlack",
+    "testNoTitleBarScrollbarGlowOrCompetingReaderFill",
+)
+EXPECTED_M1_SOURCE_MARKERS = (
+    (
+        "named-swiftui-srgb",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "Color(.sRGB, red: red, green: green, blue: blue, opacity: opacity)",
+    ),
+    (
+        "named-appkit-srgb",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "NSColor(srgbRed: red, green: green, blue: blue, alpha: opacity)",
+    ),
+    (
+        "opaque-card-top",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 52.0 / 255, green: 70.0 / 255, blue: 111.0 / 255, opacity: 1",
+    ),
+    (
+        "opaque-card-middle",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 44.0 / 255, green: 61.0 / 255, blue: 99.0 / 255, opacity: 1",
+    ),
+    (
+        "opaque-card-bottom",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 32.0 / 255, green: 43.0 / 255, blue: 75.0 / 255, opacity: 1",
+    ),
+    (
+        "reading-text",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "red: 247.0 / 255, green: 248.0 / 255, blue: 252.0 / 255, opacity: 1",
+    ),
+    (
+        "card-radius",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "static let cardRadius: CGFloat = 30",
+    ),
+    (
+        "card-border-width",
+        "PrivatePresenterApp/Overlay/OverlayVisualTokens.swift",
+        "static let cardBorderWidth: CGFloat = 1",
+    ),
+    (
+        "root-gradient",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        "LinearGradient(",
+    ),
+    (
+        "continuous-card",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        "RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)",
+    ),
+    (
+        "inset-card-border",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        ".strokeBorder(",
+    ),
+    (
+        "background-accessibility-id",
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift",
+        '.accessibilityIdentifier("privatePresenter.readerBackground")',
+    ),
+    (
+        "transparent-appkit-reader",
+        "PrivatePresenterApp/Overlay/ReaderTextView.swift",
+        "backgroundView.layer?.backgroundColor = NSColor.clear.cgColor",
+    ),
 )
 
 EXPECTED_PENDING_CLAIMS = (
@@ -112,6 +188,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_PHASE_ZERO_FUTURE_PATHS": EXPECTED_FUTURE_M6_PATHS,
             "M6_PREDECESSOR_PENDING_CLAIMS": EXPECTED_PENDING_CLAIMS,
             "M6_M5_HANDOFF_FILES": EXPECTED_M5_HANDOFF_FILES,
+            "M6_M1_REQUIRED_PATHS": EXPECTED_M1_REQUIRED_PATHS,
+            "M6_M1_NAMED_TESTS": EXPECTED_M1_NAMED_TESTS,
+            "M6_M1_SOURCE_MARKERS": EXPECTED_M1_SOURCE_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -242,6 +321,39 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertNotIn("getenv", source)
         self.assertNotIn("environ", source)
         self.assertNotIn("phase_zero", inspect.signature(VALIDATOR.validate_m6_path_inventory).parameters)
+
+    def testM1OpaqueReferenceSurfaceContractAndMutations(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_M1_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        for label, path, marker in EXPECTED_M1_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                source = VALIDATOR.read(path)
+                self.assertEqual(source.count(marker), 1, f"{path}:{label}")
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == path:
+                        return source.replace(marker, f"removed-{label}", 1)
+                    return VALIDATOR_READ(candidate)
+
+                VALIDATOR_READ = VALIDATOR.read
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(f"visual:m1-missing-marker:{label}", violations)
+
+        root = VALIDATOR.read("PrivatePresenterApp/Overlay/OverlayRootView.swift")
+        reader = VALIDATOR.read("PrivatePresenterApp/Overlay/ReaderTextView.swift")
+        panel = VALIDATOR.read("PrivatePresenterApp/Overlay/TeleprompterPanel.swift")
+        self.assertNotIn("Color(red: 0.05, green: 0.06, blue: 0.09)", root)
+        self.assertNotIn("red: 0.05,\n            green: 0.06", reader)
+        self.assertNotIn(".shadow(", root)
+        self.assertIn("hasShadow = true", panel)
+        self.assertIn("isOpaque = false", panel)
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
 
 if __name__ == "__main__":
