@@ -135,6 +135,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep visual acceptance reproducible and honestly host-bound",
     "Make hosted controls match their full semantic targets",
     "Keep the active band current without rebuilding text",
+    "Make the semantic oracle deterministic without sharing product state",
 )
 EXPECTED_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -232,7 +233,7 @@ EXPECTED_M5_VISUAL_SOURCE_MARKERS = (
     ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 2),
     (
         "literal-continuous-mask",
-        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: bounds).cgPath",
+        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: literalBounds).cgPath",
         1,
     ),
     ("literal-oracle", "static func makeCanonicalSemanticOracle() throws -> SemanticOracle", 1),
@@ -307,6 +308,48 @@ EXPECTED_BAND_REPAIR_SOURCE_MARKERS = (
     ("cache-only-band-refresh", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "func refreshActiveBandLayoutFromCachedMetrics(force: Bool = false)", 1),
     ("selected-pair-coalescing", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "guard force || signature != resolvedBandSignature else { return }", 1),
     ("legacy-reserved-rect-test", "PrivatePresenterAppTests/ScrollSessionControllerTests.swift", "func testBandUsesPersistedViewportFractionInsideReservedReadingRect()", 1),
+)
+
+EXPECTED_ORACLE_REPAIR_NAMED_TESTS = (
+    "testActualRenderBufferUsesNamedSRGBEightBitPremultipliedRGBA",
+    "testOffscreenTextKitRenderHostUsesAssertedTwoXBackingScale",
+    "testSemanticOracleBandUsesTwoIndependentlyMeasuredTextKitFragmentHeights",
+    "testCanonicalFrameworkMaskStaysLiteralIndependentAndMutationSensitive",
+)
+EXPECTED_ORACLE_REPAIR_SOURCE_MARKERS = (
+    ("premultiplied-bitmap", "bitmapFormat: []", 1),
+    ("explicit-eight-bit-components", "bitsPerSample: 8", 1),
+    ("named-srgb-bitmap", "colorSpaceName: .sRGB", 1),
+    ("explicit-host-layer", "hosting.wantsLayer = true", 1),
+    ("explicit-host-scale", "hosting.layer?.contentsScale = backingScale", 1),
+    ("asserted-effective-scale", "guard effectiveBackingScale == backingScale else", 1),
+    ("textkit-scale", "textView.layer?.contentsScale = backingScale", 1),
+    (
+        "measured-fragment-entry",
+        "static func measureSyntheticTextKitFragmentHeights() throws -> [CGFloat]",
+        1,
+    ),
+    (
+        "oracle-fragment-input",
+        "static func makeCanonicalSemanticOracle(\n        fragmentHeights: [CGFloat]",
+        1,
+    ),
+    (
+        "two-measured-heights-plus-padding",
+        "bandFragmentHeights[0] + bandFragmentHeights[1] + 12",
+        1,
+    ),
+    ("literal-bounds", "let literalBounds = CGRect(origin: .zero, size: size)", 1),
+    (
+        "framework-continuous-literal-mask",
+        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: literalBounds).cgPath",
+        1,
+    ),
+)
+EXPECTED_ORACLE_REPAIR_FORBIDDEN_MARKERS = (
+    ("nonpremultiplied-alpha", ".alphaNonpremultiplied"),
+    ("screen-dependent-scale", "NSScreen"),
+    ("fixed-band-formula", "2 * (42 * 1.42) + 12"),
 )
 
 EXPECTED_M1_REQUIRED_PATHS = (
@@ -615,6 +658,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             "M6_REPAIR_FORBIDDEN_MARKERS": EXPECTED_REPAIR_FORBIDDEN_MARKERS,
             "M6_BAND_REPAIR_NAMED_TESTS": EXPECTED_BAND_REPAIR_NAMED_TESTS,
             "M6_BAND_REPAIR_SOURCE_MARKERS": EXPECTED_BAND_REPAIR_SOURCE_MARKERS,
+            "M6_ORACLE_REPAIR_NAMED_TESTS": EXPECTED_ORACLE_REPAIR_NAMED_TESTS,
+            "M6_ORACLE_REPAIR_SOURCE_MARKERS": EXPECTED_ORACLE_REPAIR_SOURCE_MARKERS,
+            "M6_ORACLE_REPAIR_FORBIDDEN_MARKERS": EXPECTED_ORACLE_REPAIR_FORBIDDEN_MARKERS,
         }
         for name, value in expected.items():
             with self.subTest(constant=name):
@@ -1042,6 +1088,79 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
 
         self.assertEqual(VALIDATOR.validate_m6_source(), [])
 
+    def testM6DeterministicSemanticOracleRepairContractAndMutations(self) -> None:
+        test_source = VALIDATOR.read(
+            "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift"
+        )
+        for name in EXPECTED_ORACLE_REPAIR_NAMED_TESTS:
+            with self.subTest(named_test=name):
+                self.assertEqual(test_source.count(f"func {name}()"), 1)
+
+        support_path = "PrivatePresenterAppTests/M6VisualTestSupport.swift"
+        support = VALIDATOR.read(support_path)
+        for label, marker, expected_count in EXPECTED_ORACLE_REPAIR_SOURCE_MARKERS:
+            with self.subTest(source_marker=label):
+                self.assertEqual(support.count(marker), expected_count, label)
+                original_read = VALIDATOR.read
+
+                def replaced_read(candidate: str) -> str:
+                    if candidate == support_path:
+                        return support.replace(marker, f"removed-{label}")
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=replaced_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(
+                    f"visual:oracle-repair-missing-marker:{label}", violations
+                )
+
+        for label, marker in EXPECTED_ORACLE_REPAIR_FORBIDDEN_MARKERS:
+            with self.subTest(forbidden_marker=label):
+                self.assertNotIn(marker, support, label)
+                original_read = VALIDATOR.read
+
+                def injected_read(candidate: str) -> str:
+                    if candidate == support_path:
+                        return support + "\n" + marker
+                    return original_read(candidate)
+
+                with patch.object(VALIDATOR, "read", side_effect=injected_read):
+                    violations = VALIDATOR.validate_m6_source()
+                self.assertIn(
+                    f"visual:oracle-repair-forbidden:{label}", violations
+                )
+
+        mask_source = support.split(
+            "private static func makeLiteralCardMask", 1
+        )[-1].split("private static func drawLiteralSurface", 1)[0]
+        self.assertIn(
+            "RoundedRectangle(cornerRadius: 30, style: .continuous)"
+            ".path(in: literalBounds).cgPath",
+            mask_source,
+        )
+        for marker in ("CGPath(roundedRect:", "addArc(", "addCurve("):
+            self.assertNotIn(marker, mask_source)
+
+        original_read = VALIDATOR.read
+
+        def hand_coded_mask(candidate: str) -> str:
+            if candidate == support_path:
+                return support.replace(
+                    "private static func drawLiteralSurface",
+                    "// CGPath(roundedRect: hand-coded mask\n"
+                    "private static func drawLiteralSurface",
+                    1,
+                )
+            return original_read(candidate)
+
+        with patch.object(VALIDATOR, "read", side_effect=hand_coded_mask):
+            self.assertIn(
+                "visual:oracle-repair-hand-coded-mask",
+                VALIDATOR.validate_m6_source(),
+            )
+
+        self.assertEqual(VALIDATOR.validate_m6_source(), [])
+
     def testM6PendingScreenshotIdentityRowsRejectEveryOmission(self) -> None:
         path = ROOT / EXPECTED_RESULT_PATH
         self.assertTrue(path.is_file(), "6A RED requires the additive visual-result template")
@@ -1132,7 +1251,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
                     any(item.startswith("evidence:private-surface:") for item in violations)
                 )
 
-    def testM6HistoryIsExactlyNineImmediateRedGreenPairs(self) -> None:
+    def testM6HistoryIsExactlyTenImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
         self.assertEqual(VALIDATOR.validate_m6_history_rows(rows), [])
         self.assertEqual(len(rows), len(EXPECTED_LEDGER_TITLES) * 2)

@@ -958,7 +958,10 @@ final class OverlayVisualSnapshotTests: XCTestCase {
 
     func testActualOverlayRenderMatchesIndependentSemanticBaseline() throws {
         let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
-        let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle()
+        let fragmentHeights = try M6VisualTestSupport.measureSyntheticTextKitFragmentHeights()
+        let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle(
+            fragmentHeights: fragmentHeights
+        )
         let comparison = M6VisualTestSupport.compare(rendered.image, with: oracle)
 
         XCTAssertTrue(comparison.interiorAlphaIsExact, comparison.summary)
@@ -973,7 +976,10 @@ final class OverlayVisualSnapshotTests: XCTestCase {
 
     func testSemanticComparatorRejectsEveryNamedCorruption() throws {
         let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
-        let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle()
+        let fragmentHeights = try M6VisualTestSupport.measureSyntheticTextKitFragmentHeights()
+        let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle(
+            fragmentHeights: fragmentHeights
+        )
         for corruption in M6VisualTestSupport.Corruption.allCases {
             let corrupted = try M6VisualTestSupport.corrupt(
                 rendered.image, corruption: corruption
@@ -1031,6 +1037,83 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertEqual(rendered.textColor.colorSpace, .sRGB)
         XCTAssertEqual(rendered.readerFrame, CGRect(x: 52, y: 124, width: 932, height: 222))
         XCTAssertEqual(rendered.toolbarFrame, CGRect(x: 324.5, y: 24, width: 387, height: 65))
+    }
+
+    func testActualRenderBufferUsesNamedSRGBEightBitPremultipliedRGBA() throws {
+        let rendered = try M6VisualTestSupport.renderCanonicalOverlay()
+        XCTAssertEqual(rendered.image.colorSpace?.name, CGColorSpace.sRGB)
+        XCTAssertEqual(rendered.image.bitsPerComponent, 8)
+        XCTAssertEqual(rendered.image.bitsPerPixel, 32)
+        XCTAssertEqual(rendered.image.bytesPerRow, rendered.image.width * 4)
+        XCTAssertEqual(rendered.image.alphaInfo, .premultipliedLast)
+        XCTAssertFalse(rendered.bitmapUsesNonpremultipliedAlpha)
+    }
+
+    func testOffscreenTextKitRenderHostUsesAssertedTwoXBackingScale() throws {
+        for size in M6VisualTestSupport.renderSizes {
+            let rendered = try M6VisualTestSupport.render(
+                size: size, state: .unlocked
+            )
+            XCTAssertEqual(rendered.scale, 2)
+            XCTAssertEqual(rendered.effectiveBackingScale, 2)
+            XCTAssertEqual(rendered.textKitBandBackingScale, 2)
+            XCTAssertEqual(rendered.image.width, Int(size.width * 2))
+            XCTAssertEqual(rendered.image.height, Int(size.height * 2))
+        }
+    }
+
+    func testSemanticOracleBandUsesTwoIndependentlyMeasuredTextKitFragmentHeights() throws {
+        let heights = try M6VisualTestSupport.measureSyntheticTextKitFragmentHeights()
+        XCTAssertEqual(heights.count, 2)
+        XCTAssertTrue(heights.allSatisfy { $0.isFinite && $0 > 0 })
+
+        let oracle = try M6VisualTestSupport.makeCanonicalSemanticOracle(
+            fragmentHeights: heights
+        )
+        let band = try XCTUnwrap(oracle.regions["band"])
+        XCTAssertEqual(band.height, heights[0] + heights[1] + 12, accuracy: 0.001)
+
+        let firstMutation = try M6VisualTestSupport.makeCanonicalSemanticOracle(
+            fragmentHeights: [heights[0] + 3, heights[1]]
+        )
+        let secondMutation = try M6VisualTestSupport.makeCanonicalSemanticOracle(
+            fragmentHeights: [heights[0], heights[1] + 5]
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(firstMutation.regions["band"]).height,
+            band.height + 3,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(secondMutation.regions["band"]).height,
+            band.height + 5,
+            accuracy: 0.001
+        )
+    }
+
+    func testCanonicalFrameworkMaskStaysLiteralIndependentAndMutationSensitive() throws {
+        let supportURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("M6VisualTestSupport.swift")
+        let support = try String(contentsOf: supportURL, encoding: .utf8)
+        let literalPath = "RoundedRectangle(cornerRadius: 30, style: .continuous)"
+            + ".path(in: literalBounds).cgPath"
+        XCTAssertEqual(support.components(separatedBy: literalPath).count - 1, 1)
+        XCTAssertFalse(support.contains("OverlayVisualTokens"))
+        XCTAssertFalse(support.contains("OverlayLayoutMetrics"))
+
+        let canonical = try M6VisualTestSupport.makeLiteralCardMask(
+            radius: 30, style: .continuous
+        )
+        let wrongRadius = try M6VisualTestSupport.makeLiteralCardMask(
+            radius: 29, style: .continuous
+        )
+        let wrongStyle = try M6VisualTestSupport.makeLiteralCardMask(
+            radius: 30, style: .circular
+        )
+        XCTAssertTrue(M6VisualTestSupport.cardMaskMatchesCanonical(canonical))
+        XCTAssertFalse(M6VisualTestSupport.cardMaskMatchesCanonical(wrongRadius))
+        XCTAssertFalse(M6VisualTestSupport.cardMaskMatchesCanonical(wrongStyle))
     }
 
     private func assertCachedBandMatchesExactTarget(

@@ -1540,6 +1540,7 @@ M6_LEDGER_TITLES = (
     "Keep visual acceptance reproducible and honestly host-bound",
     "Make hosted controls match their full semantic targets",
     "Keep the active band current without rebuilding text",
+    "Make the semantic oracle deterministic without sharing product state",
 )
 M6_PRIOR_LEDGER_PAIRS = (
     ("726c781f4fd09e0bdc69c37a0f424c3979451736", "401fa11f385fb3d56aaa4864d3a316853e59b4e3"),
@@ -1639,7 +1640,7 @@ M6_M5_VISUAL_SOURCE_MARKERS = (
     ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 2),
     (
         "literal-continuous-mask",
-        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: bounds).cgPath",
+        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: literalBounds).cgPath",
         1,
     ),
     ("literal-oracle", "static func makeCanonicalSemanticOracle() throws -> SemanticOracle", 1),
@@ -1714,6 +1715,48 @@ M6_BAND_REPAIR_SOURCE_MARKERS = (
     ("cache-only-band-refresh", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "func refreshActiveBandLayoutFromCachedMetrics(force: Bool = false)", 1),
     ("selected-pair-coalescing", "PrivatePresenterApp/Overlay/ReaderTextView.swift", "guard force || signature != resolvedBandSignature else { return }", 1),
     ("legacy-reserved-rect-test", "PrivatePresenterAppTests/ScrollSessionControllerTests.swift", "func testBandUsesPersistedViewportFractionInsideReservedReadingRect()", 1),
+)
+
+M6_ORACLE_REPAIR_NAMED_TESTS = (
+    "testActualRenderBufferUsesNamedSRGBEightBitPremultipliedRGBA",
+    "testOffscreenTextKitRenderHostUsesAssertedTwoXBackingScale",
+    "testSemanticOracleBandUsesTwoIndependentlyMeasuredTextKitFragmentHeights",
+    "testCanonicalFrameworkMaskStaysLiteralIndependentAndMutationSensitive",
+)
+M6_ORACLE_REPAIR_SOURCE_MARKERS = (
+    ("premultiplied-bitmap", "bitmapFormat: []", 1),
+    ("explicit-eight-bit-components", "bitsPerSample: 8", 1),
+    ("named-srgb-bitmap", "colorSpaceName: .sRGB", 1),
+    ("explicit-host-layer", "hosting.wantsLayer = true", 1),
+    ("explicit-host-scale", "hosting.layer?.contentsScale = backingScale", 1),
+    ("asserted-effective-scale", "guard effectiveBackingScale == backingScale else", 1),
+    ("textkit-scale", "textView.layer?.contentsScale = backingScale", 1),
+    (
+        "measured-fragment-entry",
+        "static func measureSyntheticTextKitFragmentHeights() throws -> [CGFloat]",
+        1,
+    ),
+    (
+        "oracle-fragment-input",
+        "static func makeCanonicalSemanticOracle(\n        fragmentHeights: [CGFloat]",
+        1,
+    ),
+    (
+        "two-measured-heights-plus-padding",
+        "bandFragmentHeights[0] + bandFragmentHeights[1] + 12",
+        1,
+    ),
+    ("literal-bounds", "let literalBounds = CGRect(origin: .zero, size: size)", 1),
+    (
+        "framework-continuous-literal-mask",
+        "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: literalBounds).cgPath",
+        1,
+    ),
+)
+M6_ORACLE_REPAIR_FORBIDDEN_MARKERS = (
+    ("nonpremultiplied-alpha", ".alphaNonpremultiplied"),
+    ("screen-dependent-scale", "NSScreen"),
+    ("fixed-band-formula", "2 * (42 * 1.42) + 12"),
 )
 
 M6_M1_REQUIRED_PATHS = (
@@ -3438,6 +3481,7 @@ def validate_m6_source() -> list[str]:
         ("m5", M6_M5_VISUAL_NAMED_TESTS),
         ("repair", M6_REPAIR_NAMED_TESTS),
         ("band-repair", M6_BAND_REPAIR_NAMED_TESTS),
+        ("oracle-repair", M6_ORACLE_REPAIR_NAMED_TESTS),
     ):
         for name in names:
             if visual_tests.count(f"func {name}()") != 1:
@@ -3469,6 +3513,21 @@ def validate_m6_source() -> list[str]:
     for label, path, marker, expected_count in M6_BAND_REPAIR_SOURCE_MARKERS:
         if not (ROOT / path).is_file() or read(path).count(marker) != expected_count:
             violations.append(f"visual:band-repair-missing-marker:{label}")
+
+    for label, marker, expected_count in M6_ORACLE_REPAIR_SOURCE_MARKERS:
+        if m5_support.count(marker) != expected_count:
+            violations.append(f"visual:oracle-repair-missing-marker:{label}")
+    for label, marker in M6_ORACLE_REPAIR_FORBIDDEN_MARKERS:
+        if marker in m5_support:
+            violations.append(f"visual:oracle-repair-forbidden:{label}")
+    mask_source = m5_support.split(
+        "private static func makeLiteralCardMask", 1
+    )[-1].split("private static func drawLiteralSurface", 1)[0]
+    if any(
+        marker in mask_source
+        for marker in ("CGPath(roundedRect:", "addArc(", "addCurve(")
+    ):
+        violations.append("visual:oracle-repair-hand-coded-mask")
 
     adapter_source = production_sources.get(
         "PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift", ""
