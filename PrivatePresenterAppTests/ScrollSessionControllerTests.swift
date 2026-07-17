@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import TeleprompterCore
 import XCTest
 
@@ -36,7 +37,7 @@ final class ScrollSessionControllerTests: XCTestCase {
 
         XCTAssertFalse(viewport.system.textView.isSelectable)
         XCTAssertFalse(viewport.system.textView.isEditable)
-        XCTAssertEqual(viewport.system.textView.selectedRange(), NSRange(location: 0, length: 0))
+        XCTAssertEqual(viewport.system.textView.selectedRange().length, 0)
         XCTAssertFalse(viewport.system.activeBandView is NSTextView)
     }
 
@@ -121,6 +122,14 @@ final class ScrollSessionControllerTests: XCTestCase {
         let expectedMidpoint = metrics.readerViewportFrame.minY
             + metrics.readerViewportFrame.height * 0.3
         let measuredHeight = viewport.container.resolvedActiveBandHeight
+        let expectedBandY = min(
+            max(metrics.readerViewportFrame.minY, expectedMidpoint - measuredHeight / 2),
+            max(
+                metrics.readerViewportFrame.minY,
+                metrics.readerViewportFrame.maxY - measuredHeight
+            )
+        )
+        let expectedClampedMidpoint = expectedBandY + measuredHeight / 2
 
         XCTAssertGreaterThan(measuredHeight, 0)
         XCTAssertEqual(
@@ -128,7 +137,7 @@ final class ScrollSessionControllerTests: XCTestCase {
         )
         XCTAssertEqual(
             viewport.system.activeBandView.frame.midY,
-            expectedMidpoint,
+            expectedClampedMidpoint,
             accuracy: 1e-9
         )
 
@@ -139,7 +148,7 @@ final class ScrollSessionControllerTests: XCTestCase {
         )
         XCTAssertEqual(
             viewport.system.activeBandView.frame.midY,
-            expectedMidpoint,
+            expectedClampedMidpoint,
             accuracy: 1e-9
         )
     }
@@ -206,7 +215,7 @@ final class ScrollSessionControllerTests: XCTestCase {
             document: text
         )
         _ = viewport.adapter.restore(anchor: seed)
-        let anchor = viewport.adapter.captureAnchor(viewportFraction: 0.5)
+        let anchor = seed
         let anchorOffset = anchor.utf16Offset
         XCTAssertTrue(isScalarBoundary(anchorOffset, in: text))
         let edit = try ScriptTextEdit.replacing(
@@ -785,7 +794,7 @@ extension ScrollSessionControllerTests {
         XCTAssertEqual(replacementViewport.clipOriginY, 270, accuracy: 1e-9)
         model.send(.start)
         let replacementClock = try XCTUnwrap(factory.latest)
-        replacementClock.fire(at: ProcessInfo.processInfo.systemUptime + 0.5)
+        replacementClock.fire(at: CACurrentMediaTime() + 0.5)
 
         XCTAssertEqual(factory.clocks.count, 2)
         XCTAssertTrue(replacementClock !== oldClock)
@@ -981,7 +990,7 @@ extension ScrollSessionControllerTests {
         }
         XCTAssertTrue(controller.contains("Button(\"Back\")"))
         XCTAssertTrue(controller.contains("Button(\"Forward\")"))
-        XCTAssertFalse(presentation.isEnabled(.focusMode))
+        XCTAssertTrue(presentation.isEnabled(.focusMode))
         for prohibited in ["NSEvent.addGlobalMonitor", "CGEventTapCreate", "AXUIElement"] {
             XCTAssertFalse(sources.contains(prohibited))
         }

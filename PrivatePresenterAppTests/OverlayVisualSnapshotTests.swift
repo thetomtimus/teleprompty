@@ -618,6 +618,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         for size in M6VisualTestSupport.tierSizes {
             let metrics = OverlayLayoutMetrics(size: size)
             let samplingProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+            defer { samplingProbe.close() }
             let beforeSampling = samplingProbe.controlState
             let dispatchesBeforeSampling = samplingProbe.commandDispatchCount
             assertDenseHostedIdentifierCoverage(
@@ -629,6 +630,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
 
             for region in metrics.quickControlRegions {
                 let actionProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+                defer { actionProbe.close() }
                 let before = actionProbe.controlState
                 let dispatchesBeforePress = actionProbe.commandDispatchCount
                 actionProbe.press(
@@ -649,6 +651,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         let probe = M6VisualTestSupport.HostedRootProbe(
             size: CGSize(width: 700, height: 350)
         )
+        defer { probe.close() }
         XCTAssertTrue(probe.isPrivatePresenterConfirmed)
         XCTAssertFalse(probe.isShielded)
         XCTAssertTrue(probe.controlState.isPaused)
@@ -668,6 +671,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
             let metrics = OverlayLayoutMetrics(size: size)
             for region in metrics.quickControlRegions {
                 let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+                defer { probe.close() }
                 let before = probe.controlState
                 probe.press(at: CGPoint(x: region.frame.midX, y: region.frame.midY))
                 assertQuickControlMutation(
@@ -679,6 +683,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
 
             for resize in OverlayHitRegionResolver.frozenResizeProbes(size: size) {
                 let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+                defer { probe.close() }
                 probe.drag(from: resize.point, by: CGSize(width: 7, height: 5))
                 XCTAssertEqual(probe.resizeChanges.map(\.edge), [resize.edge])
                 XCTAssertEqual(probe.resizeEndCount, 1)
@@ -687,6 +692,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
             }
 
             let titleProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+            defer { titleProbe.close() }
             let titlePoint = CGPoint(
                 x: metrics.titleDragFrame.midX, y: metrics.titleDragFrame.midY
             )
@@ -698,6 +704,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
 
             for header in metrics.headerControlRegions {
                 let headerProbe = M6VisualTestSupport.HostedRootProbe(size: size)
+                defer { headerProbe.close() }
                 let before = headerProbe.controlState
                 let dispatchesBeforePress = headerProbe.commandDispatchCount
                 headerProbe.press(
@@ -726,6 +733,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
     func testHostedSettingsPressShowsExistingControllerExactlyOnceWithoutActivation() {
         for size in M6VisualTestSupport.tierSizes {
             let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+            defer { probe.close() }
             let wasActive = NSApp.isActive
             XCTAssertTrue(
                 probe.pressAccessibilityControl(
@@ -742,6 +750,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
     func testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged() {
         for size in M6VisualTestSupport.tierSizes {
             let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+            defer { probe.close() }
             probe.setRenderState(.unlocked)
             let baseline = probe.readerEvidence
             XCTAssertNotEqual(baseline.activeBandFrame, .zero)
@@ -783,6 +792,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
     func testDefaultUnlockedHostedHeaderOffersLockTeleprompter() {
         for size in M6VisualTestSupport.tierSizes {
             let probe = M6VisualTestSupport.HostedRootProbe(size: size)
+            defer { probe.close() }
             let lock = probe.accessibilityControl(
                 identifier: "privatePresenter.headerLock"
             )
@@ -800,6 +810,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
             let probe = M6VisualTestSupport.HostedRootProbe(
                 size: CGSize(width: 700, height: 350), scriptText: scriptText
             )
+            defer { probe.close() }
             for identifier in playbackIdentifiers {
                 let control = probe.accessibilityControl(identifier: identifier)
                 XCTAssertEqual(control?.label, "Start scrolling")
@@ -810,6 +821,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         let playing = M6VisualTestSupport.HostedRootProbe(
             size: CGSize(width: 700, height: 350), initiallyPlaying: true
         )
+        defer { playing.close() }
         for identifier in playbackIdentifiers {
             let control = playing.accessibilityControl(identifier: identifier)
             XCTAssertEqual(control?.label, "Pause scrolling")

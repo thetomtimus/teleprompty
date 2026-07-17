@@ -232,6 +232,7 @@ enum M6VisualTestSupport {
             window.isReleasedWhenClosed = false
             window.ignoresMouseEvents = false
             window.contentView = hosting
+            window.orderFrontRegardless()
             layout()
         }
 
@@ -255,6 +256,11 @@ enum M6VisualTestSupport {
         var titleChanges: [CGSize] { callbacks.titleChanges }
         var titleEndCount: Int { callbacks.titleEndCount }
         var showExistingControllerCount: Int { callbacks.showExistingControllerCount }
+
+        func close() {
+            window.orderOut(nil)
+            window.close()
+        }
 
         var accessibilityIdentifiers: Set<String> {
             Self.accessibilityIdentifiers(in: hosting)

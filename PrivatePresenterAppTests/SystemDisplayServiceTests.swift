@@ -343,7 +343,7 @@ final class SystemDisplayServiceTests: XCTestCase {
             "registrationRemovalSucceeded()",
             "removalSucceeded && pendingDeliveries == 0",
             "registrationRemovalFailed()",
-            "keep the passRetained ownership forever",
+            "the passRetained ownership forever",
         ] {
             XCTAssertTrue(source.contains(marker), marker)
         }

@@ -1565,6 +1565,7 @@ M6_LEDGER_TITLES = (
     "Convert the native bitmap into explicit sRGB",
     "Record the bitmap conversion in focused support scope",
     "Keep mutable viewport replacement inside MainActor state",
+    "Stabilize final native AppKit integration fixtures",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
