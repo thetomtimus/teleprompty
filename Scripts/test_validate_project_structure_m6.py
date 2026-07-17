@@ -146,6 +146,7 @@ EXPECTED_LEDGER_TITLES = (
     "Return every accessibility retry decision explicitly",
     "Make Carbon callbacks and messages isolation-correct",
     "Keep the display-link target and teardown actor-safe",
+    "Keep dense hosted diagnostics valid Swift",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1448,6 +1449,13 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         )
         self.assertNotIn("MainActor.assumeIsolated", source)
         self.assertNotIn("    deinit {", source)
+
+    def testM6DenseHostedDiagnosticsUseValidInterpolationExpressions(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift")
+        self.assertIn('\\(actual ?? "nil")', source)
+        self.assertIn('\\(failures.joined(separator: "; "))', source)
+        self.assertNotIn('\\(actual ?? \\"nil\\")', source)
+        self.assertNotIn('\\(failures.joined(separator: \\"; \\"))', source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
