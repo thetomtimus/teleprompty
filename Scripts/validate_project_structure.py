@@ -1558,6 +1558,7 @@ M6_LEDGER_TITLES = (
     "Keep controller UI cleanup inside MainActor tests",
     "Import Carbon constants in native hot-key tests",
     "Keep Carbon status expectations type-exact",
+    "Keep visual anchor tests aligned with the context API",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",

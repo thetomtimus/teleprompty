@@ -529,7 +529,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertEqual(willChangeCount, 100)
         XCTAssertEqual(changedCount, 100)
         XCTAssertEqual(finalAnchor.utf16Offset, baselineAnchor.utf16Offset)
-        XCTAssertEqual(adapter.lastRestoredAnchor?.document, text)
+        XCTAssertEqual(adapter.lastRestoredAnchor, baselineAnchor)
     }
 
     func testEveryHeaderAndResizeFrameRemainsContainedExactlyOnce() {
@@ -897,7 +897,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
             XCTAssertEqual(viewport.system.resyncRequestCount, resyncs)
             XCTAssertFalse(viewport.system.isAwaitingResync)
             XCTAssertEqual(viewport.adapter.lastRestoredAnchor?.utf16Offset, anchor.utf16Offset)
-            XCTAssertEqual(viewport.adapter.lastRestoredAnchor?.document, anchor.document)
+            XCTAssertEqual(viewport.adapter.lastRestoredAnchor, anchor)
         }
 
         XCTAssertNotEqual(viewport.container.resolvedBandFragments.map(\.frame), initialFrames)
