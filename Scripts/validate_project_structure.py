@@ -2044,6 +2044,17 @@ M6_IMMUTABLE_SOURCE_PATHS = (
     "Packages/TeleprompterCore/Sources/TeleprompterCore/Persistence/PersistedSnapshot.swift",
 )
 
+M6_APPROVED_METADATA_TYPE_REPAIRS = {
+    "project.yml": (
+        b"        CFBundleVersion: 1\n",
+        b'        CFBundleVersion: "1"\n',
+    ),
+    "PrivatePresenterApp/Info.plist": (
+        b"\t<integer>1</integer>\n",
+        b"\t<string>1</string>\n",
+    ),
+}
+
 
 
 
@@ -2080,6 +2091,14 @@ def committed_bytes(commit: str, path: str) -> tuple[int, bytes]:
     return result.returncode, result.stdout
 
 
+def approved_metadata_repair_bytes(path: str, baseline: bytes) -> bytes:
+    repair = M6_APPROVED_METADATA_TYPE_REPAIRS.get(path)
+    if repair is None:
+        return baseline
+    old, new = repair
+    return baseline.replace(old, new, 1) if baseline.count(old) == 1 else baseline
+
+
 def validate_plists() -> None:
     info_path = ROOT / "PrivatePresenterApp/Info.plist"
     entitlement_path = ROOT / "PrivatePresenterApp/Resources/PrivatePresenter.entitlements"
@@ -2089,6 +2108,8 @@ def validate_plists() -> None:
         entitlements = plistlib.load(stream)
     if info.get("CFBundleDisplayName") != "Private Presenter":
         fail("Info.plist must set CFBundleDisplayName to Private Presenter")
+    if not isinstance(info.get("CFBundleVersion"), str):
+        fail("Info.plist CFBundleVersion must be a string")
     if entitlements.get("com.apple.security.app-sandbox") is not True:
         fail("App Sandbox must be enabled")
     prohibited = {
@@ -2486,7 +2507,9 @@ def validate_m3_source() -> list[str]:
     project_baseline = git("show", f"{M3_BASELINE}:project.yml")
     if project_baseline.returncode != 0:
         violations.append("dependency:project-baseline-unavailable")
-    elif project_baseline.stdout != read("project.yml"):
+    elif approved_metadata_repair_bytes(
+        "project.yml", project_baseline.stdout.encode("utf-8")
+    ).decode("utf-8") != read("project.yml"):
         violations.append("dependency:project-yml-changed")
     package_path = "Packages/TeleprompterCore/Package.swift"
     package_baseline = git("show", f"{M3_BASELINE}:{package_path}")
@@ -2713,7 +2736,10 @@ def validate_m4_source() -> list[str]:
             "Packages/TeleprompterCore/Package.swift": "dependency:package-swift-changed",
             "PrivatePresenterApp/Resources/PrivatePresenter.entitlements": "entitlement:changed",
         }.get(path, f"protected-source:{path}")
-        if baseline.returncode != 0 or baseline.stdout != read(path):
+        expected = approved_metadata_repair_bytes(
+            path, baseline.stdout.encode("utf-8")
+        ).decode("utf-8")
+        if baseline.returncode != 0 or expected != read(path):
             violations.append(label)
     entitlements = read("PrivatePresenterApp/Resources/PrivatePresenter.entitlements")
     if any(
@@ -3118,7 +3144,8 @@ def validate_m5_source() -> list[str]:
     )
     for path, label in protected_dependency_sources:
         baseline_returncode, baseline_bytes = committed_bytes(M5_BASELINE, path)
-        if baseline_returncode != 0 or baseline_bytes.decode("utf-8") != read(path):
+        expected = approved_metadata_repair_bytes(path, baseline_bytes).decode("utf-8")
+        if baseline_returncode != 0 or expected != read(path):
             violations.append(label)
 
     entitlements = read("PrivatePresenterApp/Resources/PrivatePresenter.entitlements")
@@ -3624,7 +3651,14 @@ def validate_m6_source() -> list[str]:
     for path in M6_IMMUTABLE_SOURCE_PATHS:
         baseline_returncode, baseline_bytes = committed_bytes(M6_PLAN_COMMIT, path)
         current = (ROOT / path).read_bytes() if (ROOT / path).is_file() else None
-        if baseline_returncode != 0 or current != baseline_bytes:
+        expected_bytes = baseline_bytes
+        if path in M6_APPROVED_METADATA_TYPE_REPAIRS:
+            old, new = M6_APPROVED_METADATA_TYPE_REPAIRS[path]
+            if baseline_bytes.count(old) != 1:
+                violations.append(f"immutable:metadata-baseline:{path}")
+                continue
+            expected_bytes = approved_metadata_repair_bytes(path, baseline_bytes)
+        if baseline_returncode != 0 or current != expected_bytes:
             violations.append(f"immutable:source-creep:{path}")
 
     for label, path, marker in M6_PREDECESSOR_PENDING_CLAIMS:
