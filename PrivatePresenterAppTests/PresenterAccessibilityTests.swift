@@ -7,32 +7,6 @@ import XCTest
 
 @MainActor
 final class PresenterAccessibilityTests: XCTestCase {
-    private let fileManager = FileManager.default
-    private var testContainer: URL!
-
-    override func setUpWithError() throws {
-        try super.setUpWithError()
-        testContainer = URL(
-            fileURLWithPath: NSTemporaryDirectory(),
-            isDirectory: true
-        )
-        .appendingPathComponent(
-            "private-presenter-m5-root-policy-\(UUID().uuidString)",
-            isDirectory: true
-        )
-        try fileManager.createDirectory(
-            at: testContainer,
-            withIntermediateDirectories: true
-        )
-    }
-
-    override func tearDownWithError() throws {
-        if let testContainer {
-            try? fileManager.removeItem(at: testContainer)
-        }
-        try super.tearDownWithError()
-    }
-
     func testAccessibilityManifestContainsEveryActionExactlyOnce() {
         let manifest = PresenterAccessibility.manifest(state: accessibilityState())
         let identifiers = manifest.filter(\.isControl).map(\.identifier)
@@ -321,8 +295,10 @@ final class PresenterAccessibilityTests: XCTestCase {
     }
 
     func testUITestStoreOverrideRequiresDebugFlagXCTestAndTemporaryDescendant() throws {
+        let testContainer = try makeTestContainer()
+        defer { removeTestContainer(testContainer) }
         let candidate = testContainer.appendingPathComponent("valid", isDirectory: true)
-        try fileManager.createDirectory(at: candidate, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: true)
         let normal = URL(fileURLWithPath: "/normal/application-support", isDirectory: true)
         let environment = overrideEnvironment(candidate.path)
 
@@ -332,7 +308,7 @@ final class PresenterAccessibilityTests: XCTestCase {
                 isDebugBuild: true,
                 normalRoot: normal,
                 temporaryDirectory: temporaryDirectory,
-                fileManager: fileManager
+                fileManager: .default
             ),
             candidate.resolvingSymlinksInPath().standardizedFileURL
         )
@@ -350,7 +326,9 @@ final class PresenterAccessibilityTests: XCTestCase {
         }
     }
 
-    func testUITestStoreOverrideRejectsDotDotTraversal() {
+    func testUITestStoreOverrideRejectsDotDotTraversal() throws {
+        let testContainer = try makeTestContainer()
+        defer { removeTestContainer(testContainer) }
         let rawTraversal = testContainer.path + "/valid/../escape"
         let normal = URL(fileURLWithPath: "/normal/application-support", isDirectory: true)
 
@@ -365,8 +343,13 @@ final class PresenterAccessibilityTests: XCTestCase {
     }
 
     func testUITestStoreOverrideRejectsSymlinkEscape() throws {
+        let testContainer = try makeTestContainer()
+        defer { removeTestContainer(testContainer) }
         let link = testContainer.appendingPathComponent("escape-link", isDirectory: true)
-        try fileManager.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: "/"))
+        try FileManager.default.createSymbolicLink(
+            at: link,
+            withDestinationURL: URL(fileURLWithPath: "/")
+        )
         let escaped = link.appendingPathComponent("private-presenter", isDirectory: true)
         let normal = URL(fileURLWithPath: "/normal/application-support", isDirectory: true)
 
@@ -401,8 +384,10 @@ final class PresenterAccessibilityTests: XCTestCase {
     }
 
     func testUITestStoreOverrideRejectsReleaseBuild() throws {
+        let testContainer = try makeTestContainer()
+        defer { removeTestContainer(testContainer) }
         let candidate = testContainer.appendingPathComponent("release", isDirectory: true)
-        try fileManager.createDirectory(at: candidate, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: true)
         let normal = URL(fileURLWithPath: "/normal/application-support", isDirectory: true)
 
         XCTAssertEqual(
@@ -416,8 +401,10 @@ final class PresenterAccessibilityTests: XCTestCase {
     }
 
     func testUITestStoreOverrideRejectsMissingXCTestConfiguration() throws {
+        let testContainer = try makeTestContainer()
+        defer { removeTestContainer(testContainer) }
         let candidate = testContainer.appendingPathComponent("no-xctest", isDirectory: true)
-        try fileManager.createDirectory(at: candidate, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: true)
         let normal = URL(fileURLWithPath: "/normal/application-support", isDirectory: true)
         var environment = overrideEnvironment(candidate.path)
         environment.removeValue(forKey: "XCTestConfigurationFilePath")
@@ -430,6 +417,22 @@ final class PresenterAccessibilityTests: XCTestCase {
 
     private var temporaryDirectory: URL {
         URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+    }
+
+    private func makeTestContainer() throws -> URL {
+        let testContainer = temporaryDirectory.appendingPathComponent(
+            "private-presenter-m5-root-policy-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: testContainer,
+            withIntermediateDirectories: true
+        )
+        return testContainer
+    }
+
+    private func removeTestContainer(_ testContainer: URL) {
+        try? FileManager.default.removeItem(at: testContainer)
     }
 
     private func accessibilityState(
@@ -483,7 +486,7 @@ final class PresenterAccessibilityTests: XCTestCase {
             isDebugBuild: isDebugBuild,
             normalRoot: normalRoot,
             temporaryDirectory: temporaryDirectory,
-            fileManager: fileManager
+            fileManager: .default
         )
     }
 }
