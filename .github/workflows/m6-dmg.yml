@@ -29,7 +29,7 @@ jobs:
       - name: Pin the exact verified M6 source candidate
         run: |
           set -euo pipefail
-          expected='a043959c834a6e8812ccf2cac827258f758f7440'
+          expected='b7cae13d206e08707c997eae667c0154bd664676'
           git checkout --detach "$expected"
           mkdir -p .omx/handoff
           ditto /tmp/private-presenter-handoff/private-presenter-m6 \
@@ -92,7 +92,7 @@ jobs:
           This build is not notarized. It still needs the physical Keynote,
           extended-display, VoiceOver, Instruments, and visual acceptance checks.
           TXT
-          printf '%s\n' 'a043959c834a6e8812ccf2cac827258f758f7440' > dist/SOURCE-SHA.txt
+          printf '%s\n' 'b7cae13d206e08707c997eae667c0154bd664676' > dist/SOURCE-SHA.txt
 
           hdiutil create \
             -volname 'Private Presenter M6 Test' \
