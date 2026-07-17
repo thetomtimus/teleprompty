@@ -150,6 +150,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep UI lifecycle and focus queries Xcode 16 compatible",
     "Keep menu lifecycle UI tests on MainActor",
     "Launch menu UI application lazily on MainActor",
+    "Keep controller UI cleanup inside MainActor tests",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1464,8 +1465,6 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
 
     def testM6UIControllerLifecycleAndFocusQueriesCompileOnXcode16(self) -> None:
         source = VALIDATOR.read("PrivatePresenterUITests/ControllerAccessibilityUITests.swift")
-        self.assertIn("try MainActor.assumeIsolated {", source)
-        self.assertIn("MainActor.assumeIsolated {", source)
         self.assertIn('NSPredicate(format: "hasKeyboardFocus == true")', source)
         self.assertIn("private func assertHasKeyboardFocus(", source)
         self.assertNotIn(".hasFocus", source)
@@ -1479,6 +1478,15 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("private lazy var app: XCUIApplication = {", source)
         self.assertIn('application.launchEnvironment["PRIVATE_PRESENTER_UI_TEST"] = "1"', source)
         self.assertNotIn("MainActor.assumeIsolated {", source)
+
+    def testM6ControllerUITestCleanupDoesNotCaptureNonisolatedTestCase(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterUITests/ControllerAccessibilityUITests.swift")
+        self.assertIn("private func requireSupport() throws -> M5UITestSupport", source)
+        self.assertIn("defer {", source)
+        self.assertIn("support?.cleanUp()", source)
+        self.assertNotIn("MainActor.assumeIsolated {", source)
+        self.assertNotIn("override func tearDownWithError()", source)
+        self.assertNotIn("private var application:", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
