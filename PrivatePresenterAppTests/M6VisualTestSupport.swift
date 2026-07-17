@@ -261,7 +261,7 @@ enum M6VisualTestSupport {
         }
 
         var chromeIsAccessibilityNavigable: Bool {
-            !accessibilityIdentifiers.intersection(chromeIdentifiers).isEmpty
+            !accessibilityIdentifiers.intersection(Self.chromeIdentifiers).isEmpty
         }
 
         var readerEvidence: HostedReaderEvidence {
@@ -689,7 +689,7 @@ enum M6VisualTestSupport {
             samplesPerPixel: 4,
             hasAlpha: true,
             isPlanar: false,
-            colorSpaceName: .sRGB,
+            colorSpaceName: NSColorSpace.sRGB.colorSpaceName,
             bitmapFormat: [],
             bytesPerRow: pixelsWide * 4,
             bitsPerPixel: 32
@@ -762,7 +762,7 @@ enum M6VisualTestSupport {
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.containerSize = NSSize(
-            width: 932, height: .greatestFiniteMagnitude
+            width: 932, height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = true
         textView.wantsLayer = true
@@ -1459,7 +1459,7 @@ enum M6VisualTestSupport {
         func makeImage() throws -> CGImage {
             let data = Data(bytes) as CFData
             guard let provider = CGDataProvider(data: data),
-                let colorSpace = CGColorSpace(name: .sRGB),
+                let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
                 let image = CGImage(
                     width: width,
                     height: height,

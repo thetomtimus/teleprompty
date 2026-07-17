@@ -291,7 +291,9 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             && runtime.controllerWindowController.window != nil
         let syntheticEditCount = runtime.model.document.revision == 2 ? 1 : 0
         let didTerminate = await runtime.stopAndFlush()
-        editorWindow?.close()
+        withExtendedLifetime(syntheticEditor) {
+            editorWindow?.close()
+        }
         syntheticEditor = nil
 
         if measured {

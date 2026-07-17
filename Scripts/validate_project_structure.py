@@ -1560,6 +1560,7 @@ M6_LEDGER_TITLES = (
     "Keep Carbon status expectations type-exact",
     "Keep visual anchor tests aligned with the context API",
     "Keep accessibility store fixtures inside MainActor tests",
+    "Keep native support fixtures Xcode 16 type-exact",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -2000,6 +2001,7 @@ M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Services/CarbonHotKeyService.swift",
     "PrivatePresenterApp/Services/PerformanceSignposter.swift",
     "PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift",
+    "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
