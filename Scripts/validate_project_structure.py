@@ -1556,6 +1556,7 @@ M6_LEDGER_TITLES = (
     "Keep menu lifecycle UI tests on MainActor",
     "Launch menu UI application lazily on MainActor",
     "Keep controller UI cleanup inside MainActor tests",
+    "Import Carbon constants in native hot-key tests",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1995,6 +1996,7 @@ M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Overlay/ScrollSessionController.swift",
     "PrivatePresenterApp/Services/CarbonHotKeyService.swift",
     "PrivatePresenterApp/Services/PerformanceSignposter.swift",
+    "PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
