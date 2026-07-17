@@ -151,6 +151,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep menu lifecycle UI tests on MainActor",
     "Launch menu UI application lazily on MainActor",
     "Keep controller UI cleanup inside MainActor tests",
+    "Import Carbon constants in native hot-key tests",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -692,6 +693,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Overlay/ScrollSessionController.swift",
     "PrivatePresenterApp/Services/CarbonHotKeyService.swift",
     "PrivatePresenterApp/Services/PerformanceSignposter.swift",
+    "PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
@@ -1487,6 +1489,11 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertNotIn("MainActor.assumeIsolated {", source)
         self.assertNotIn("override func tearDownWithError()", source)
         self.assertNotIn("private var application:", source)
+
+    def testM6NativeHotKeyTestsImportCarbonConstants(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift")
+        self.assertIn("import Carbon\n", source)
+        self.assertIn("eventNotHandledErr", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
