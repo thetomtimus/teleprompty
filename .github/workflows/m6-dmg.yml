@@ -2,12 +2,27 @@ name: Build M6 macOS DMG
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Build a new DMG or verify an existing build artifact
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - verify
+      artifact_run_id:
+        description: Build run ID when mode is verify
+        required: false
+        type: string
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   build:
+    if: inputs.mode != 'verify'
     runs-on: macos-15
     timeout-minutes: 45
 
@@ -127,3 +142,97 @@ jobs:
           elif [ "$PACKAGE_OUTCOME" != success ]; then
             echo '::warning::Native gate passed but DMG packaging did not; no DMG was published.'
           fi
+
+  verify:
+    if: inputs.mode == 'verify'
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Require the source artifact run
+        run: test -n '${{ inputs.artifact_run_id }}'
+
+      - name: Download the exact DMG artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Private-Presenter-M6-macOS-arm64-DMG
+          path: dist
+          repository: thetomtimus/teleprompty
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify, mount, and inspect the packaged app
+        run: |
+          set -euo pipefail
+          dmg='dist/Private-Presenter-M6-macOS-arm64.dmg'
+          checksum='dist/Private-Presenter-M6-macOS-arm64.dmg.sha256'
+          source_sha='dist/SOURCE-SHA.txt'
+          mount_point="$(mktemp -d /tmp/private-presenter-m6.XXXXXX)"
+          report='dist/DMG-VERIFICATION.txt'
+
+          test -f "$dmg"
+          test -f "$checksum"
+          test -f "$source_sha"
+          (cd dist && shasum -a 256 -c "$(basename "$checksum")")
+          hdiutil verify "$dmg"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount_point" "$dmg"
+          trap 'hdiutil detach "$mount_point" >/dev/null 2>&1 || true' EXIT
+
+          app="$mount_point/Private Presenter.app"
+          executable="$app/Contents/MacOS/Private Presenter"
+          plist="$app/Contents/Info.plist"
+          test -d "$app"
+          test -x "$executable"
+          test -f "$plist"
+
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
+          short_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+          bundle_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
+          architectures="$(lipo -archs "$executable")"
+          byte_size="$(stat -f '%z' "$dmg")"
+          sha256="$(shasum -a 256 "$dmg" | cut -d ' ' -f 1)"
+          source="$(tr -d '\r\n' < "$source_sha")"
+          dmg_type="$(file -b "$dmg")"
+          executable_type="$(file -b "$executable")"
+
+          codesign --verify --deep --strict --verbose=4 "$app" 2>dist/codesign-verify.txt
+          codesign -dv --verbose=4 "$app" 2>dist/codesign-details.txt
+          set +e
+          spctl --assess --type execute --verbose=4 "$app" >dist/spctl.txt 2>&1
+          spctl_status=$?
+          set -e
+
+          {
+            printf 'filename=%s\n' "$(basename "$dmg")"
+            printf 'byte_size=%s\n' "$byte_size"
+            printf 'sha256=%s\n' "$sha256"
+            printf 'source_sha=%s\n' "$source"
+            printf 'dmg_file_type=%s\n' "$dmg_type"
+            printf 'bundle_identifier=%s\n' "$bundle_id"
+            printf 'short_version=%s\n' "$short_version"
+            printf 'bundle_version=%s\n' "$bundle_version"
+            printf 'architectures=%s\n' "$architectures"
+            printf 'executable_file_type=%s\n' "$executable_type"
+            printf 'hdiutil_verify=passed\n'
+            printf 'readonly_mount=passed\n'
+            printf 'codesign_verify=passed\n'
+            printf 'spctl_exit_status=%s\n' "$spctl_status"
+            printf '\n[codesign details]\n'
+            cat dist/codesign-details.txt
+            printf '\n[spctl assessment]\n'
+            cat dist/spctl.txt
+          } | tee "$report"
+
+          hdiutil detach "$mount_point"
+          trap - EXIT
+
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: Private-Presenter-M6-DMG-verification
+          path: |
+            dist/DMG-VERIFICATION.txt
+            dist/codesign-verify.txt
+            dist/codesign-details.txt
+            dist/spctl.txt
+          if-no-files-found: error
+          retention-days: 7
