@@ -2,8 +2,8 @@
 
 Status: PENDING controlled-Mac replay; M6 WSL source candidate only
 Exact M6 plan SHA: `3c1aadd9fb50ab6f335580ebd72e6609f2cfa2f0`
-Exact WSL source SHA: `b7cae13d206e08707c997eae667c0154bd664676`
-Exact Git tree: `79fef45fe2138d4145b4e6ee93da61c75bb8f4bd`
+Exact WSL source SHA: `067122428b7d57f4970c117d152e65d28dc4d313`
+Exact Git tree: `6a0d3df92384fe86ece0f76a0ced232422a8ae24`
 Immutable M5 manifest SHA-256 prerequisite: `29a38045cb4f01c29c5973baeb3ec57de0cda249d52e82e385481a2724f20eae`
 M3 native evidence: PENDING
 M4 native evidence: PENDING
@@ -59,6 +59,8 @@ contract; Swift/AppKit commands below remain unobserved until controlled-Mac rep
 | M6.26 | `63dcbb940f16d2f1d3cf1ce42839c65c83cb408d` | `a043959c834a6e8812ccf2cac827258f758f7440` | `python3 -B Scripts/test_validate_project_structure_m6.py` | Expected RED: Int32-exact Carbon status expectations and the completed XCTest generic-type repair pair are absent. |
 | M6.27 | `47924da6982d7d11a6697df859833d11d0484733` | `6d414307c448d44e9ee4fb068894a5a57ef41641` | `python3 -B Scripts/test_validate_project_structure_m6.py` | Expected RED: current context-based ReadingAnchor assertions and the completed native visual-test API repair pair are absent. |
 | M6.28 | `1339fed048059152052cd67a80b4caff060fe885` | `b7cae13d206e08707c997eae667c0154bd664676` | `python3 -B Scripts/test_validate_project_structure_m6.py` | Expected RED: test-local accessibility store fixtures and the completed XCTest lifecycle-isolation repair pair are absent. |
+| M6.29 | `80c2c40a62c80b8e008ed87d9ca89f9cdee68b0a` | `527d66bb27c3eb9af6d78ca7e2eb591be1fba06a` | `python3 -B Scripts/test_validate_project_structure_m6.py` | Expected RED: Xcode 16-explicit native support types and the completed performance/visual fixture repair pair are absent. |
+| M6.30 | `b74e7a7922023cc28a7810942f7ecee84a3f4a2d` | `067122428b7d57f4970c117d152e65d28dc4d313` | `python3 -B Scripts/test_validate_project_structure_m6.py` | Expected RED: final-scope marker spellings for the Xcode 16 support repair and the completed bookkeeping pair are absent. |
 
 Do not amend, squash, reorder, or relabel these commits. A source repair requires another
 preserved RED/minimum-GREEN pair and regeneration of every M6 handoff hash.
@@ -93,9 +95,9 @@ test "$(shasum -a 256 "$M5_HANDOFF/m5-artifacts.sha256" | awk '{print $1}')" = "
   tar -tf private-presenter-m6-source.tar >"${TMPDIR:-/tmp}/private-presenter-m6-tar.list")
 git -C "$REPLAY_CLONE" fetch "$M6_HANDOFF/private-presenter-m6-wsl.bundle" \
   HEAD:refs/remotes/m6-wsl/head
-git -C "$REPLAY_CLONE" switch --detach b7cae13d206e08707c997eae667c0154bd664676
-test "$(git -C "$REPLAY_CLONE" rev-parse HEAD)" = b7cae13d206e08707c997eae667c0154bd664676
-test "$(git -C "$REPLAY_CLONE" rev-parse HEAD^{tree})" = 79fef45fe2138d4145b4e6ee93da61c75bb8f4bd
+git -C "$REPLAY_CLONE" switch --detach 067122428b7d57f4970c117d152e65d28dc4d313
+test "$(git -C "$REPLAY_CLONE" rev-parse HEAD)" = 067122428b7d57f4970c117d152e65d28dc4d313
+test "$(git -C "$REPLAY_CLONE" rev-parse HEAD^{tree})" = 6a0d3df92384fe86ece0f76a0ced232422a8ae24
 test -z "$(git -C "$REPLAY_CLONE" status --porcelain=v1)"
 (cd "$REPLAY_CLONE" && shasum -a 256 -c "$M6_HANDOFF/m6-source-files.sha256")
 ```
@@ -151,7 +153,7 @@ path.mkdir(parents=True)
 PY_CLEAR_STAGE
   cp "$FINAL_M6_HANDOFF/MAC-CONTINUATION.md" "$stage_handoff/MAC-CONTINUATION.md"
   STAGE_SHA="$stage_sha" STAGE_TREE="$stage_tree" PAIR_INDEX="$pair_index" \
-    FINAL_SHA=b7cae13d206e08707c997eae667c0154bd664676 FINAL_TREE=79fef45fe2138d4145b4e6ee93da61c75bb8f4bd \
+    FINAL_SHA=067122428b7d57f4970c117d152e65d28dc4d313 FINAL_TREE=6a0d3df92384fe86ece0f76a0ced232422a8ae24 \
     python3 - "$stage_handoff/MAC-CONTINUATION.md" <<'PY'
 from pathlib import Path
 import os, re, sys
@@ -283,11 +285,13 @@ done <<'REPLAY_PAIRS'
 26 63dcbb940f16d2f1d3cf1ce42839c65c83cb408d a043959c834a6e8812ccf2cac827258f758f7440 static
 27 47924da6982d7d11a6697df859833d11d0484733 6d414307c448d44e9ee4fb068894a5a57ef41641 static
 28 1339fed048059152052cd67a80b4caff060fe885 b7cae13d206e08707c997eae667c0154bd664676 static
+29 80c2c40a62c80b8e008ed87d9ca89f9cdee68b0a 527d66bb27c3eb9af6d78ca7e2eb591be1fba06a static
+30 b74e7a7922023cc28a7810942f7ecee84a3f4a2d 067122428b7d57f4970c117d152e65d28dc4d313 static
 REPLAY_PAIRS
 ```
 
 Every native row runs the visual XCTest command at both its RED and GREEN SHA. In particular,
-M6.7, M6.8, M6.9, and M6.10 are native rows. M6.0, M6.6, M6.11, M6.12, M6.13, M6.14, M6.15, M6.16, M6.17, M6.18, M6.19, M6.20, M6.21, M6.22, M6.23, M6.24, M6.25, M6.26, M6.27, and M6.28 are static evidence/history
+M6.7, M6.8, M6.9, and M6.10 are native rows. M6.0, M6.6, M6.11, M6.12, M6.13, M6.14, M6.15, M6.16, M6.17, M6.18, M6.19, M6.20, M6.21, M6.22, M6.23, M6.24, M6.25, M6.26, M6.27, M6.28, M6.29, and M6.30 are static evidence/history
 pairs. A RED is accepted only for its intended missing source, test, or guide contract; missing
 Xcode, SDKs, configuration, displays, or Keynote never constitutes a valid RED.
 
