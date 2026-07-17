@@ -148,6 +148,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep the display-link target and teardown actor-safe",
     "Keep dense hosted diagnostics valid Swift",
     "Keep UI lifecycle and focus queries Xcode 16 compatible",
+    "Keep menu lifecycle UI tests on MainActor",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -695,6 +696,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
     "PrivatePresenterUITests/ControllerAccessibilityUITests.swift",
+    "PrivatePresenterUITests/MenuLifecycleUITests.swift",
     "Scripts/test_validate_project_structure_m3.py",
     "Scripts/test_validate_project_structure_m6.py",
     "Scripts/validate_project_structure.py",
@@ -1466,6 +1468,11 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn('NSPredicate(format: "hasKeyboardFocus == true")', source)
         self.assertIn("private func assertHasKeyboardFocus(", source)
         self.assertNotIn(".hasFocus", source)
+
+    def testM6MenuLifecycleUITestsStayOnMainActor(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterUITests/MenuLifecycleUITests.swift")
+        self.assertIn("@MainActor\nfinal class MenuLifecycleUITests", source)
+        self.assertIn("MainActor.assumeIsolated {", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
