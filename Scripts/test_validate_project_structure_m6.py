@@ -156,6 +156,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep visual anchor tests aligned with the context API",
     "Keep accessibility store fixtures inside MainActor tests",
     "Keep native support fixtures Xcode 16 type-exact",
+    "Record Xcode 16 support spellings in final scope",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -274,7 +275,7 @@ EXPECTED_M5_VISUAL_SOURCE_MARKERS = (
     ("left-to-right", ".environment(\\.layoutDirection, .leftToRight)", 1),
     ("dark-aqua", "NSAppearance(named: .darkAqua)", 1),
     ("animations-disabled", "NSAnimationContext.runAnimationGroup", 1),
-    ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 2),
+    ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 3),
     (
         "literal-continuous-mask",
         "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: literalBounds).cgPath",
@@ -320,7 +321,7 @@ EXPECTED_REPAIR_SOURCE_MARKERS = (
     ("real-ax-press", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private static func performAccessibilityPress", 1),
     ("resize-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "resizeChanges.append(change)", 1),
     ("title-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "titleChanges.append(translation)", 1),
-    ("hosted-ax-navigation", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "!accessibilityIdentifiers.intersection(chromeIdentifiers).isEmpty", 1),
+    ("hosted-ax-navigation", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "!accessibilityIdentifiers.intersection(Self.chromeIdentifiers).isEmpty", 1),
     ("controller-playback-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "let playbackPresentation = ControllerPresentation(", 1),
     ("playing-pause-eligible", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.isPlaying || playbackPresentation.isEnabled(.start)", 1),
     ("disabled-visual", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".opacity(accessibility.isEnabled ? 1 : 0.45)", 1),
@@ -363,7 +364,7 @@ EXPECTED_ORACLE_REPAIR_NAMED_TESTS = (
 EXPECTED_ORACLE_REPAIR_SOURCE_MARKERS = (
     ("premultiplied-bitmap", "bitmapFormat: []", 1),
     ("explicit-eight-bit-components", "bitsPerSample: 8", 1),
-    ("named-srgb-bitmap", "colorSpaceName: .sRGB", 1),
+    ("named-srgb-bitmap", "colorSpaceName: NSColorSpace.sRGB.colorSpaceName", 1),
     ("explicit-host-layer", "hosting.wantsLayer = true", 1),
     ("explicit-host-scale", "hosting.layer?.contentsScale = backingScale", 1),
     ("asserted-effective-scale", "guard effectiveBackingScale == backingScale else", 1),
@@ -1534,6 +1535,17 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertNotIn("colorSpaceName: .sRGB", visual)
         self.assertNotIn("height: .greatestFiniteMagnitude", visual)
         self.assertNotIn("CGColorSpace(name: .sRGB)", visual)
+
+    def testM6FinalMarkerInventoryUsesXcode16SupportSpellings(self) -> None:
+        self.assertEqual(
+            VALIDATOR.M6_M5_VISUAL_SOURCE_MARKERS,
+            EXPECTED_M5_VISUAL_SOURCE_MARKERS,
+        )
+        self.assertEqual(VALIDATOR.M6_REPAIR_SOURCE_MARKERS, EXPECTED_REPAIR_SOURCE_MARKERS)
+        self.assertEqual(
+            VALIDATOR.M6_ORACLE_REPAIR_SOURCE_MARKERS,
+            EXPECTED_ORACLE_REPAIR_SOURCE_MARKERS,
+        )
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
