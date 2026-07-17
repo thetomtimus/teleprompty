@@ -1554,6 +1554,7 @@ M6_LEDGER_TITLES = (
     "Keep dense hosted diagnostics valid Swift",
     "Keep UI lifecycle and focus queries Xcode 16 compatible",
     "Keep menu lifecycle UI tests on MainActor",
+    "Launch menu UI application lazily on MainActor",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
