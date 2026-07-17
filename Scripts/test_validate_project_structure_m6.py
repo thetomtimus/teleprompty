@@ -160,6 +160,7 @@ EXPECTED_LEDGER_TITLES = (
     "Convert the native bitmap into explicit sRGB",
     "Record the bitmap conversion in focused support scope",
     "Keep mutable viewport replacement inside MainActor state",
+    "Stabilize final native AppKit integration fixtures",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1576,6 +1577,25 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertEqual(source.count("viewportBox.viewport = replacementViewport"), 2)
         self.assertNotIn("var currentViewport = firstViewport", source)
         self.assertNotIn("readerViewportProvider: { currentViewport }", source)
+
+    def testM6FinalNativeFixturesOwnWindowsClocksAndAppKitAssertions(self) -> None:
+        support = VALIDATOR.read("PrivatePresenterAppTests/M6VisualTestSupport.swift")
+        overlay = VALIDATOR.read("PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift")
+        accessibility = VALIDATOR.read("PrivatePresenterAppTests/PresenterAccessibilityTests.swift")
+        scroll = VALIDATOR.read("PrivatePresenterAppTests/ScrollSessionControllerTests.swift")
+        display = VALIDATOR.read("PrivatePresenterAppTests/SystemDisplayServiceTests.swift")
+
+        self.assertIn("window.orderFrontRegardless()", support)
+        self.assertIn("func close()", support)
+        self.assertGreaterEqual(overlay.count(".close()"), 12)
+        self.assertIn("window.orderFrontRegardless()", accessibility)
+        self.assertIn("private func hostedAccessibilityElements", accessibility)
+        self.assertIn("selectedRange().length, 0", scroll)
+        self.assertIn("let expectedBandY = min(", scroll)
+        self.assertIn("XCTAssertTrue(presentation.isEnabled(.focusMode))", scroll)
+        self.assertIn("let anchor = seed", scroll)
+        self.assertIn("replacementClock.fire(at: CACurrentMediaTime() + 0.5)", scroll)
+        self.assertIn('"the passRetained ownership forever"', display)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
