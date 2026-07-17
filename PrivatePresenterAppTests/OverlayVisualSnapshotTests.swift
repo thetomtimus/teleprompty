@@ -1253,7 +1253,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
                     let actual = probe.hostedIdentifier(at: point)
                     if actual != region.identifier, failures.count < 12 {
                         failures.append(
-                            "\(region.identifier) at \(x),\(y): \(actual ?? \"nil\")"
+                            "\(region.identifier) at \(x),\(y): \(actual ?? "nil")"
                         )
                     }
                 }
@@ -1261,7 +1261,7 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         }
         XCTAssertTrue(
             failures.isEmpty,
-            "Dense NSHostingView hit/identifier failures: \(failures.joined(separator: \"; \"))",
+            "Dense NSHostingView hit/identifier failures: \(failures.joined(separator: "; "))",
             file: file,
             line: line
         )

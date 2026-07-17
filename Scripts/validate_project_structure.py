@@ -1551,6 +1551,7 @@ M6_LEDGER_TITLES = (
     "Return every accessibility retry decision explicitly",
     "Make Carbon callbacks and messages isolation-correct",
     "Keep the display-link target and teardown actor-safe",
+    "Keep dense hosted diagnostics valid Swift",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
