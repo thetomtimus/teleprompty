@@ -1,14 +1,17 @@
 import AppKit
 import XCTest
 
+@MainActor
 final class MenuLifecycleUITests: XCTestCase {
     private var app: XCUIApplication!
 
     override func setUp() {
         continueAfterFailure = false
-        app = XCUIApplication()
-        app.launchEnvironment["PRIVATE_PRESENTER_UI_TEST"] = "1"
-        app.launch()
+        MainActor.assumeIsolated {
+            app = XCUIApplication()
+            app.launchEnvironment["PRIVATE_PRESENTER_UI_TEST"] = "1"
+            app.launch()
+        }
     }
 
     func testSingleModelIsSharedByBothWindowsAndStatusItem() {
