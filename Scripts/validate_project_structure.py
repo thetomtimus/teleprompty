@@ -1566,6 +1566,7 @@ M6_LEDGER_TITLES = (
     "Record the bitmap conversion in focused support scope",
     "Keep mutable viewport replacement inside MainActor state",
     "Stabilize final native AppKit integration fixtures",
+    "Record the native display fixture in final scope",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -2012,6 +2013,7 @@ M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "PrivatePresenterAppTests/SystemDisplayServiceTests.swift",
     "PrivatePresenterUITests/ControllerAccessibilityUITests.swift",
     "PrivatePresenterUITests/MenuLifecycleUITests.swift",
     "Scripts/test_validate_project_structure_m3.py",
