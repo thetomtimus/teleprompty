@@ -149,6 +149,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep dense hosted diagnostics valid Swift",
     "Keep UI lifecycle and focus queries Xcode 16 compatible",
     "Keep menu lifecycle UI tests on MainActor",
+    "Launch menu UI application lazily on MainActor",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1472,7 +1473,12 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
     def testM6MenuLifecycleUITestsStayOnMainActor(self) -> None:
         source = VALIDATOR.read("PrivatePresenterUITests/MenuLifecycleUITests.swift")
         self.assertIn("@MainActor\nfinal class MenuLifecycleUITests", source)
-        self.assertIn("MainActor.assumeIsolated {", source)
+
+    def testM6MenuUIApplicationLaunchDoesNotCaptureNonisolatedTestCase(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterUITests/MenuLifecycleUITests.swift")
+        self.assertIn("private lazy var app: XCUIApplication = {", source)
+        self.assertIn('application.launchEnvironment["PRIVATE_PRESENTER_UI_TEST"] = "1"', source)
+        self.assertNotIn("MainActor.assumeIsolated {", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
