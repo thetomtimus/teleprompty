@@ -162,6 +162,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep mutable viewport replacement inside MainActor state",
     "Stabilize final native AppKit integration fixtures",
     "Record the native display fixture in final scope",
+    "Use protocol AX traversal and valid native geometry",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1605,6 +1606,31 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
             EXPECTED_FINAL_CHANGED_PATHS,
         )
         self.assertEqual(VALIDATOR.M6_FINAL_CHANGED_PATHS, EXPECTED_FINAL_CHANGED_PATHS)
+
+    def testM6NativeFixturesUseProtocolAXAndValidGeometry(self) -> None:
+        support = VALIDATOR.read("PrivatePresenterAppTests/M6VisualTestSupport.swift")
+        accessibility = VALIDATOR.read("PrivatePresenterAppTests/PresenterAccessibilityTests.swift")
+        scroll = VALIDATOR.read("PrivatePresenterAppTests/ScrollSessionControllerTests.swift")
+        display_test = VALIDATOR.read("PrivatePresenterAppTests/SystemDisplayServiceTests.swift")
+        display_source = VALIDATOR.read(
+            "PrivatePresenterApp/Services/SystemDisplayService.swift"
+        )
+
+        self.assertIn("in root: NSAccessibilityProtocol", support)
+        self.assertIn("-> [NSAccessibilityProtocol]", support)
+        self.assertIn("of root: NSAccessibilityProtocol", accessibility)
+        self.assertIn("window.isReleasedWhenClosed = false", accessibility)
+        self.assertIn("window.contentView = nil", accessibility)
+        self.assertIn("size: NSSize(width: 260, height: 226)", scroll)
+        self.assertIn(
+            "let anchor = viewport.adapter.captureAnchor(viewportFraction: 0.5)",
+            scroll,
+        )
+        self.assertIn("replacementViewport.semanticRestoreOffset = nil", scroll)
+        self.assertIn("replacementClock.fire(at: CACurrentMediaTime() + 0.1)", scroll)
+        self.assertIn("XCTAssertGreaterThan(replacementViewport.clipOriginY, 270)", scroll)
+        self.assertIn('"keep the passRetained ownership forever"', display_test)
+        self.assertIn("// keep the passRetained ownership forever", display_source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
