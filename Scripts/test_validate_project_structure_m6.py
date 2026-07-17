@@ -152,6 +152,7 @@ EXPECTED_LEDGER_TITLES = (
     "Launch menu UI application lazily on MainActor",
     "Keep controller UI cleanup inside MainActor tests",
     "Import Carbon constants in native hot-key tests",
+    "Keep Carbon status expectations type-exact",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1494,6 +1495,11 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         source = VALIDATOR.read("PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift")
         self.assertIn("import Carbon\n", source)
         self.assertIn("eventNotHandledErr", source)
+
+    def testM6NativeHotKeyStatusExpectationsUseInt32(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift")
+        self.assertEqual(source.count("Int32(eventNotHandledErr)"), 2)
+        self.assertNotIn("\n            eventNotHandledErr\n", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
