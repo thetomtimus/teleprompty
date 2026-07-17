@@ -158,6 +158,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep native support fixtures Xcode 16 type-exact",
     "Record Xcode 16 support spellings in final scope",
     "Convert the native bitmap into explicit sRGB",
+    "Record the bitmap conversion in focused support scope",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1529,7 +1530,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         visual = VALIDATOR.read("PrivatePresenterAppTests/M6VisualTestSupport.swift")
         self.assertIn("withExtendedLifetime(syntheticEditor)", performance)
         self.assertIn("Self.chromeIdentifiers", visual)
-        self.assertIn("NSColorSpace.sRGB.colorSpaceName", visual)
+        self.assertIn("colorSpaceName: .deviceRGB", visual)
         self.assertIn("CGFloat.greatestFiniteMagnitude", visual)
         self.assertIn("CGColorSpace(name: CGColorSpace.sRGB)", visual)
         self.assertNotIn("intersection(chromeIdentifiers)", visual)
@@ -1556,6 +1557,12 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("context.draw(sourceImage, in:", source)
         self.assertIn("guard let image = context.makeImage()", source)
         self.assertNotIn("NSColorSpace.sRGB.colorSpaceName", source)
+
+    def testM6FocusedSupportScopeRecordsBitmapConversion(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterAppTests/M6VisualTestSupport.swift")
+        self.assertIn("colorSpaceName: .deviceRGB", source)
+        self.assertNotIn("NSColorSpace.sRGB.colorSpaceName", source)
+        self.assertEqual(VALIDATOR.M6_LEDGER_TITLES, EXPECTED_LEDGER_TITLES)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
