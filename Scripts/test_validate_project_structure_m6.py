@@ -159,6 +159,7 @@ EXPECTED_LEDGER_TITLES = (
     "Record Xcode 16 support spellings in final scope",
     "Convert the native bitmap into explicit sRGB",
     "Record the bitmap conversion in focused support scope",
+    "Keep mutable viewport replacement inside MainActor state",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1563,6 +1564,18 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("colorSpaceName: .deviceRGB", source)
         self.assertNotIn("NSColorSpace.sRGB.colorSpaceName", source)
         self.assertEqual(VALIDATOR.M6_LEDGER_TITLES, EXPECTED_LEDGER_TITLES)
+
+    def testM6ViewportReplacementDoesNotCaptureMutableLocals(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterAppTests/ScrollSessionControllerTests.swift")
+        self.assertIn("private final class M3ViewportProviderBox", source)
+        self.assertEqual(
+            source.count("let viewportBox = M3ViewportProviderBox(viewport: firstViewport)"),
+            2,
+        )
+        self.assertEqual(source.count("readerViewportProvider: { viewportBox.viewport }"), 2)
+        self.assertEqual(source.count("viewportBox.viewport = replacementViewport"), 2)
+        self.assertNotIn("var currentViewport = firstViewport", source)
+        self.assertNotIn("readerViewportProvider: { currentViewport }", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
