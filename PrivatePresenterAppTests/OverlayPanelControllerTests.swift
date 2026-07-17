@@ -77,11 +77,11 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertFalse(operations.contains(.makeMain))
     }
 
-    func testOverlayInteractionIsDisabledOnlyWhileLockedAndRestoredWhenUnlocked() {
+    func testOverlayRetainsMouseDeliveryForUnlockInBothLockStates() {
         let controller = OverlayPanelController()
 
         controller.setLocked(true)
-        XCTAssertTrue(controller.teleprompterPanel.ignoresMouseEvents)
+        XCTAssertFalse(controller.teleprompterPanel.ignoresMouseEvents)
 
         controller.setLocked(false)
         XCTAssertFalse(controller.teleprompterPanel.ignoresMouseEvents)
@@ -289,7 +289,7 @@ final class OverlayPanelControllerTests: XCTestCase {
 
         controller.setLocked(true)
 
-        XCTAssertTrue(controller.teleprompterPanel.ignoresMouseEvents)
+        XCTAssertFalse(controller.teleprompterPanel.ignoresMouseEvents)
         XCTAssertEqual(controller.teleprompterPanel.frame, frame)
     }
 

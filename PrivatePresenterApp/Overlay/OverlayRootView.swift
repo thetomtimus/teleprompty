@@ -158,6 +158,12 @@ struct OverlayRootView: View {
     static let interiorIsFullyOpaque = true
     static let resizeZones = ClampedPanelInteractionController.ResizeEdge.allCases
 
+    static func lockedUnlockTargetFrame(in metrics: OverlayLayoutMetrics) -> CGRect {
+        metrics.headerControlRegions.first(where: {
+            $0.identifier == "privatePresenter.headerLock"
+        })?.frame ?? .zero
+    }
+
     let model: AppModel?
     let readerSystem: ReaderTextSystem?
     let readerViewportFraction: Double
@@ -288,6 +294,11 @@ struct OverlayRootView: View {
                         .opacity(presentation.opacity)
                         .allowsHitTesting(presentation.allowsInteraction)
                         .accessibilityHidden(presentation.isAccessibilityHidden)
+
+                    if model.isLocked {
+                        lockedInteractionBlocker
+                        lockedUnlockTarget(model: model, metrics: metrics)
+                    }
                 }
                 .animation(
                     chromeAnimation(duration: presentation.transitionDuration),
@@ -299,6 +310,37 @@ struct OverlayRootView: View {
 
     private var cardShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+    }
+
+    private var lockedInteractionBlocker: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .accessibilityHidden(true)
+    }
+
+    private func lockedUnlockTarget(
+        model: AppModel,
+        metrics: OverlayLayoutMetrics
+    ) -> some View {
+        let frame = Self.lockedUnlockTargetFrame(in: metrics)
+        return Button {
+            model.send(.toggleLock)
+        } label: {
+            Color.clear
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: frame.width, height: frame.height)
+        .position(
+            x: frame.midX,
+            y: metrics.size.height - frame.midY
+        )
+        .presenterAccessibility(
+            PresenterAccessibility.entry(
+                "privatePresenter.headerLock",
+                state: PresenterAccessibility.state(model: model)
+            )
+        )
     }
 
     private func chromeAnimation(duration: TimeInterval) -> Animation? {

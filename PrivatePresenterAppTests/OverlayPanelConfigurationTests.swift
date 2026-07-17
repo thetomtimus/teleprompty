@@ -109,7 +109,7 @@ final class OverlayPanelConfigurationTests: XCTestCase {
     func testLockedPanelIgnoresMouseAndCannotBecomeKeyOrMain() {
         let panel = makeController().teleprompterPanel
         panel.setLocked(true)
-        XCTAssertTrue(panel.ignoresMouseEvents)
+        XCTAssertFalse(panel.ignoresMouseEvents)
         XCTAssertFalse(panel.canBecomeKey)
         XCTAssertFalse(panel.canBecomeMain)
     }
@@ -186,7 +186,7 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         XCTAssertFalse(unlocked.isLocked)
         XCTAssertTrue(locked.isLocked)
         XCTAssertFalse(unlocked.ignoresMouseEvents)
-        XCTAssertTrue(locked.ignoresMouseEvents)
+        XCTAssertFalse(locked.ignoresMouseEvents)
     }
 
     #if DEBUG

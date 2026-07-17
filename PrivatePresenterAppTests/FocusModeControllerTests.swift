@@ -13,7 +13,8 @@ final class FocusModeControllerTests: XCTestCase {
         harness.controller.apply(.init(isVisible: true, isLocked: true, isFocusModeEnabled: true, pointerPresent: true))
 
         XCTAssertEqual(harness.visibility, [true, false, true])
-        XCTAssertTrue(harness.panel.ignoresMouseEvents)
+        XCTAssertFalse(harness.panel.ignoresMouseEvents)
+        XCTAssertFalse(harness.panel.canBecomeKey)
     }
 
     func testDynamicCanBecomeKeyRequiresUnlockedAndActive() {
@@ -105,7 +106,8 @@ final class FocusModeControllerTests: XCTestCase {
         let harness = makeFocusHarness()
         harness.panel.setLocked(true)
         harness.controller.apply(.init(isVisible: true, isLocked: true, isFocusModeEnabled: true, pointerPresent: true))
-        XCTAssertTrue(harness.panel.ignoresMouseEvents)
+        XCTAssertFalse(harness.panel.ignoresMouseEvents)
+        XCTAssertFalse(harness.panel.canBecomeKey)
     }
 
     func testInactiveApplicationCannotYieldKeyPanelEvenWhenUnlocked() {

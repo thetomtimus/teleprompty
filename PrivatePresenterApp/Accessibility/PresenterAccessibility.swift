@@ -290,9 +290,9 @@ enum PresenterAccessibility {
                 label: state.isLocked ? "Unlock teleprompter" : "Lock teleprompter",
                 value: lockState,
                 help: state.isLocked
-                    ? "Unlock the teleprompter from the controller or shortcut"
+                    ? "Click again to unlock the teleprompter"
                     : "Lock the teleprompter so it does not take Keynote input",
-                isEnabled: !state.isLocked,
+                isEnabled: true,
                 target: overlayTarget
             ),
             overlayEntry(

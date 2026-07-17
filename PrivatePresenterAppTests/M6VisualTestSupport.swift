@@ -283,6 +283,9 @@ enum M6VisualTestSupport {
         var showExistingControllerCount: Int { callbacks.showExistingControllerCount }
 
         var semanticIdentifiers: Set<String> {
+            if model.isLocked {
+                return ["privatePresenter.headerLock"]
+            }
             let presentation = OverlayRootView.chromePresentation(
                 focusState: model.focusChromeState,
                 isLocked: model.isLocked,

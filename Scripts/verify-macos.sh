@@ -6,20 +6,24 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
+readonly NATIVE_DERIVED_ROOT="/tmp/private-presenter-verify-${UID}"
+readonly DEBUG_DERIVED_DATA="${NATIVE_DERIVED_ROOT}/Debug"
+readonly RELEASE_DERIVED_DATA="${NATIVE_DERIVED_ROOT}/Release"
+
 ./Scripts/bootstrap-macos.sh
 python3 Scripts/validate_project_structure.py
 ./Scripts/test-verify-m0-proof-provenance.sh
 swift test --package-path Packages/TeleprompterCore
 # The UI-test shell is intentionally a skipped placeholder for the separate
 # physical Keynote/display gate. Running its unsigned runner cannot bootstrap.
-xcodebuild test -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO -skip-testing:PrivatePresenterUITests
-debug_executable='.build/DerivedData/Build/Products/Debug/Private Presenter.app/Contents/MacOS/Private Presenter'
+xcodebuild test -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Debug -destination 'platform=macOS' -derivedDataPath "$DEBUG_DERIVED_DATA" CODE_SIGNING_ALLOWED=NO -skip-testing:PrivatePresenterUITests
+debug_executable="${DEBUG_DERIVED_DATA}/Build/Products/Debug/Private Presenter.app/Contents/MacOS/Private Presenter"
 if [[ ! -x "$debug_executable" || -e "${debug_executable}.debug.dylib" ]]; then
   echo 'error: Debug proof code must live in the hash-bound main executable.' >&2
   exit 1
 fi
-xcodebuild analyze -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Debug -destination 'platform=macOS' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO
-xcodebuild build -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/DerivedData-Release CODE_SIGNING_ALLOWED=NO
+xcodebuild analyze -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Debug -destination 'platform=macOS' -derivedDataPath "$DEBUG_DERIVED_DATA" CODE_SIGNING_ALLOWED=NO
+xcodebuild build -project PrivatePresenter.xcodeproj -scheme PrivatePresenter -configuration Release -destination 'platform=macOS,arch=arm64' -derivedDataPath "$RELEASE_DERIVED_DATA" CODE_SIGNING_ALLOWED=NO
 xcrun swift-format lint --recursive Packages PrivatePresenterApp PrivatePresenterAppTests PrivatePresenterUITests
 ./Scripts/verify-no-network.sh
 shasum -a 256 -c docs/validation/source-artifact-checksums.sha256

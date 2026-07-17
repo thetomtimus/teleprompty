@@ -796,10 +796,11 @@ final class OverlayVisualSnapshotTests: XCTestCase {
                 .lockedFocusHidden,
             ] {
                 probe.setRenderState(state)
-                XCTAssertTrue(
+                XCTAssertEqual(
                     probe.semanticIdentifiers.intersection(
                         M6VisualTestSupport.OffscreenRootProbe.chromeIdentifiers
-                    ).isEmpty
+                    ),
+                    ["privatePresenter.headerLock"]
                 )
                 assertReaderEvidencePreserved(probe.readerEvidence, baseline: baseline)
             }
@@ -813,6 +814,24 @@ final class OverlayVisualSnapshotTests: XCTestCase {
                 2
             )
             XCTAssertFalse(rootSource.contains("if isChromeVisible"))
+        }
+    }
+
+    func testLockedHeaderLockTargetUnlocksFromTheOverlay() {
+        for size in M6VisualTestSupport.tierSizes {
+            let probe = M6VisualTestSupport.OffscreenRootProbe(size: size)
+            probe.setRenderState(.lockedVisible)
+            let metrics = OverlayLayoutMetrics(size: size)
+            let target = OverlayRootView.lockedUnlockTargetFrame(in: metrics)
+
+            XCTAssertEqual(target.width, 44)
+            XCTAssertEqual(target.height, 44)
+            XCTAssertTrue(probe.controlState.isLocked)
+            XCTAssertFalse(
+                probe.pressControl(identifier: "privatePresenter.headerPlayback")
+            )
+            probe.press(at: CGPoint(x: target.midX, y: target.midY))
+            XCTAssertFalse(probe.controlState.isLocked)
         }
     }
 

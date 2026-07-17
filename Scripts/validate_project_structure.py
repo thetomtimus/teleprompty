@@ -2623,8 +2623,18 @@ def validate_m4_source() -> list[str]:
         violations.append("panel:dynamic-key-eligibility")
     if "override var canBecomeMain: Bool { false }" not in panel:
         violations.append("panel:permanent-non-main")
-    if "ignoresMouseEvents = locked" not in panel:
-        violations.append("panel:locked-click-through")
+    overlay_root = app_sources.get(
+        "PrivatePresenterApp/Overlay/OverlayRootView.swift", ""
+    )
+    if "ignoresMouseEvents = false" not in panel or any(
+        marker not in overlay_root
+        for marker in (
+            "lockedInteractionBlocker",
+            "lockedUnlockTarget(model: model, metrics: metrics)",
+            '"privatePresenter.headerLock"',
+        )
+    ):
+        violations.append("panel:locked-unlock-target")
     if "proofLevel: OverlayPanelLevel = .statusBar" not in runtime:
         violations.append("panel:status-bar-default")
     dependency_container = app_sources.get(
