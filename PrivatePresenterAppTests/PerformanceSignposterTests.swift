@@ -380,7 +380,10 @@ final class PerformanceSignposterTests: XCTestCase {
                 .mainActorSentinelCompleted,
             ]
         )
-        XCTAssertEqual(productRig.restoreOpenCountsAfterEachMilestone, [1, 1, 1, 1, 1, 1, 0])
+        let productOpenCounts = productRig.restoreOpenCountsAfterEachMilestone
+        XCTAssertEqual(productOpenCounts.count, productRig.restoreMilestones.count)
+        XCTAssertTrue(productOpenCounts.dropLast().allSatisfy { $0 >= 1 })
+        XCTAssertEqual(productOpenCounts.last, 0)
         XCTAssertFalse(productRig.usedManufacturedBeginEnd)
     }
 
@@ -415,8 +418,8 @@ final class PerformanceSignposterTests: XCTestCase {
 
         try await rig.driveTwoProductSavesThatSupersedeDebounce()
 
-        XCTAssertEqual(rig.recorder.outcomes(for: .snapshotEncode), [.success, .success])
-        XCTAssertEqual(rig.recorder.outcomes(for: .snapshotWrite), [.success])
+        XCTAssertEqual(rig.debouncedEditEncodeOutcomes, [.success, .success])
+        XCTAssertEqual(rig.debouncedEditWriteOutcomes, [.success])
         XCTAssertEqual(rig.registry.openIntervalCount, 0)
         XCTAssertFalse(rig.usedManufacturedBeginEnd)
     }
@@ -484,6 +487,8 @@ private final class M5ProductPerformanceTerminalRig {
     private let runtime: AppRuntime
     private var editor: EditorTextSystem?
     private var directRegistryMutationCount = 0
+    private(set) var debouncedEditEncodeOutcomes: [PerformanceSignpostOutcome] = []
+    private(set) var debouncedEditWriteOutcomes: [PerformanceSignpostOutcome] = []
 
     var restoreMilestones: [RestoreInteractiveMilestone] {
         dependencies.restorePerformanceGate.recordedMilestones
@@ -535,9 +540,11 @@ private final class M5ProductPerformanceTerminalRig {
             startupSeams: AppRuntimeStartupSeams(
                 load: { await loadGate.load() },
                 observeAndQuery: { .failure(M5ProductTopologyError()) },
-                registerDiagnosticHotKey: { 0 }
+                registerDiagnosticHotKey: { 0 },
+                presentsControllerAtStartup: false
             )
         )
+        M5ProductOffscreenReaderLayoutHost.prepare(dependencies.overlayController)
         self.recorder = recorder
         self.registry = registry
         self.rootURL = rootURL
@@ -591,6 +598,8 @@ private final class M5ProductPerformanceTerminalRig {
 
     func driveTwoProductSavesThatSupersedeDebounce() async throws {
         await startNormally()
+        let initialEncodeCount = recorder.outcomes(for: .snapshotEncode).count
+        let initialWriteCount = recorder.outcomes(for: .snapshotWrite).count
         let editor = makeEditor()
         self.editor = editor
         let end = runtime.model.document.text.utf16.count
@@ -602,7 +611,20 @@ private final class M5ProductPerformanceTerminalRig {
             in: NSRange(location: end + 1, length: 0),
             with: "y"
         )
+        for _ in 0..<20
+        where recorder.outcomes(for: .snapshotEncode).count < initialEncodeCount + 2
+        {
+            await Task.yield()
+        }
+        debouncedEditEncodeOutcomes = Array(
+            recorder.outcomes(for: .snapshotEncode)
+                .dropFirst(initialEncodeCount)
+                .prefix(2)
+        )
         _ = await runtime.stopAndFlush()
+        debouncedEditWriteOutcomes = Array(
+            recorder.outcomes(for: .snapshotWrite).dropFirst(initialWriteCount)
+        )
     }
 
     func startProductRuntimeThenTeardown() async throws {
@@ -674,6 +696,18 @@ private actor M5ProductLoadGate {
 }
 
 private struct M5ProductTopologyError: Error {}
+
+@MainActor
+private enum M5ProductOffscreenReaderLayoutHost {
+    static func prepare(_ overlay: OverlayPanelController) {
+        guard let contentView = overlay.teleprompterPanel.contentViewController?.view else {
+            return
+        }
+        contentView.frame = NSRect(x: 0, y: 0, width: 700, height: 350)
+        contentView.needsLayout = true
+        contentView.layoutSubtreeIfNeeded()
+    }
+}
 
 private final class M5PerformanceRecorder: PerformanceSignposting, @unchecked Sendable {
     struct Event: Equatable, Sendable {

@@ -768,8 +768,8 @@ extension ScrollSessionControllerTests {
         let oldClock = try XCTUnwrap(factory.latest)
         firstViewport?.setClipOriginY(37)
         let expectedAnchor = firstViewport?.captureAnchor(viewportFraction: 0.5)
-        weak var oldSession: ScrollSessionController? = adapter.scrollSessionForTesting
-        weak var oldViewport: M3FakeReaderViewport? = firstViewport
+        weak let oldSession: ScrollSessionController? = adapter.scrollSessionForTesting
+        weak let oldViewport: M3FakeReaderViewport? = firstViewport
 
         let replacementViewport = M3FakeReaderViewport()
         replacementViewport.semanticRestoreOffset = 180
@@ -840,8 +840,8 @@ extension ScrollSessionControllerTests {
         let oldClock = try XCTUnwrap(factory.latest)
         firstViewport?.setClipOriginY(43)
         let capturedAnchor = firstViewport?.captureAnchor(viewportFraction: 0.5)
-        weak var oldSession: ScrollSessionController? = adapter.scrollSessionForTesting
-        weak var oldViewport: M3FakeReaderViewport? = firstViewport
+        weak let oldSession: ScrollSessionController? = adapter.scrollSessionForTesting
+        weak let oldViewport: M3FakeReaderViewport? = firstViewport
 
         model.send(.readerAttachmentChanged(isAttached: false))
         let detachedGeneration = model.currentScrollGeneration

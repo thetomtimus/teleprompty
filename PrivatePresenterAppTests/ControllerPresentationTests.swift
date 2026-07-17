@@ -108,7 +108,8 @@ final class ControllerPresentationTests: XCTestCase {
         let source = try String(contentsOfFile: sourcePath("ControllerPrivacyShieldView.swift"))
 
         XCTAssertTrue(source.contains("topologyStatus"))
-        XCTAssertTrue(source.contains("ControllerPresentation.topologyLabel"))
+        XCTAssertTrue(source.contains("PresenterAccessibility.genericSafetyState"))
+        XCTAssertFalse(source.contains("ControllerPresentation.topologyLabel"))
     }
 
     func testEmptyInstructionAndDisabledStart() {
