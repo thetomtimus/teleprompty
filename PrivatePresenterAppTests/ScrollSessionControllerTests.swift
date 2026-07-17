@@ -739,11 +739,11 @@ extension ScrollSessionControllerTests {
         let overlay = OverlayPanelController()
         let factory = M3FakeFrameClockFactory()
         var firstViewport: M3FakeReaderViewport? = M3FakeReaderViewport()
-        var currentViewport = firstViewport
+        let viewportBox = M3ViewportProviderBox(viewport: firstViewport)
         let adapter = AppEffectAdapter(
             snapshotStore: SnapshotStore(rootURL: root),
             overlayController: overlay,
-            readerViewportProvider: { currentViewport },
+            readerViewportProvider: { viewportBox.viewport },
             frameClockFactory: factory.make
         )
         let model = AppModel(
@@ -764,7 +764,7 @@ extension ScrollSessionControllerTests {
 
         let replacementViewport = M3FakeReaderViewport()
         replacementViewport.semanticRestoreOffset = 180
-        currentViewport = replacementViewport
+        viewportBox.viewport = replacementViewport
         firstViewport = nil
         XCTAssertNotNil(oldSession)
         XCTAssertNotNil(oldViewport)
@@ -802,11 +802,11 @@ extension ScrollSessionControllerTests {
         let overlay = OverlayPanelController()
         let factory = M3FakeFrameClockFactory()
         var firstViewport: M3FakeReaderViewport? = M3FakeReaderViewport()
-        var currentViewport = firstViewport
+        let viewportBox = M3ViewportProviderBox(viewport: firstViewport)
         let adapter = AppEffectAdapter(
             snapshotStore: SnapshotStore(rootURL: root),
             overlayController: overlay,
-            readerViewportProvider: { currentViewport },
+            readerViewportProvider: { viewportBox.viewport },
             frameClockFactory: factory.make
         )
         let model = AppModel(
@@ -841,7 +841,7 @@ extension ScrollSessionControllerTests {
         XCTAssertEqual(adapter.activeScrollSessionCount, 0)
         XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
 
-        currentViewport = nil
+        viewportBox.viewport = nil
         firstViewport = nil
         XCTAssertNil(oldViewport)
         model.send(.readerAttachmentChanged(isAttached: false))
@@ -850,7 +850,7 @@ extension ScrollSessionControllerTests {
 
         let replacementViewport = M3FakeReaderViewport()
         replacementViewport.semanticRestoreOffset = 170
-        currentViewport = replacementViewport
+        viewportBox.viewport = replacementViewport
         model.send(.readerAttachmentChanged(isAttached: true))
 
         XCTAssertEqual(model.currentScrollGeneration, detachedGeneration)
@@ -1218,6 +1218,15 @@ private final class M3SessionHarness {
     }
     var terminals: [ScrollTerminalResult] {
         events.compactMap { if case .terminal(let value) = $0 { value } else { nil } }
+    }
+}
+
+@MainActor
+private final class M3ViewportProviderBox {
+    var viewport: M3FakeReaderViewport?
+
+    init(viewport: M3FakeReaderViewport?) {
+        self.viewport = viewport
     }
 }
 
