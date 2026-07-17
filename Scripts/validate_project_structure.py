@@ -1562,6 +1562,7 @@ M6_LEDGER_TITLES = (
     "Keep accessibility store fixtures inside MainActor tests",
     "Keep native support fixtures Xcode 16 type-exact",
     "Record Xcode 16 support spellings in final scope",
+    "Convert the native bitmap into explicit sRGB",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1682,7 +1683,7 @@ M6_M5_VISUAL_SOURCE_MARKERS = (
     ("left-to-right", ".environment(\\.layoutDirection, .leftToRight)", 1),
     ("dark-aqua", "NSAppearance(named: .darkAqua)", 1),
     ("animations-disabled", "NSAnimationContext.runAnimationGroup", 1),
-    ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 3),
+    ("named-srgb", "CGColorSpace(name: CGColorSpace.sRGB)", 4),
     (
         "literal-continuous-mask",
         "RoundedRectangle(cornerRadius: 30, style: .continuous).path(in: literalBounds).cgPath",
@@ -1771,7 +1772,7 @@ M6_ORACLE_REPAIR_NAMED_TESTS = (
 M6_ORACLE_REPAIR_SOURCE_MARKERS = (
     ("premultiplied-bitmap", "bitmapFormat: []", 1),
     ("explicit-eight-bit-components", "bitsPerSample: 8", 1),
-    ("named-srgb-bitmap", "colorSpaceName: NSColorSpace.sRGB.colorSpaceName", 1),
+    ("named-srgb-bitmap", "colorSpaceName: .deviceRGB", 1),
     ("explicit-host-layer", "hosting.wantsLayer = true", 1),
     ("explicit-host-scale", "hosting.layer?.contentsScale = backingScale", 1),
     ("asserted-effective-scale", "guard effectiveBackingScale == backingScale else", 1),

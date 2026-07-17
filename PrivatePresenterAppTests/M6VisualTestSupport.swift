@@ -689,7 +689,7 @@ enum M6VisualTestSupport {
             samplesPerPixel: 4,
             hasAlpha: true,
             isPlanar: false,
-            colorSpaceName: NSColorSpace.sRGB.colorSpaceName,
+            colorSpaceName: .deviceRGB,
             bitmapFormat: [],
             bytesPerRow: pixelsWide * 4,
             bitsPerPixel: 32
@@ -704,7 +704,22 @@ enum M6VisualTestSupport {
             system.activeBandView.layer?.contentsScale == backingScale
         else { throw SupportError.backingScale }
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
-        guard let image = bitmap.cgImage else { throw SupportError.imageAllocation }
+        guard let sourceImage = bitmap.cgImage,
+            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+            let context = CGContext(
+                data: nil,
+                width: pixelsWide,
+                height: pixelsHigh,
+                bitsPerComponent: 8,
+                bytesPerRow: pixelsWide * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { throw SupportError.imageAllocation }
+        context.draw(sourceImage, in: CGRect(
+            x: 0, y: 0, width: CGFloat(pixelsWide), height: CGFloat(pixelsHigh)
+        ))
+        guard let image = context.makeImage() else { throw SupportError.imageAllocation }
 
         guard genericText.utf16.count > 0 else { throw SupportError.missingAttribute }
         let attributes = system.textStorage.attributes(at: 0, effectiveRange: nil)
