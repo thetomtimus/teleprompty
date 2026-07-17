@@ -15,7 +15,8 @@ final class ScrollSessionControllerTests: XCTestCase {
         XCTAssertEqual(viewport.container.scrollView.verticalScrollElasticity, .none)
         XCTAssertEqual(viewport.container.scrollView.horizontalScrollElasticity, .none)
         XCTAssertTrue(viewport.container.scrollView.contentView is ReaderClipView)
-        XCTAssertTrue(viewport.container.scrollView.documentView === viewport.system.textView)
+        XCTAssertTrue(viewport.container.scrollView.documentView === viewport.system.renderView)
+        XCTAssertFalse(viewport.container.scrollView.documentView === viewport.system.textView)
         XCTAssertTrue(ReaderScrollView.userScrollingIsDisabled)
         XCTAssertNotNil(viewport.system.textView.textLayoutManager)
     }

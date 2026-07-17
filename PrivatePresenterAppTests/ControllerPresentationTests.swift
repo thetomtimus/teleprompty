@@ -176,8 +176,18 @@ final class ControllerPresentationTests: XCTestCase {
         if case .restart? = presentation.productCommand(for: .restart) {} else {
             XCTFail("Restart must dispatch through AppModel")
         }
-        // Speed carries a bound value and therefore dispatches directly from the slider.
+        // Speed carries a bound value and therefore dispatches directly from its control.
         XCTAssertNil(presentation.productCommand(for: .speed))
+    }
+
+    func testControllerUsesCompatibleInteractiveControls() throws {
+        let source = try String(contentsOfFile: sourcePath("ControllerView.swift"))
+
+        XCTAssertFalse(source.contains("Slider("))
+        XCTAssertFalse(source.contains("ScriptEditorTextView("))
+        XCTAssertEqual(source.components(separatedBy: "Stepper(").count - 1, 2)
+        XCTAssertTrue(source.contains("axis: .vertical"))
+        XCTAssertTrue(source.contains("ControllerTextEditing.minimalEdit"))
     }
 
     func testM4FocusModeIsEnabledWithoutPlaceholderCopy() {

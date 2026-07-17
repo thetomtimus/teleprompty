@@ -82,6 +82,61 @@ final class ReaderActiveBandView: NSView {
 }
 
 @MainActor
+final class ReaderDrawingView: NSView {
+    private weak var system: ReaderTextSystem?
+
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+
+    convenience init() {
+        self.init(frame: .zero)
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        let accessibility = PresenterAccessibility.staticEntry(
+            "privatePresenter.reader"
+        )
+        identifier = NSUserInterfaceItemIdentifier(accessibility.identifier)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel(accessibility.label)
+        setAccessibilityHelp(accessibility.help)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func connect(to system: ReaderTextSystem) {
+        self.system = system
+        refresh()
+    }
+
+    func refresh() {
+        setAccessibilityValue(system?.textStorage.string ?? "")
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let system else { return }
+        let inset = system.textView.textContainerInset
+        let textRect = NSRect(
+            x: inset.width,
+            y: inset.height,
+            width: max(0, bounds.width - 2 * inset.width),
+            height: max(0, bounds.height - 2 * inset.height)
+        )
+        system.textStorage.draw(
+            with: textRect,
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+    }
+}
+
+@MainActor
 final class ReaderViewportContainerView: NSView {
     let backgroundView = NSView()
     let scrollView = ReaderScrollView()
@@ -137,11 +192,7 @@ final class ReaderViewportContainerView: NSView {
         scrollView.verticalScrollElasticity = .none
         scrollView.horizontalScrollElasticity = .none
         scrollView.allowsMagnification = false
-        scrollView.documentView = system.textView
-
-        system.textView.identifier = NSUserInterfaceItemIdentifier(
-            "privatePresenter.reader"
-        )
+        scrollView.documentView = system.renderView
 
         // AppKit subview order is back-to-front: opaque background, fixed band,
         // then the transparent clipped text view.

@@ -71,6 +71,8 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         XCTAssertFalse(reader.scrollView.drawsBackground)
         XCTAssertFalse(reader.scrollView.contentView.drawsBackground)
         XCTAssertFalse(system.textView.drawsBackground)
+        XCTAssertTrue(reader.scrollView.documentView === system.renderView)
+        XCTAssertFalse(reader.scrollView.documentView === system.textView)
         XCTAssertFalse(reader.scrollView.hasVerticalScroller)
         XCTAssertFalse(reader.scrollView.hasHorizontalScroller)
     }

@@ -82,14 +82,18 @@ struct ControllerView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                ScriptEditorTextView(
-                    text: model.document.text,
-                    revision: model.document.revision,
-                    performanceRegistry: performanceRegistry,
-                    restorePerformanceGate: restorePerformanceGate,
-                    onEdit: { model.send(.applyScriptEdit($0)) }
+                TextField(
+                    "Script editor",
+                    text: scriptTextBinding,
+                    axis: .vertical
+                )
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(12...24)
+                .presenterAccessibility(
+                    accessibilityEntry("privatePresenter.scriptEditor")
                 )
                 .frame(minHeight: 300)
+                .onAppear { restorePerformanceGate?.editorReady() }
 
                 HStack {
                     Button(presentation.openCloseLabel) { dispatch(.openClose) }
@@ -121,14 +125,15 @@ struct ControllerView: View {
 
                 HStack {
                     Text("Font size")
-                    Slider(
+                    Stepper(
                         value: Binding(
                             get: { model.preferences.fontSizePoints },
                             set: { model.send(.setFontSize($0)) }
                         ),
                         in: 24...96,
                         step: 2
-                    )
+                    ) { EmptyView() }
+                    .labelsHidden()
                     .presenterAccessibility(
                         accessibilityEntry("privatePresenter.fontSize")
                     )
@@ -224,14 +229,15 @@ struct ControllerView: View {
             }
             HStack {
                 Text("Speed")
-                Slider(
+                Stepper(
                     value: Binding(
                         get: { model.preferences.speedPointsPerSecond },
                         set: { model.send(.setSpeed($0)) }
                     ),
                     in: TeleprompterPreferences.speedRange,
                     step: TeleprompterPreferences.speedStep
-                )
+                ) { EmptyView() }
+                .labelsHidden()
                 .disabled(!presentation.isEnabled(.speed))
                 .presenterAccessibility(
                     accessibilityEntry("privatePresenter.speed")
@@ -280,6 +286,26 @@ struct ControllerView: View {
         ControllerPresentation.globalShortcutStatusText(model.hotKeyStatus)
     }
 
+    private var scriptTextBinding: Binding<String> {
+        Binding(
+            get: { model.document.text },
+            set: { replacement in
+                let current = model.document.text
+                guard let edit = try? ControllerTextEditing.minimalEdit(
+                    from: current,
+                    to: replacement,
+                    baseRevision: model.document.revision
+                ) else { return }
+                performanceRegistry.beginEditToVisible(for: edit.revision)
+                model.send(.applyScriptEdit(edit))
+                performanceRegistry.endEditToVisible(
+                    for: edit.revision,
+                    outcome: .failure
+                )
+            }
+        )
+    }
+
     private var canRetryGlobalShortcuts: Bool {
         guard let status = model.hotKeyStatus else { return false }
         switch status {
@@ -293,5 +319,86 @@ struct ControllerView: View {
     private func dispatch(_ control: ControllerControl) {
         guard let command = presentation.productCommand(for: control) else { return }
         model.send(command)
+    }
+}
+
+enum ControllerTextEditing {
+    static func minimalEdit(
+        from current: String,
+        to replacement: String,
+        baseRevision: UInt64
+    ) throws -> ScriptTextEdit? {
+        guard current != replacement else { return nil }
+
+        let currentUTF16 = current.utf16
+        let replacementUTF16 = replacement.utf16
+        var currentPrefix = currentUTF16.startIndex
+        var replacementPrefix = replacementUTF16.startIndex
+        var prefixLength = 0
+
+        while currentPrefix != currentUTF16.endIndex,
+            replacementPrefix != replacementUTF16.endIndex,
+            currentUTF16[currentPrefix] == replacementUTF16[replacementPrefix]
+        {
+            currentUTF16.formIndex(after: &currentPrefix)
+            replacementUTF16.formIndex(after: &replacementPrefix)
+            prefixLength += 1
+        }
+
+        if splitsSurrogatePair(at: currentPrefix, in: currentUTF16)
+            || splitsSurrogatePair(at: replacementPrefix, in: replacementUTF16)
+        {
+            currentUTF16.formIndex(before: &currentPrefix)
+            replacementUTF16.formIndex(before: &replacementPrefix)
+            prefixLength -= 1
+        }
+
+        var currentSuffix = currentUTF16.endIndex
+        var replacementSuffix = replacementUTF16.endIndex
+        var suffixLength = 0
+        while currentSuffix != currentPrefix,
+            replacementSuffix != replacementPrefix
+        {
+            let precedingCurrent = currentUTF16.index(before: currentSuffix)
+            let precedingReplacement = replacementUTF16.index(before: replacementSuffix)
+            guard currentUTF16[precedingCurrent] == replacementUTF16[precedingReplacement]
+            else { break }
+            currentSuffix = precedingCurrent
+            replacementSuffix = precedingReplacement
+            suffixLength += 1
+        }
+
+        if splitsSurrogatePair(at: currentSuffix, in: currentUTF16)
+            || splitsSurrogatePair(at: replacementSuffix, in: replacementUTF16)
+        {
+            currentUTF16.formIndex(after: &currentSuffix)
+            replacementUTF16.formIndex(after: &replacementSuffix)
+            suffixLength -= 1
+        }
+
+        let replacementLength = replacementUTF16.count - prefixLength - suffixLength
+        let replacementText = (replacement as NSString).substring(
+            with: NSRange(location: prefixLength, length: replacementLength)
+        )
+        return try ScriptTextEdit.replacing(
+            in: current,
+            range: UTF16TextRange(
+                location: prefixLength,
+                length: currentUTF16.count - prefixLength - suffixLength
+            ),
+            with: replacementText,
+            baseRevision: baseRevision
+        )
+    }
+
+    private static func splitsSurrogatePair(
+        at index: String.UTF16View.Index,
+        in utf16: String.UTF16View
+    ) -> Bool {
+        guard index != utf16.startIndex, index != utf16.endIndex else { return false }
+        let previous = utf16[utf16.index(before: index)]
+        let current = utf16[index]
+        return (0xD800...0xDBFF).contains(previous)
+            && (0xDC00...0xDFFF).contains(current)
     }
 }

@@ -2056,6 +2056,13 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def uses_textkit2(source: str) -> bool:
+    return "NSTextView(usingTextLayoutManager: true)" in source or all(
+        marker in source
+        for marker in ("NSTextContentStorage()", "NSTextLayoutManager()", "NSTextContainer()")
+    )
+
+
 def git(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args], cwd=ROOT, check=False, text=True, capture_output=True
@@ -2252,9 +2259,9 @@ def validate_m2_source() -> list[str]:
 
     editor_source = read("PrivatePresenterApp/Controller/EditorTextSystem.swift")
     reader_source = read("PrivatePresenterApp/Overlay/ReaderTextSystem.swift")
-    if "NSTextView(usingTextLayoutManager: true)" not in editor_source:
+    if not uses_textkit2(editor_source):
         violations.append("textkit:editor-not-textkit2")
-    if "NSTextView(usingTextLayoutManager: true)" not in reader_source:
+    if not uses_textkit2(reader_source):
         violations.append("textkit:reader-not-textkit2")
     if "private(set) var isAwaitingResync" not in reader_source:
         violations.append("reader:resync-latch-missing")
@@ -2391,9 +2398,9 @@ def validate_m3_source() -> list[str]:
     editor = app_sources["PrivatePresenterApp/Controller/EditorTextSystem.swift"]
     reader = app_sources["PrivatePresenterApp/Overlay/ReaderTextSystem.swift"]
     adapter = app_sources["PrivatePresenterApp/Overlay/ReaderViewportAdapter.swift"]
-    if "NSTextView(usingTextLayoutManager: true)" not in editor:
+    if not uses_textkit2(editor):
         violations.append("textkit:editor-not-textkit2")
-    if "NSTextView(usingTextLayoutManager: true)" not in reader:
+    if not uses_textkit2(reader):
         violations.append("textkit:reader-not-textkit2")
     for marker in ("textLayoutManager", "ensureLayout(for:", "enumerateTextLayoutFragments"):
         if marker not in adapter:
@@ -2689,7 +2696,7 @@ def validate_m4_source() -> list[str]:
         "PrivatePresenterApp/Controller/EditorTextSystem.swift",
         "PrivatePresenterApp/Overlay/ReaderTextSystem.swift",
     ):
-        if "NSTextView(usingTextLayoutManager: true)" not in app_sources.get(path, ""):
+        if not uses_textkit2(app_sources.get(path, "")):
             violations.append(f"textkit:not-textkit2:{path}")
 
     protected_sources = (

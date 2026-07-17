@@ -80,6 +80,44 @@ final class EditorTextSystemTests: XCTestCase {
         XCTAssertEqual(try valid.applying(to: "A👍B", revision: 0), "A🙂B")
     }
 
+    func testControllerTextEditingDerivesMinimalEdit() throws {
+        let edit = try XCTUnwrap(
+            ControllerTextEditing.minimalEdit(
+                from: "Hello brave world",
+                to: "Hello bold world",
+                baseRevision: 12
+            )
+        )
+
+        XCTAssertEqual(edit.range, UTF16TextRange(location: 7, length: 4))
+        XCTAssertEqual(edit.replacement, "old")
+        XCTAssertEqual(try edit.applying(to: "Hello brave world", revision: 12), "Hello bold world")
+    }
+
+    func testControllerTextEditingPreservesEmojiBoundaries() throws {
+        let edit = try XCTUnwrap(
+            ControllerTextEditing.minimalEdit(
+                from: "A👍B",
+                to: "A🙂B",
+                baseRevision: 3
+            )
+        )
+
+        XCTAssertEqual(edit.range, UTF16TextRange(location: 1, length: 2))
+        XCTAssertEqual(edit.replacement, "🙂")
+        XCTAssertEqual(try edit.applying(to: "A👍B", revision: 3), "A🙂B")
+    }
+
+    func testControllerTextEditingReturnsNilForUnchangedText() throws {
+        XCTAssertNil(
+            try ControllerTextEditing.minimalEdit(
+                from: "unchanged",
+                to: "unchanged",
+                baseRevision: 4
+            )
+        )
+    }
+
     func testCombiningCharacterEditUsesUTF16DeltaWithoutCorruption() throws {
         let base = "Cafe\u{301}"
         let edit = try ScriptTextEdit.replacing(
