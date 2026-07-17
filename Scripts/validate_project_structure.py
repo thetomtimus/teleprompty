@@ -791,7 +791,7 @@ M5_INDEPENDENT_REVIEW_NAMED_TESTS = (
     "testDebouncedSaveSupersessionEndsRealIntervals",
     "testProductTeardownCancelsEveryOpenInterval",
     "testTerminationDuringDelayedStartupAwaitsLoadedRevisionBeforeExactFlushAndRetry",
-    "testHostedOverlayChromeBridgesHelpAndActualFortyFourPointFrames",
+    "testOverlayChromeSemanticsMatchActualFortyFourPointLayoutFrames",
 )
 
 M5_PROTECTED_PATHS = (
@@ -1426,6 +1426,7 @@ M5_ORDER_MARKER_COUNTS = {
 }
 
 M6_PLAN_COMMIT = "3c1aadd9fb50ab6f335580ebd72e6609f2cfa2f0"
+M6_FINAL_SOURCE_COMMIT = "9fc74287456179b63928b53c81318644592e1fbf"
 M6_PLAN_PARENT = "1ac13dbbdae1c53eea06033c353d22ab0919e8a5"
 M6_PLAN_PATH = (
     "docs/plans/2026-07-16-milestone-6-reference-faithful-visual-polish.md"
@@ -1718,24 +1719,25 @@ M6_M5_VISUAL_SOURCE_MARKERS = (
 )
 
 M6_REPAIR_NAMED_TESTS = (
-    "testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint",
-    "testHostedRootDispatchesEveryControlResizeAndTitleRouteAcrossTiers",
-    "testHostedSettingsPressShowsExistingControllerExactlyOnceWithoutActivation",
-    "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
-    "testDefaultUnlockedHostedHeaderOffersLockTeleprompter",
+    "testOffscreenQuickControlsUseFullRectangularTargetsWithCircularPaint",
+    "testOffscreenProbeDoesNotOrderOrLeakApplicationWindows",
+    "testOffscreenRootDispatchesEveryControlResizeAndTitleRouteAcrossTiers",
+    "testOffscreenSettingsPressShowsExistingControllerExactlyOnceWithoutActivation",
+    "testOffscreenLockedChromeLeavesSemanticsAndReaderStateUnchanged",
+    "testDefaultUnlockedOffscreenHeaderOffersLockTeleprompter",
     "testPlaybackTargetsRespectExistingPresentationEligibility",
 )
 M6_REPAIR_SOURCE_MARKERS = (
     ("rectangular-hit-shape", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".contentShape(Rectangle())", 1),
     ("circular-paint", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", "Circle().fill(fill(configuration:", 1),
-    ("hosted-probe", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "final class HostedRootProbe", 1),
-    ("real-window-events", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "window.sendEvent(event)", 1),
-    ("real-hit-testing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "hosting.hitTest(point)", 1),
-    ("real-ax-children", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "compactMap { $0 as? NSAccessibilityProtocol }", 1),
-    ("real-ax-press", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private static func performAccessibilityPress", 1),
+    ("offscreen-probe", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "final class OffscreenRootProbe", 1),
+    ("offscreen-hit-testing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "hosting.hitTest(point)", 1),
+    ("product-hit-routing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "OverlayHitRegionResolver(metrics: metrics).resolve(point: point)", 1),
+    ("manifest-semantics", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "PresenterAccessibility.entry(", 1),
+    ("windowless-model-seam", "PrivatePresenterApp/App/AppModel.swift", "testConfigurationSnapshot: OverlayConfigurationSnapshot", 2),
     ("resize-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "resizeChanges.append(change)", 1),
     ("title-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "titleChanges.append(translation)", 1),
-    ("hosted-ax-navigation", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "!accessibilityIdentifiers.intersection(Self.chromeIdentifiers).isEmpty", 1),
+    ("window-isolation-regression", "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift", "testOffscreenProbeDoesNotOrderOrLeakApplicationWindows", 1),
     ("controller-playback-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "let playbackPresentation = ControllerPresentation(", 1),
     ("playing-pause-eligible", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.isPlaying || playbackPresentation.isEnabled(.start)", 1),
     ("disabled-visual", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".opacity(accessibility.isEnabled ? 1 : 0.45)", 1),
@@ -1743,7 +1745,9 @@ M6_REPAIR_SOURCE_MARKERS = (
 )
 M6_REPAIR_FORBIDDEN_MARKERS = (
     ("circular-hit-shape", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".contentShape(Circle())"),
-    ("caller-echoed-ax", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "chromeIsAccessibilityNavigable: state == .unlocked"),
+    ("globally-ordered-test-window", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "orderFrontRegardless()"),
+    ("shared-test-window", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "NSWindow("),
+    ("stale-ax-query", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "accessibilityChildren()"),
     ("duplicated-empty-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.scriptText.trimmingCharacters"),
 )
 
@@ -1812,9 +1816,9 @@ M6_ORACLE_REPAIR_FORBIDDEN_MARKERS = (
 )
 
 M6_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS = (
-    "testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint",
-    "testHostedProbeConfirmsPrivatePresenterBeforePlaybackMutation",
-    "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
+    "testOffscreenQuickControlsUseFullRectangularTargetsWithCircularPaint",
+    "testOffscreenProbeConfirmsPrivatePresenterBeforePlaybackMutation",
+    "testOffscreenLockedChromeLeavesSemanticsAndReaderStateUnchanged",
 )
 M6_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS = (
     (
@@ -1829,29 +1833,32 @@ M6_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS = (
         1,
     ),
     ("real-show-command", "model.send(.showOverlay)", 1),
-    ("eligible-playback-command", "model.send(.togglePlayback)", 1),
+    ("eligible-playback-command", "model.send(.togglePlayback)", 2),
     (
-        "hosted-hit-identifier",
-        "func hostedIdentifier(at point: CGPoint) -> String?",
+        "offscreen-hit-identifier",
+        "func offscreenIdentifier(at point: CGPoint) -> String?",
         1,
     ),
     (
-        "actual-ax-frame-cache",
-        "private func cacheHostedAccessibilityControlFrames()",
+        "product-hit-resolver",
+        "OverlayHitRegionResolver(metrics: metrics).resolve(point: point)",
         1,
     ),
-    ("active-band-frame-evidence", "activeBandFrame: system.activeBandView.frame", 1),
+    ("manifest-control", "func semanticControl(identifier: String)", 1),
+    ("active-band-frame-evidence", "activeBandFrame: system.activeBandView.frame", 2),
     (
         "text-container-inset-evidence",
         "textContainerInset: system.textView.textContainerInset",
-        1,
+        2,
     ),
-    ("panel-window-frame-evidence", "panelWindowFrame: window.frame", 1),
+    ("offscreen-frame-evidence", "offscreenFrame: hosting.frame", 1),
 )
 M6_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS = (
     ("fabricated-shield-state", "model.isShielded ="),
     ("fabricated-confirmation-state", "model.isSelectionConfirmed ="),
-    ("synthetic-hit-identifier", "OverlayHitRegionResolver(metrics:"),
+    ("globally-visible-window", "orderFrontRegardless()"),
+    ("shared-app-window", "NSWindow("),
+    ("stale-ax-traversal", "accessibilityChildren()"),
 )
 
 M6_M1_REQUIRED_PATHS = (
@@ -3248,7 +3255,8 @@ def validate_m6_result_text(text: str) -> list[str]:
 
 def m6_history_rows() -> list[tuple[str, list[str], str]]:
     result = git(
-        "log", "--reverse", "--format=%H%x09%P%x09%s", f"{M6_PLAN_COMMIT}..HEAD"
+        "log", "--reverse", "--format=%H%x09%P%x09%s",
+        f"{M6_PLAN_COMMIT}..{M6_FINAL_SOURCE_COMMIT}"
     )
     if result.returncode != 0:
         return []
@@ -3470,8 +3478,8 @@ def validate_m6_continuation(handoff_root: Path | None = None) -> list[str]:
     )
     if actual_files != tuple(sorted(M6_CONTINUATION_FILES)):
         violations.append("continuation:exact-file-inventory")
-    head = git("rev-parse", "HEAD")
-    tree = git("rev-parse", "HEAD^{tree}")
+    head = git("rev-parse", M6_FINAL_SOURCE_COMMIT)
+    tree = git("rev-parse", f"{M6_FINAL_SOURCE_COMMIT}^{{tree}}")
     if head.returncode != 0 or tree.returncode != 0:
         return [*violations, "continuation:git-identity"]
     source_sha = head.stdout.strip()
@@ -3504,8 +3512,8 @@ def validate_m6_continuation(handoff_root: Path | None = None) -> list[str]:
     if source_paths != expected_paths:
         violations.append("continuation:source-manifest-paths")
     for digest, relative in source_entries:
-        target = ROOT / relative
-        if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+        returncode, source_bytes = committed_bytes(source_sha, relative)
+        if returncode != 0 or hashlib.sha256(source_bytes).hexdigest() != digest:
             violations.append(f"continuation:source-hash:{relative}")
 
     artifact_manifest = handoff / "m6-artifacts.sha256"
@@ -3531,15 +3539,17 @@ def validate_m6_continuation(handoff_root: Path | None = None) -> list[str]:
                     violations.append("continuation:tar-paths")
                 for member in members:
                     extracted = source_tar.extractfile(member)
-                    target = ROOT / member.name
+                    returncode, source_bytes = committed_bytes(
+                        source_sha, member.name
+                    )
                     if (
                         not member.isfile()
                         or member.mtime != 0
                         or member.uid != 0
                         or member.gid != 0
                         or extracted is None
-                        or not target.is_file()
-                        or extracted.read() != target.read_bytes()
+                        or returncode != 0
+                        or extracted.read() != source_bytes
                     ):
                         violations.append(f"continuation:tar-entry:{member.name}")
         except (tarfile.TarError, OSError):
@@ -3593,7 +3603,9 @@ def validate_m6_source() -> list[str]:
     )
     if plan_paths.returncode != 0 or plan_paths.stdout.splitlines() != [M6_PLAN_PATH]:
         violations.append("ancestry:m6-plan-path")
-    if git("merge-base", "--is-ancestor", M6_PLAN_COMMIT, "HEAD").returncode != 0:
+    if git(
+        "merge-base", "--is-ancestor", M6_FINAL_SOURCE_COMMIT, "HEAD"
+    ).returncode != 0:
         violations.append("ancestry:m6-plan-not-ancestor")
 
     for path in M6_PROTECTED_PATHS:
@@ -3613,7 +3625,8 @@ def validate_m6_source() -> list[str]:
             violations.append(f"evidence:predecessor-pending:{label}")
 
     committed_changes = git(
-        "diff", "--name-only", "--diff-filter=ACMR", f"{M6_PLAN_COMMIT}..HEAD"
+        "diff", "--name-only", "--diff-filter=ACMR",
+        f"{M6_PLAN_COMMIT}..{M6_FINAL_SOURCE_COMMIT}"
     )
     if committed_changes.returncode != 0:
         violations.append("scope:m6-final-history")
@@ -3726,9 +3739,15 @@ def validate_m6_source() -> list[str]:
     if any(marker in cache_refresh_source for marker in ("ensureLayout(", "NSTextLayoutManager(")):
         violations.append("visual:band-repair-cache-owner-creep")
 
+    oracle_support = m5_support.split("static func makeCanonicalSemanticOracle", 1)[-1]
     for marker in (
         "OverlayVisualTokens",
         "OverlayLayoutMetrics",
+    ):
+        if marker in oracle_support:
+            violations.append(f"visual:m5-forbidden:{marker}")
+
+    for marker in (
         "WKWebView",
         "HTML",
         "CGWindowListCreateImage",
