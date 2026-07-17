@@ -161,6 +161,7 @@ EXPECTED_LEDGER_TITLES = (
     "Record the bitmap conversion in focused support scope",
     "Keep mutable viewport replacement inside MainActor state",
     "Stabilize final native AppKit integration fixtures",
+    "Record the native display fixture in final scope",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -709,6 +710,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "PrivatePresenterAppTests/SystemDisplayServiceTests.swift",
     "PrivatePresenterUITests/ControllerAccessibilityUITests.swift",
     "PrivatePresenterUITests/MenuLifecycleUITests.swift",
     "Scripts/test_validate_project_structure_m3.py",
@@ -1596,6 +1598,13 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("let anchor = seed", scroll)
         self.assertIn("replacementClock.fire(at: CACurrentMediaTime() + 0.5)", scroll)
         self.assertIn('"the passRetained ownership forever"', display)
+
+    def testM6FinalScopeIncludesNativeDisplayFixture(self) -> None:
+        self.assertIn(
+            "PrivatePresenterAppTests/SystemDisplayServiceTests.swift",
+            EXPECTED_FINAL_CHANGED_PATHS,
+        )
+        self.assertEqual(VALIDATOR.M6_FINAL_CHANGED_PATHS, EXPECTED_FINAL_CHANGED_PATHS)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
