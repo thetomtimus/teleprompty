@@ -153,6 +153,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep controller UI cleanup inside MainActor tests",
     "Import Carbon constants in native hot-key tests",
     "Keep Carbon status expectations type-exact",
+    "Keep visual anchor tests aligned with the context API",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1500,6 +1501,13 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         source = VALIDATOR.read("PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift")
         self.assertEqual(source.count("Int32(eventNotHandledErr)"), 2)
         self.assertNotIn("\n            eventNotHandledErr\n", source)
+
+    def testM6VisualAnchorAssertionsUseCurrentContextModel(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift")
+        self.assertIn("XCTAssertEqual(adapter.lastRestoredAnchor, baselineAnchor)", source)
+        self.assertIn("XCTAssertEqual(viewport.adapter.lastRestoredAnchor, anchor)", source)
+        self.assertNotIn("lastRestoredAnchor?.document", source)
+        self.assertNotIn("anchor.document", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
