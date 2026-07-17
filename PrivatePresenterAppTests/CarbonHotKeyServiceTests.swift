@@ -98,13 +98,13 @@ final class CarbonHotKeyServiceTests: XCTestCase {
 
         XCTAssertEqual(
             harness.service.receiveForTesting(identifier: .init(signature: 0, id: 1)),
-            eventNotHandledErr
+            Int32(eventNotHandledErr)
         )
         XCTAssertEqual(
             harness.service.receiveForTesting(
                 identifier: .init(signature: ProductHotKeyIdentifier.signature, id: 99)
             ),
-            eventNotHandledErr
+            Int32(eventNotHandledErr)
         )
         XCTAssertTrue(harness.commands.isEmpty)
     }
