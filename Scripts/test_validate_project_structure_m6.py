@@ -155,6 +155,7 @@ EXPECTED_LEDGER_TITLES = (
     "Keep Carbon status expectations type-exact",
     "Keep visual anchor tests aligned with the context API",
     "Keep accessibility store fixtures inside MainActor tests",
+    "Keep native support fixtures Xcode 16 type-exact",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -697,6 +698,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterApp/Services/CarbonHotKeyService.swift",
     "PrivatePresenterApp/Services/PerformanceSignposter.swift",
     "PrivatePresenterAppTests/CarbonHotKeyServiceTests.swift",
+    "PrivatePresenterAppTests/M5PerformanceTestSupport.swift",
     "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift",
     "PrivatePresenterAppTests/M6VisualTestSupport.swift",
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
@@ -1519,6 +1521,19 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertNotIn("private var testContainer:", source)
         self.assertNotIn("override func setUpWithError()", source)
         self.assertNotIn("override func tearDownWithError()", source)
+
+    def testM6NativeSupportFixturesUseExplicitXcode16Types(self) -> None:
+        performance = VALIDATOR.read("PrivatePresenterAppTests/M5PerformanceTestSupport.swift")
+        visual = VALIDATOR.read("PrivatePresenterAppTests/M6VisualTestSupport.swift")
+        self.assertIn("withExtendedLifetime(syntheticEditor)", performance)
+        self.assertIn("Self.chromeIdentifiers", visual)
+        self.assertIn("NSColorSpace.sRGB.colorSpaceName", visual)
+        self.assertIn("CGFloat.greatestFiniteMagnitude", visual)
+        self.assertIn("CGColorSpace(name: CGColorSpace.sRGB)", visual)
+        self.assertNotIn("intersection(chromeIdentifiers)", visual)
+        self.assertNotIn("colorSpaceName: .sRGB", visual)
+        self.assertNotIn("height: .greatestFiniteMagnitude", visual)
+        self.assertNotIn("CGColorSpace(name: .sRGB)", visual)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
