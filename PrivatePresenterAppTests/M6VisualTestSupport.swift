@@ -398,66 +398,58 @@ enum M6VisualTestSupport {
             window.sendEvent(event)
         }
 
-        fileprivate static func accessibilityIdentifiers(in root: NSView) -> Set<String> {
+        fileprivate static func accessibilityIdentifiers(
+            in root: NSAccessibilityProtocol
+        ) -> Set<String> {
             Set(accessibilityElements(in: root).compactMap { accessibilityIdentifier(of: $0) })
         }
 
-        private static func accessibilityElements(in root: NSView) -> [AnyObject] {
-            var result: [AnyObject] = []
-            var pending: [AnyObject] = [root]
+        private static func accessibilityElements(
+            in root: NSAccessibilityProtocol
+        ) -> [NSAccessibilityProtocol] {
+            var result: [NSAccessibilityProtocol] = []
+            var pending: [NSAccessibilityProtocol] = [root]
             var visited: Set<ObjectIdentifier> = []
             while let element = pending.popLast() {
                 let identity = ObjectIdentifier(element)
                 guard visited.insert(identity).inserted else { continue }
                 result.append(element)
-                pending.append(contentsOf: directAccessibilityChildren(of: element))
+                pending.append(
+                    contentsOf: (element.accessibilityChildren() ?? [])
+                        .compactMap { $0 as? NSAccessibilityProtocol }
+                )
             }
             return result
         }
 
-        private static func directAccessibilityChildren(of element: AnyObject) -> [AnyObject] {
-            if let view = element as? NSView {
-                return (view.accessibilityChildren() ?? []).map { $0 as AnyObject }
-            }
-            if let accessibilityElement = element as? NSAccessibilityElement {
-                return (accessibilityElement.accessibilityChildren() ?? []).map { $0 as AnyObject }
-            }
-            return []
+        private static func accessibilityIdentifier(
+            of element: NSAccessibilityProtocol
+        ) -> String? {
+            element.accessibilityIdentifier()
         }
 
-        private static func accessibilityIdentifier(of element: AnyObject) -> String? {
-            if let view = element as? NSView {
-                return view.accessibilityIdentifier()
-            }
-            return (element as? NSAccessibilityElement)?.accessibilityIdentifier()
+        private static func accessibilityLabel(
+            of element: NSAccessibilityProtocol
+        ) -> String? {
+            element.accessibilityLabel()
         }
 
-        private static func accessibilityLabel(of element: AnyObject) -> String? {
-            if let view = element as? NSView {
-                return view.accessibilityLabel()
-            }
-            return (element as? NSAccessibilityElement)?.accessibilityLabel()
+        private static func accessibilityFrame(
+            of element: NSAccessibilityProtocol
+        ) -> CGRect? {
+            element.accessibilityFrame()
         }
 
-        private static func accessibilityFrame(of element: AnyObject) -> CGRect? {
-            if let view = element as? NSView {
-                return view.accessibilityFrame()
-            }
-            return (element as? NSAccessibilityElement)?.accessibilityFrame()
+        private static func accessibilityEnabled(
+            of element: NSAccessibilityProtocol
+        ) -> Bool {
+            element.isAccessibilityEnabled()
         }
 
-        private static func accessibilityEnabled(of element: AnyObject) -> Bool {
-            if let view = element as? NSView {
-                return view.isAccessibilityEnabled()
-            }
-            return (element as? NSAccessibilityElement)?.isAccessibilityEnabled() ?? false
-        }
-
-        private static func performAccessibilityPress(on element: AnyObject) -> Bool {
-            if let view = element as? NSView {
-                return view.accessibilityPerformPress()
-            }
-            return (element as? NSAccessibilityElement)?.accessibilityPerformPress() ?? false
+        private static func performAccessibilityPress(
+            on element: NSAccessibilityProtocol
+        ) -> Bool {
+            element.accessibilityPerformPress()
         }
     }
 

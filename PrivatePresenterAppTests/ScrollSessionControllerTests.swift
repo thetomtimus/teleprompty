@@ -207,7 +207,7 @@ final class ScrollSessionControllerTests: XCTestCase {
         let text = "Alpha\nBravo\nCharlie"
         let viewport = makeViewport(
             text: text,
-            size: NSSize(width: 260, height: 80)
+            size: NSSize(width: 260, height: 226)
         )
         let seed = ReadingAnchor(
             utf16Offset: utf16Offset(of: "Bravo", in: text),
@@ -215,7 +215,7 @@ final class ScrollSessionControllerTests: XCTestCase {
             document: text
         )
         _ = viewport.adapter.restore(anchor: seed)
-        let anchor = seed
+        let anchor = viewport.adapter.captureAnchor(viewportFraction: 0.5)
         let anchorOffset = anchor.utf16Offset
         XCTAssertTrue(isScalarBoundary(anchorOffset, in: text))
         let edit = try ScriptTextEdit.replacing(
@@ -786,6 +786,7 @@ extension ScrollSessionControllerTests {
         XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
         XCTAssertEqual(replacementViewport.restoredAnchors.last, expectedAnchor)
         XCTAssertEqual(replacementViewport.clipOriginY, 180, accuracy: 1e-9)
+        replacementViewport.semanticRestoreOffset = nil
         XCTAssertEqual(adapter.scrollSessionConstructionCount, 2)
         XCTAssertEqual(adapter.activeScrollSessionCount, 1)
         XCTAssertEqual(factory.clocks.count, 1)
@@ -793,12 +794,13 @@ extension ScrollSessionControllerTests {
         model.send(.moveForward)
         XCTAssertEqual(replacementViewport.clipOriginY, 270, accuracy: 1e-9)
         model.send(.start)
+        XCTAssertEqual(replacementViewport.clipOriginY, 270, accuracy: 1e-9)
         let replacementClock = try XCTUnwrap(factory.latest)
-        replacementClock.fire(at: CACurrentMediaTime() + 0.5)
+        replacementClock.fire(at: CACurrentMediaTime() + 0.1)
 
         XCTAssertEqual(factory.clocks.count, 2)
         XCTAssertTrue(replacementClock !== oldClock)
-        XCTAssertGreaterThan(replacementViewport.clipOriginY, 180)
+        XCTAssertGreaterThan(replacementViewport.clipOriginY, 270)
         XCTAssertEqual(adapter.activeScrollSessionCount, 1)
     }
 

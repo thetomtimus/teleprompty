@@ -1567,6 +1567,7 @@ M6_LEDGER_TITLES = (
     "Keep mutable viewport replacement inside MainActor state",
     "Stabilize final native AppKit integration fixtures",
     "Record the native display fixture in final scope",
+    "Use protocol AX traversal and valid native geometry",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",

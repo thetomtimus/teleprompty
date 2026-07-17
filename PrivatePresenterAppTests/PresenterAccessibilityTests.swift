@@ -183,30 +183,32 @@ final class PresenterAccessibilityTests: XCTestCase {
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
         window.contentView = hosting
         window.orderFrontRegardless()
         hosting.layoutSubtreeIfNeeded()
         hosting.displayIfNeeded()
         defer {
             window.orderOut(nil)
+            window.contentView = nil
             window.close()
         }
 
         let expectedLabels = Set(["Start scrolling", "Lock teleprompter", "Show Controller"])
         let controls = hostedAccessibilityElements(of: hosting).filter {
-            guard let label = hostedAccessibilityLabel(of: $0) else { return false }
+            guard let label = $0.accessibilityLabel() else { return false }
             return expectedLabels.contains(label)
         }
 
         XCTAssertEqual(
-            Set(controls.compactMap { hostedAccessibilityLabel(of: $0) }),
+            Set(controls.compactMap { $0.accessibilityLabel() }),
             expectedLabels
         )
         for control in controls {
-            let actualFrame = hostedAccessibilityFrame(of: control)
+            let actualFrame = control.accessibilityFrame()
             XCTAssertGreaterThanOrEqual(actualFrame.width, 44)
             XCTAssertGreaterThanOrEqual(actualFrame.height, 44)
-            XCTAssertFalse(hostedAccessibilityHelp(of: control)?.isEmpty ?? true)
+            XCTAssertFalse(control.accessibilityHelp()?.isEmpty ?? true)
         }
     }
 
@@ -465,42 +467,22 @@ final class PresenterAccessibilityTests: XCTestCase {
         )
     }
 
-    private func hostedAccessibilityElements(of root: NSView) -> [AnyObject] {
-        var result: [AnyObject] = []
-        var pending: [AnyObject] = [root]
+    private func hostedAccessibilityElements(
+        of root: NSAccessibilityProtocol
+    ) -> [NSAccessibilityProtocol] {
+        var result: [NSAccessibilityProtocol] = []
+        var pending: [NSAccessibilityProtocol] = [root]
         var visited: Set<ObjectIdentifier> = []
         while let element = pending.popLast() {
             let identity = ObjectIdentifier(element)
             guard visited.insert(identity).inserted else { continue }
             result.append(element)
-            pending.append(contentsOf: hostedAccessibilityChildren(of: element))
+            pending.append(
+                contentsOf: (element.accessibilityChildren() ?? [])
+                    .compactMap { $0 as? NSAccessibilityProtocol }
+            )
         }
         return result
-    }
-
-    private func hostedAccessibilityChildren(of element: AnyObject) -> [AnyObject] {
-        if let view = element as? NSView {
-            return (view.accessibilityChildren() ?? []).map { $0 as AnyObject }
-        }
-        if let accessibilityElement = element as? NSAccessibilityElement {
-            return (accessibilityElement.accessibilityChildren() ?? []).map { $0 as AnyObject }
-        }
-        return []
-    }
-
-    private func hostedAccessibilityLabel(of element: AnyObject) -> String? {
-        if let view = element as? NSView { return view.accessibilityLabel() }
-        return (element as? NSAccessibilityElement)?.accessibilityLabel()
-    }
-
-    private func hostedAccessibilityFrame(of element: AnyObject) -> CGRect {
-        if let view = element as? NSView { return view.accessibilityFrame() }
-        return (element as? NSAccessibilityElement)?.accessibilityFrame() ?? .zero
-    }
-
-    private func hostedAccessibilityHelp(of element: AnyObject) -> String? {
-        if let view = element as? NSView { return view.accessibilityHelp() }
-        return (element as? NSAccessibilityElement)?.accessibilityHelp()
     }
 
     private func entry(

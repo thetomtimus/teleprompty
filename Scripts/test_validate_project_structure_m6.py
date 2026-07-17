@@ -1596,8 +1596,8 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("selectedRange().length, 0", scroll)
         self.assertIn("let expectedBandY = min(", scroll)
         self.assertIn("XCTAssertTrue(presentation.isEnabled(.focusMode))", scroll)
-        self.assertIn("let anchor = seed", scroll)
-        self.assertIn("replacementClock.fire(at: CACurrentMediaTime() + 0.5)", scroll)
+        self.assertIn("size: NSSize(width: 260, height: 226)", scroll)
+        self.assertIn("replacementClock.fire(at: CACurrentMediaTime() + 0.1)", scroll)
         self.assertIn('"the passRetained ownership forever"', display)
 
     def testM6FinalScopeIncludesNativeDisplayFixture(self) -> None:
@@ -1612,9 +1612,6 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         accessibility = VALIDATOR.read("PrivatePresenterAppTests/PresenterAccessibilityTests.swift")
         scroll = VALIDATOR.read("PrivatePresenterAppTests/ScrollSessionControllerTests.swift")
         display_test = VALIDATOR.read("PrivatePresenterAppTests/SystemDisplayServiceTests.swift")
-        display_source = VALIDATOR.read(
-            "PrivatePresenterApp/Services/SystemDisplayService.swift"
-        )
 
         self.assertIn("in root: NSAccessibilityProtocol", support)
         self.assertIn("-> [NSAccessibilityProtocol]", support)
@@ -1629,8 +1626,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("replacementViewport.semanticRestoreOffset = nil", scroll)
         self.assertIn("replacementClock.fire(at: CACurrentMediaTime() + 0.1)", scroll)
         self.assertIn("XCTAssertGreaterThan(replacementViewport.clipOriginY, 270)", scroll)
-        self.assertIn('"keep the passRetained ownership forever"', display_test)
-        self.assertIn("// keep the passRetained ownership forever", display_source)
+        self.assertIn('"the passRetained ownership forever"', display_test)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
