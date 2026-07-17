@@ -2,28 +2,15 @@ import XCTest
 
 @MainActor
 final class ControllerAccessibilityUITests: XCTestCase {
-    private var application: XCUIApplication?
-    private var support: M5UITestSupport!
+    private var support: M5UITestSupport?
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        try MainActor.assumeIsolated {
-            support = try M5UITestSupport()
-        }
-    }
-
-    override func tearDownWithError() throws {
-        MainActor.assumeIsolated {
-            application?.terminate()
-            support?.cleanUp()
-            application = nil
-            support = nil
-        }
-        try super.tearDownWithError()
     }
 
     func testAllIconButtonsHaveLabelsAndHelp() throws {
         let app = try launchConfirmedApplicationWithScript()
+        defer { cleanUp(app) }
         element("privatePresenter.openClose", in: app).click()
 
         let expectedActionIdentifiers = [
@@ -65,6 +52,7 @@ final class ControllerAccessibilityUITests: XCTestCase {
 
     func testWarningExposesTextNotColorOnly() throws {
         let app = try launchShieldedApplication()
+        defer { cleanUp(app) }
         let status = element("privatePresenter.displaySafetyStatus", in: app)
         let icon = element("privatePresenter.displaySafetyIcon", in: app)
 
@@ -79,6 +67,7 @@ final class ControllerAccessibilityUITests: XCTestCase {
 
     func testControllerKeyboardTraversal() throws {
         let app = try launchConfirmedApplicationWithScript()
+        defer { cleanUp(app) }
         var expected = [
             "privatePresenter.scriptTitle",
             "privatePresenter.scriptEditor",
@@ -136,6 +125,7 @@ final class ControllerAccessibilityUITests: XCTestCase {
 
     func testFontRangeControlsAreReachable() throws {
         let app = try launchConfirmedApplicationWithScript()
+        defer { cleanUp(app) }
         let fontSize = element("privatePresenter.fontSize", in: app)
         XCTAssertTrue(fontSize.waitForExistence(timeout: 5))
         fontSize.click()
@@ -164,19 +154,46 @@ final class ControllerAccessibilityUITests: XCTestCase {
     }
 
     private func launchShieldedApplication() throws -> XCUIApplication {
-        let app = try support.launchShieldedApplication()
-        application = app
-        return app
+        let support = try requireSupport()
+        do {
+            return try support.launchShieldedApplication()
+        } catch {
+            support.cleanUp()
+            self.support = nil
+            throw error
+        }
     }
 
     private func launchConfirmedApplicationWithScript() throws -> XCUIApplication {
-        let app = try support.launchConfirmedApplication()
-        application = app
+        let support = try requireSupport()
+        let app: XCUIApplication
+        do {
+            app = try support.launchConfirmedApplication()
+        } catch {
+            support.cleanUp()
+            self.support = nil
+            throw error
+        }
         let editor = element("privatePresenter.scriptEditor", in: app)
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         editor.click()
         editor.typeText("Synthetic accessibility script")
         return app
+    }
+
+    private func requireSupport() throws -> M5UITestSupport {
+        if let support {
+            return support
+        }
+        let created = try M5UITestSupport()
+        support = created
+        return created
+    }
+
+    private func cleanUp(_ app: XCUIApplication) {
+        app.terminate()
+        support?.cleanUp()
+        support = nil
     }
 
     private func assertHasKeyboardFocus(
@@ -201,6 +218,6 @@ final class ControllerAccessibilityUITests: XCTestCase {
         _ identifier: String,
         in app: XCUIApplication
     ) -> XCUIElement {
-        support.element(identifier, in: app)
+        app.descendants(matching: .any)[identifier]
     }
 }

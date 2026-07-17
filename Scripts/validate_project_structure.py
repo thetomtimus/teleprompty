@@ -1555,6 +1555,7 @@ M6_LEDGER_TITLES = (
     "Keep UI lifecycle and focus queries Xcode 16 compatible",
     "Keep menu lifecycle UI tests on MainActor",
     "Launch menu UI application lazily on MainActor",
+    "Keep controller UI cleanup inside MainActor tests",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
