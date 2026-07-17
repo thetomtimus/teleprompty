@@ -154,6 +154,7 @@ EXPECTED_LEDGER_TITLES = (
     "Import Carbon constants in native hot-key tests",
     "Keep Carbon status expectations type-exact",
     "Keep visual anchor tests aligned with the context API",
+    "Keep accessibility store fixtures inside MainActor tests",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1508,6 +1509,16 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("XCTAssertEqual(viewport.adapter.lastRestoredAnchor, anchor)", source)
         self.assertNotIn("lastRestoredAnchor?.document", source)
         self.assertNotIn("anchor.document", source)
+
+    def testM6AccessibilityStoreFixturesAvoidNonisolatedLifecycleState(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterAppTests/PresenterAccessibilityTests.swift")
+        self.assertEqual(source.count("let testContainer = try makeTestContainer()"), 5)
+        self.assertEqual(source.count("defer { removeTestContainer(testContainer) }"), 5)
+        self.assertIn("private func makeTestContainer() throws -> URL", source)
+        self.assertIn("private func removeTestContainer(_ testContainer: URL)", source)
+        self.assertNotIn("private var testContainer:", source)
+        self.assertNotIn("override func setUpWithError()", source)
+        self.assertNotIn("override func tearDownWithError()", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
