@@ -147,6 +147,7 @@ EXPECTED_LEDGER_TITLES = (
     "Make Carbon callbacks and messages isolation-correct",
     "Keep the display-link target and teardown actor-safe",
     "Keep dense hosted diagnostics valid Swift",
+    "Keep UI lifecycle and focus queries Xcode 16 compatible",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -693,6 +694,7 @@ EXPECTED_FINAL_CHANGED_PATHS = (
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "PrivatePresenterUITests/ControllerAccessibilityUITests.swift",
     "Scripts/test_validate_project_structure_m3.py",
     "Scripts/test_validate_project_structure_m6.py",
     "Scripts/validate_project_structure.py",
@@ -1456,6 +1458,14 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn('\\(failures.joined(separator: "; "))', source)
         self.assertNotIn('\\(actual ?? \\"nil\\")', source)
         self.assertNotIn('\\(failures.joined(separator: \\"; \\"))', source)
+
+    def testM6UIControllerLifecycleAndFocusQueriesCompileOnXcode16(self) -> None:
+        source = VALIDATOR.read("PrivatePresenterUITests/ControllerAccessibilityUITests.swift")
+        self.assertIn("try MainActor.assumeIsolated {", source)
+        self.assertIn("MainActor.assumeIsolated {", source)
+        self.assertIn('NSPredicate(format: "hasKeyboardFocus == true")', source)
+        self.assertIn("private func assertHasKeyboardFocus(", source)
+        self.assertNotIn(".hasFocus", source)
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
