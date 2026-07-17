@@ -1552,6 +1552,7 @@ M6_LEDGER_TITLES = (
     "Make Carbon callbacks and messages isolation-correct",
     "Keep the display-link target and teardown actor-safe",
     "Keep dense hosted diagnostics valid Swift",
+    "Keep UI lifecycle and focus queries Xcode 16 compatible",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -1996,6 +1997,7 @@ M6_FINAL_CHANGED_PATHS = (
     "PrivatePresenterAppTests/PresenterAccessibilityTests.swift",
     "PrivatePresenterAppTests/ReaderTextSystemTests.swift",
     "PrivatePresenterAppTests/ScrollSessionControllerTests.swift",
+    "PrivatePresenterUITests/ControllerAccessibilityUITests.swift",
     "Scripts/test_validate_project_structure_m3.py",
     "Scripts/test_validate_project_structure_m6.py",
     "Scripts/validate_project_structure.py",

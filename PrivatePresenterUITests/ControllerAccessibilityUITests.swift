@@ -7,14 +7,18 @@ final class ControllerAccessibilityUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        support = try M5UITestSupport()
+        try MainActor.assumeIsolated {
+            support = try M5UITestSupport()
+        }
     }
 
     override func tearDownWithError() throws {
-        application?.terminate()
-        support?.cleanUp()
-        application = nil
-        support = nil
+        MainActor.assumeIsolated {
+            application?.terminate()
+            support?.cleanUp()
+            application = nil
+            support = nil
+        }
         try super.tearDownWithError()
     }
 
@@ -101,15 +105,15 @@ final class ControllerAccessibilityUITests: XCTestCase {
 
         let first = element(expected[0], in: app)
         first.click()
-        XCTAssertTrue(first.hasFocus, expected[0])
+        assertHasKeyboardFocus(expected[0], in: app)
         for identifier in expected.dropFirst() {
             app.typeKey(.tab, modifierFlags: [])
-            XCTAssertTrue(element(identifier, in: app).hasFocus, identifier)
+            assertHasKeyboardFocus(identifier, in: app)
         }
 
         for identifier in expected.dropLast().reversed() {
             app.typeKey(.tab, modifierFlags: [.shift])
-            XCTAssertTrue(element(identifier, in: app).hasFocus, identifier)
+            assertHasKeyboardFocus(identifier, in: app)
         }
 
         let band = element("privatePresenter.activeBand", in: app)
@@ -135,7 +139,7 @@ final class ControllerAccessibilityUITests: XCTestCase {
         let fontSize = element("privatePresenter.fontSize", in: app)
         XCTAssertTrue(fontSize.waitForExistence(timeout: 5))
         fontSize.click()
-        XCTAssertTrue(fontSize.hasFocus)
+        assertHasKeyboardFocus("privatePresenter.fontSize", in: app)
 
         for _ in 0..<40 {
             app.typeKey(.leftArrow, modifierFlags: [])
@@ -154,7 +158,7 @@ final class ControllerAccessibilityUITests: XCTestCase {
 
         let speed = element("privatePresenter.speed", in: app)
         speed.click()
-        XCTAssertTrue(speed.hasFocus)
+        assertHasKeyboardFocus("privatePresenter.speed", in: app)
         app.typeKey(.rightArrow, modifierFlags: [])
         XCTAssertTrue((speed.value as? String)?.contains("points per second") == true)
     }
@@ -173,6 +177,24 @@ final class ControllerAccessibilityUITests: XCTestCase {
         editor.click()
         editor.typeText("Synthetic accessibility script")
         return app
+    }
+
+    private func assertHasKeyboardFocus(
+        _ identifier: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let focused = app.descendants(matching: .any)
+            .matching(identifier: identifier)
+            .matching(NSPredicate(format: "hasKeyboardFocus == true"))
+            .firstMatch
+        XCTAssertTrue(
+            focused.waitForExistence(timeout: 2),
+            identifier,
+            file: file,
+            line: line
+        )
     }
 
     private func element(
