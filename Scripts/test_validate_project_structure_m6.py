@@ -163,6 +163,7 @@ EXPECTED_LEDGER_TITLES = (
     "Stabilize final native AppKit integration fixtures",
     "Record the native display fixture in final scope",
     "Use protocol AX traversal and valid native geometry",
+    "Record protocol AX traversal in final markers",
 )
 EXPECTED_LORE_TRAILER_KEYS = (
     "Constraint",
@@ -323,7 +324,7 @@ EXPECTED_REPAIR_SOURCE_MARKERS = (
     ("hosted-probe", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "final class HostedRootProbe", 1),
     ("real-window-events", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "window.sendEvent(event)", 1),
     ("real-hit-testing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "hosting.hitTest(point)", 1),
-    ("real-ax-children", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private static func directAccessibilityChildren", 1),
+    ("real-ax-children", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "compactMap { $0 as? NSAccessibilityProtocol }", 1),
     ("real-ax-press", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private static func performAccessibilityPress", 1),
     ("resize-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "resizeChanges.append(change)", 1),
     ("title-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "titleChanges.append(translation)", 1),
@@ -1627,6 +1628,19 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("replacementClock.fire(at: CACurrentMediaTime() + 0.1)", scroll)
         self.assertIn("XCTAssertGreaterThan(replacementViewport.clipOriginY, 270)", scroll)
         self.assertIn('"the passRetained ownership forever"', display_test)
+
+    def testM6FinalMarkersRecordProtocolAXTraversal(self) -> None:
+        marker = (
+            "real-ax-children",
+            "PrivatePresenterAppTests/M6VisualTestSupport.swift",
+            "compactMap { $0 as? NSAccessibilityProtocol }",
+            1,
+        )
+        self.assertIn(marker, EXPECTED_REPAIR_SOURCE_MARKERS)
+        self.assertEqual(
+            VALIDATOR.M6_REPAIR_SOURCE_MARKERS,
+            EXPECTED_REPAIR_SOURCE_MARKERS,
+        )
 
     def testM6HistoryIsExactlyImmediateRedGreenPairs(self) -> None:
         rows = VALIDATOR.m6_history_rows()
