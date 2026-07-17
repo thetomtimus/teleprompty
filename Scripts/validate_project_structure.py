@@ -1563,6 +1563,7 @@ M6_LEDGER_TITLES = (
     "Keep native support fixtures Xcode 16 type-exact",
     "Record Xcode 16 support spellings in final scope",
     "Convert the native bitmap into explicit sRGB",
+    "Record the bitmap conversion in focused support scope",
 )
 M6_LORE_TRAILER_KEYS = (
     "Constraint",
