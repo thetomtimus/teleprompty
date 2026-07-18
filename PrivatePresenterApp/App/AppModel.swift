@@ -305,6 +305,10 @@ final class AppModel {
             setScriptTitle(title)
         case .setFontSize(let size):
             setFontSize(size)
+        case .decreaseFontSize:
+            adjustFontSize(by: -TeleprompterPreferences.fontSizeStep)
+        case .increaseFontSize:
+            adjustFontSize(by: TeleprompterPreferences.fontSizeStep)
         case .setTextAlignment(let alignment):
             setTextAlignment(alignment)
         case .setActiveBandEnabled(let enabled):
@@ -702,6 +706,10 @@ final class AppModel {
         invalidatePendingClearForDurableChange()
         preferences.fontSizePoints = normalized
         commitReaderAppearanceChange()
+    }
+
+    private func adjustFontSize(by delta: Double) {
+        setFontSize(preferences.fontSizePoints + delta)
     }
 
     private func setTextAlignment(_ alignment: TeleprompterTextAlignment) {
@@ -1581,6 +1589,7 @@ final class AppModel {
             .teardownScrollSession,
             .focusChromeStateChanged, .focusChromeTransitionDurationChanged,
             .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
+            .decreaseFontSize, .increaseFontSize,
             .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,
             .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .setSpeed, .moveBackward, .moveForward,

@@ -621,6 +621,74 @@ final class OverlayVisualSnapshotTests: XCTestCase {
         }
     }
 
+    func testBrowserLikeResizeAffordanceUsesLargeCornersGripsAndDirectionalCursors() {
+        for size in m6ResizeSizeMatrix() {
+            let corners = OverlayLayoutMetrics(size: size).cornerResizeRegions
+            XCTAssertEqual(corners.count, 4)
+            XCTAssertTrue(corners.allSatisfy { $0.frame.width == 28 })
+            XCTAssertTrue(corners.allSatisfy { $0.frame.height == 28 })
+        }
+
+        XCTAssertEqual(
+            OverlayResizeInteractionLayer.visibleGripEdges,
+            [.bottomLeft, .bottomRight]
+        )
+        XCTAssertTrue(OverlayResizeInteractionLayer.cornerGripsAreVisible(isLocked: false))
+        XCTAssertFalse(OverlayResizeInteractionLayer.cornerGripsAreVisible(isLocked: true))
+        XCTAssertEqual(
+            OverlayResizeInteractionLayer.cursorStyle(for: .left),
+            .horizontal
+        )
+        XCTAssertEqual(
+            OverlayResizeInteractionLayer.cursorStyle(for: .bottom),
+            .vertical
+        )
+        XCTAssertEqual(
+            OverlayResizeInteractionLayer.cursorStyle(for: .topLeft),
+            .diagonalNorthwestSoutheast
+        )
+        XCTAssertEqual(
+            OverlayResizeInteractionLayer.cursorStyle(for: .bottomLeft),
+            .diagonalNortheastSouthwest
+        )
+    }
+
+    func testIconOnlyControlsUsePlainLanguageStyledHoverLabels() {
+        let model = AppModel(
+            overlayController: OverlayPanelController(),
+            restorationRequired: false
+        )
+        let state = PresenterAccessibility.state(model: model)
+
+        XCTAssertEqual(
+            PresenterAccessibility.entry(
+                "privatePresenter.quickSlower",
+                state: state
+            ).label,
+            "Slower scrolling"
+        )
+        XCTAssertEqual(
+            PresenterAccessibility.entry(
+                "privatePresenter.quickPlayback",
+                state: state
+            ).label,
+            "Start scrolling"
+        )
+        XCTAssertEqual(
+            PresenterAccessibility.entry(
+                "privatePresenter.quickFaster",
+                state: state
+            ).label,
+            "Faster scrolling"
+        )
+        XCTAssertEqual(OverlayVisualTokens.toolTipRadius, 9)
+        XCTAssertEqual(OverlayControlToolTipPlacement.above.verticalOffset, -36)
+        XCTAssertEqual(
+            OverlayControlToolTipPlacement.belowTrailing.verticalOffset,
+            36
+        )
+    }
+
     func testOffscreenQuickControlsUseFullRectangularTargetsWithCircularPaint() {
         let source = try! String(
             contentsOf: sourceURL("OverlayQuickControlsView.swift"), encoding: .utf8

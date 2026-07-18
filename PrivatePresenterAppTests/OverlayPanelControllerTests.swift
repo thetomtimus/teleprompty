@@ -239,6 +239,72 @@ final class OverlayPanelControllerTests: XCTestCase {
         XCTAssertTrue(selected.contains(controller.teleprompterPanel.frame))
     }
 
+    func testSwiftUIDragTranslationMovesPanelInTheDraggedDirection() {
+        let controller = OverlayPanelController()
+        let selected = NSRect(x: 0, y: 0, width: 1_200, height: 800)
+        let initial = NSRect(x: 200, y: 250, width: 500, height: 300)
+        controller.stageHidden(proposedFrame: initial, on: selected)
+
+        controller.updateDrag(translation: CGSize(width: 30, height: 40))
+
+        XCTAssertEqual(
+            controller.teleprompterPanel.frame,
+            NSRect(x: 230, y: 210, width: 500, height: 300)
+        )
+    }
+
+    func testSwiftUICornerTranslationsResizeBothDimensionsInTheDraggedDirection() {
+        let selected = NSRect(x: 0, y: 0, width: 1_200, height: 800)
+        let initial = NSRect(x: 200, y: 250, width: 500, height: 300)
+
+        let topLeft = OverlayPanelController()
+        topLeft.stageHidden(proposedFrame: initial, on: selected)
+        topLeft.updateResize(
+            edge: .topLeft,
+            translation: CGSize(width: -40, height: -50)
+        )
+        XCTAssertEqual(
+            topLeft.teleprompterPanel.frame,
+            NSRect(x: 160, y: 250, width: 540, height: 350)
+        )
+
+        let bottomRight = OverlayPanelController()
+        bottomRight.stageHidden(proposedFrame: initial, on: selected)
+        bottomRight.updateResize(
+            edge: .bottomRight,
+            translation: CGSize(width: 40, height: 50)
+        )
+        XCTAssertEqual(
+            bottomRight.teleprompterPanel.frame,
+            NSRect(x: 200, y: 200, width: 540, height: 350)
+        )
+    }
+
+    func testScreenBasedTranslationStaysStableWhileThePanelMoves() {
+        let start = OverlayScreenDragTranslation.inferredStartLocation(
+            currentScreenLocation: NSPoint(x: 530, y: 470),
+            initialSwiftUITranslation: CGSize(width: 30, height: 40)
+        )
+
+        XCTAssertEqual(start, NSPoint(x: 500, y: 510))
+        XCTAssertEqual(
+            OverlayScreenDragTranslation.swiftUITranslation(
+                from: start,
+                to: NSPoint(x: 560, y: 450)
+            ),
+            CGSize(width: 60, height: 60)
+        )
+    }
+
+    func testPanelFramesAlignToBackingPixelsDuringLiveInteraction() {
+        let aligned = OverlayPanelController.pixelAligned(
+            NSRect(x: 10.26, y: 20.24, width: 300.51, height: 199.77),
+            scale: 2
+        )
+
+        XCTAssertEqual(aligned, NSRect(x: 10.5, y: 20, width: 300.5, height: 200))
+    }
+
     func testEveryAppliedFrameIsRecordedExactlyOnce() {
         var records: [OverlayAppliedFrameRecord] = []
         let controller = OverlayPanelController(
@@ -359,6 +425,34 @@ final class OverlayPanelControllerTests: XCTestCase {
         if NSScreen.main != nil {
             XCTAssertTrue(operations.contains(.frameChanged))
         }
+    }
+
+    func testExplicitControllerPresentationRaisesAVisibleWindowOnce() {
+        var operations: [ControllerWindowOperation] = []
+        let controller = makeControllerWindowController { operations.append($0) }
+        controller.close()
+        let countBefore = controller.presentationCount
+
+        controller.showExistingController()
+
+        XCTAssertTrue(controller.window?.isVisible ?? false)
+        XCTAssertEqual(controller.presentationCount, countBefore + 1)
+        XCTAssertEqual(operations.first, .presentationEntry)
+        XCTAssertEqual(operations.filter { $0 == .showWindow }.count, 1)
+        XCTAssertEqual(operations.last, .presentationExit)
+    }
+
+    func testExplicitControllerPresentationFitsAboveTheDock() throws {
+        let controller = makeControllerWindowController()
+        let visibleFrame = try XCTUnwrap(NSScreen.main?.visibleFrame)
+        let window = try XCTUnwrap(controller.window)
+        window.setFrameOrigin(
+            NSPoint(x: visibleFrame.minX, y: visibleFrame.minY - 100)
+        )
+
+        controller.showExistingController()
+
+        XCTAssertTrue(visibleFrame.contains(window.frame))
     }
 
     func testPhaseAControllerObserverRecordsVisibilityOrderKeyMainAndOcclusion() {

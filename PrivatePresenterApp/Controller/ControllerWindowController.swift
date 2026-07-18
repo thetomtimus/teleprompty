@@ -152,17 +152,42 @@ final class ControllerWindowController: NSWindowController {
     }
 
     func showExistingController() {
-        guard window != nil else { return }
+        guard let window else { return }
         #if DEBUG
         operationRecorder(.presentationEntry)
         #endif
+        fitControllerToVisibleScreen(window)
         presentationCount += 1
         #if DEBUG
         operationRecorder(.showWindow)
         #endif
-        showWindow(nil)
+        // Opening the controller is an explicit request to leave the
+        // non-activating presenter surface and interact with normal app UI.
+        window.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
         #if DEBUG
         operationRecorder(.presentationExit)
+        #endif
+    }
+
+    private func fitControllerToVisibleScreen(_ window: NSWindow) {
+        guard let visibleFrame = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+        else { return }
+        let fittedSize = NSSize(
+            width: min(window.frame.width, visibleFrame.width),
+            height: min(window.frame.height, visibleFrame.height)
+        )
+        let fittedFrame = ClampedPanelInteractionController.clamp(
+            NSRect(origin: window.frame.origin, size: fittedSize),
+            inside: visibleFrame,
+            minimumSize: fittedSize,
+            maximumSize: visibleFrame.size
+        )
+        guard fittedFrame != window.frame else { return }
+        window.setFrame(fittedFrame, display: false)
+        #if DEBUG
+        operationRecorder(.frameChanged)
         #endif
     }
 

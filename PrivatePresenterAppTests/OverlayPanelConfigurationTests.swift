@@ -322,18 +322,40 @@ final class OverlayPanelConfigurationTests: XCTestCase {
         )
     }
 
-    func testForbiddenWindowLevelsAndFocusWorkaroundsAreAbsent() throws {
+    func testForbiddenWindowLevelsAndUnscopedFocusWorkaroundsAreAbsent() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let source = try swiftSources(at: root.appendingPathComponent("PrivatePresenterApp"))
+        let sources = try swiftSources(
+            at: root.appendingPathComponent("PrivatePresenterApp")
+        )
+        let source =
+            sources
             .map(\.contents)
             .joined(separator: "\n")
+        let explicitControllerActivation = sources.filter {
+            $0.contents.contains("NSApp.activate(ignoringOtherApps: true)")
+                || $0.contents.contains("makeKeyAndOrderFront(")
+        }
+        XCTAssertEqual(
+            explicitControllerActivation.map(\.name),
+            ["ControllerWindowController.swift"]
+        )
+        XCTAssertEqual(
+            explicitControllerActivation[0].contents.components(
+                separatedBy: "NSApp.activate(ignoringOtherApps: true)"
+            ).count - 1,
+            1
+        )
+        XCTAssertEqual(
+            explicitControllerActivation[0].contents.components(
+                separatedBy: "makeKeyAndOrderFront("
+            ).count - 1,
+            1
+        )
         let forbidden = [
             ".screenSaver",
             "CGWindowLevelForKey(",
-            "NSApp.activate(",
-            "makeKeyAndOrderFront(",
             "GetEventDispatcherTarget(",
             "performWindowDrag(",
             "NSWindow.Level(rawValue:",

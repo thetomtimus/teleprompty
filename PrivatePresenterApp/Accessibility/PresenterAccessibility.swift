@@ -612,13 +612,20 @@ enum PresenterAccessibility {
 extension View {
     @ViewBuilder
     func presenterAccessibility(
-        _ entry: PresenterAccessibility.Entry
+        _ entry: PresenterAccessibility.Entry,
+        showsSystemToolTip: Bool = true
     ) -> some View {
-        let described = accessibilityIdentifier(entry.identifier)
+        let accessibilityDescription = accessibilityIdentifier(entry.identifier)
             .accessibilityLabel(Text(entry.label))
             .accessibilityHint(Text(entry.help))
-            .help(entry.toolTip)
             .disabled(!entry.isEnabled)
+        let described = Group {
+            if showsSystemToolTip {
+                accessibilityDescription.help(entry.toolTip)
+            } else {
+                accessibilityDescription
+            }
+        }
         if entry.value.isEmpty {
             described
         } else {

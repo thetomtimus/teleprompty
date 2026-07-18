@@ -403,19 +403,9 @@ enum M6VisualTestSupport {
             case "privatePresenter.headerSettings":
                 model.send(.showController)
             case "privatePresenter.quickSmaller":
-                model.send(
-                    .setFontSize(
-                        model.preferences.fontSizePoints
-                            - PresenterAccessibility.fontSizeStep
-                    )
-                )
+                model.send(.decreaseFontSize)
             case "privatePresenter.quickLarger":
-                model.send(
-                    .setFontSize(
-                        model.preferences.fontSizePoints
-                            + PresenterAccessibility.fontSizeStep
-                    )
-                )
+                model.send(.increaseFontSize)
             case "privatePresenter.quickAlignment":
                 model.send(
                     .setTextAlignment(

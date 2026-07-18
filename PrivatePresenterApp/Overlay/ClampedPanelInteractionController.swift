@@ -25,10 +25,12 @@ final class ClampedPanelInteractionController {
 
     let minimumSize: NSSize
     private let policy: PanelFramePolicy
+    private let frameNormalizer: (NSRect) -> NSRect
     private let frameApplier: (NSRect) -> Void
 
     init(
         minimumSize: NSSize = NSSize(width: 320, height: 180),
+        frameNormalizer: @escaping (NSRect) -> NSRect = { $0 },
         frameApplier: @escaping (NSRect) -> Void
     ) {
         self.minimumSize = minimumSize
@@ -39,6 +41,7 @@ final class ClampedPanelInteractionController {
                 height: Double(minimumSize.height)
             )
         )
+        self.frameNormalizer = frameNormalizer
         self.frameApplier = frameApplier
     }
 
@@ -56,7 +59,7 @@ final class ClampedPanelInteractionController {
                 height: Double(screenFrame.height)
             )
         )
-        let contained = NSRect(result)
+        let contained = frameNormalizer(NSRect(result))
         frameApplier(contained)
         return contained
     }
@@ -76,15 +79,16 @@ final class ClampedPanelInteractionController {
         delta: NSSize,
         inside screenFrame: NSRect
     ) -> NSRect {
-        let contained = NSRect(
-            policy.resizedFrame(
-                DisplayRect(frame),
-                edges: edge.policyEdges,
-                deltaX: Double(delta.width),
-                deltaY: Double(delta.height),
-                in: DisplayRect(screenFrame)
-            )
-        )
+        let contained = frameNormalizer(
+            NSRect(
+                policy.resizedFrame(
+                    DisplayRect(frame),
+                    edges: edge.policyEdges,
+                    deltaX: Double(delta.width),
+                    deltaY: Double(delta.height),
+                    in: DisplayRect(screenFrame)
+                )
+            ))
         frameApplier(contained)
         return contained
     }

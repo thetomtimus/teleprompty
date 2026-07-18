@@ -25,6 +25,8 @@ enum AppCommand {
     case teardownScrollSession
     case setScriptTitle(String)
     case setFontSize(Double)
+    case decreaseFontSize
+    case increaseFontSize
     case setTextAlignment(TeleprompterTextAlignment)
     case setActiveBandEnabled(Bool)
     case panelFrameChanged(displayID: UInt32, frame: CGRect)

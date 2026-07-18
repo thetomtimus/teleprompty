@@ -284,6 +284,22 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(snapshots.last?.preferences.isActiveBandEnabled, false)
     }
 
+    func testFontSizeStepCommandsSaturateAtBoundsWithoutWrapping() {
+        let model = AppModel(overlayController: OverlayPanelController())
+
+        model.send(.setFontSize(94))
+        for _ in 0..<10 {
+            model.send(.increaseFontSize)
+        }
+        XCTAssertEqual(model.preferences.fontSizePoints, 96)
+
+        model.send(.setFontSize(26))
+        for _ in 0..<10 {
+            model.send(.decreaseFontSize)
+        }
+        XCTAssertEqual(model.preferences.fontSizePoints, 24)
+    }
+
     func testAcceptedEditSchedulesAutosaveAfterAuthoritativeMutation() throws {
         var observedText: String?
         let model = AppModel(

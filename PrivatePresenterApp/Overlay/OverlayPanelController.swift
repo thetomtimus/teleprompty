@@ -128,10 +128,20 @@ final class OverlayPanelController: NSWindowController {
         #endif
         self.operationRecorder = operationRecorder
         self.appliedFrameRecorder = appliedFrameRecorder
-        interactionController = ClampedPanelInteractionController { [weak panel] frame in
-            operationRecorder(.applyContainedFrame)
-            panel?.setFrame(frame, display: false)
-        }
+        interactionController = ClampedPanelInteractionController(
+            frameNormalizer: { [weak panel] frame in
+                Self.pixelAligned(
+                    frame,
+                    scale: panel?.screen?.backingScaleFactor
+                        ?? NSScreen.main?.backingScaleFactor
+                        ?? 1
+                )
+            },
+            frameApplier: { [weak panel] frame in
+                operationRecorder(.applyContainedFrame)
+                panel?.setFrame(frame, display: true)
+            }
+        )
         super.init(window: panel)
 
     }
@@ -272,7 +282,7 @@ final class OverlayPanelController: NSWindowController {
         interactionStartFrame = start
         let frame = interactionController.drag(
             frame: start,
-            delta: NSSize(width: translation.width, height: translation.height),
+            delta: appKitDelta(from: translation),
             inside: selectedScreenFrame
         )
         recordAppliedFrame(frame)
@@ -288,14 +298,39 @@ final class OverlayPanelController: NSWindowController {
         let frame = interactionController.resize(
             frame: start,
             edge: edge,
-            delta: NSSize(width: translation.width, height: translation.height),
+            delta: appKitDelta(from: translation),
             inside: selectedScreenFrame
         )
         recordAppliedFrame(frame)
     }
 
+    private func appKitDelta(from swiftUITranslation: CGSize) -> NSSize {
+        // SwiftUI is down-positive; AppKit window coordinates are up-positive.
+        NSSize(
+            width: swiftUITranslation.width,
+            height: -swiftUITranslation.height
+        )
+    }
+
     func endInteraction() {
         interactionStartFrame = nil
+    }
+
+    static func pixelAligned(_ frame: NSRect, scale: CGFloat) -> NSRect {
+        let safeScale = scale.isFinite && scale > 0 ? scale : 1
+        func aligned(_ value: CGFloat) -> CGFloat {
+            (value * safeScale).rounded() / safeScale
+        }
+        let minX = aligned(frame.minX)
+        let maxX = aligned(frame.maxX)
+        let minY = aligned(frame.minY)
+        let maxY = aligned(frame.maxY)
+        return NSRect(
+            x: minX,
+            y: minY,
+            width: max(0, maxX - minX),
+            height: max(0, maxY - minY)
+        )
     }
 
     private func configureSelectedFrames(

@@ -1,5 +1,28 @@
+import AppKit
 import SwiftUI
 import TeleprompterCore
+
+enum OverlayScreenDragTranslation {
+    static func inferredStartLocation(
+        currentScreenLocation: NSPoint,
+        initialSwiftUITranslation: CGSize
+    ) -> NSPoint {
+        NSPoint(
+            x: currentScreenLocation.x - initialSwiftUITranslation.width,
+            y: currentScreenLocation.y + initialSwiftUITranslation.height
+        )
+    }
+
+    static func swiftUITranslation(
+        from startScreenLocation: NSPoint,
+        to currentScreenLocation: NSPoint
+    ) -> CGSize {
+        CGSize(
+            width: currentScreenLocation.x - startScreenLocation.x,
+            height: startScreenLocation.y - currentScreenLocation.y
+        )
+    }
+}
 
 /// Pure, bottom-origin half-open hit routing shared by geometry tests and the
 /// rendered interaction layers. The ordering is the interaction contract.
@@ -77,12 +100,39 @@ struct OverlayHitRegionResolver {
 /// controls so SwiftUI renders the same precedence as the pure resolver.
 @MainActor
 struct OverlayResizeInteractionLayer: View {
+    enum CursorStyle: Equatable {
+        case horizontal
+        case vertical
+        case diagonalNorthwestSoutheast
+        case diagonalNortheastSouthwest
+    }
+
+    static let visibleGripEdges: [ClampedPanelInteractionController.ResizeEdge] = [
+        .bottomLeft, .bottomRight,
+    ]
+
     let metrics: OverlayLayoutMetrics
+    let showsCornerGrips: Bool
     let onResizeChanged: (ClampedPanelInteractionController.ResizeEdge, CGSize) -> Void
     let onResizeEnded: () -> Void
+    @State private var hoveredEdge: ClampedPanelInteractionController.ResizeEdge?
+    @State private var activeEdge: ClampedPanelInteractionController.ResizeEdge?
+    @State private var dragStartScreenLocation: NSPoint?
 
     var body: some View {
         ZStack {
+            if showsCornerGrips {
+                ForEach(Self.visibleGripEdges, id: \.self) { edge in
+                    OverlayCornerResizeGrip(
+                        edge: edge,
+                        isHighlighted: hoveredEdge == edge || activeEdge == edge
+                    )
+                    .position(gripCenter(for: edge))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
+
             ForEach(metrics.resizeRegions, id: \.edge) { region in
                 interactionZone(edge: region.edge)
                     .frame(width: region.frame.width, height: region.frame.height)
@@ -90,6 +140,37 @@ struct OverlayResizeInteractionLayer: View {
                     .zIndex(isCorner(region.edge) ? 1 : 0)
             }
         }
+        .onChange(of: showsCornerGrips) { _, isVisible in
+            if !isVisible {
+                hoveredEdge = nil
+                activeEdge = nil
+                dragStartScreenLocation = nil
+                NSCursor.arrow.set()
+            }
+        }
+        .onDisappear {
+            dragStartScreenLocation = nil
+            NSCursor.arrow.set()
+        }
+    }
+
+    static func cursorStyle(
+        for edge: ClampedPanelInteractionController.ResizeEdge
+    ) -> CursorStyle {
+        switch edge {
+        case .left, .right:
+            .horizontal
+        case .top, .bottom:
+            .vertical
+        case .topLeft, .bottomRight:
+            .diagonalNorthwestSoutheast
+        case .topRight, .bottomLeft:
+            .diagonalNortheastSouthwest
+        }
+    }
+
+    static func cornerGripsAreVisible(isLocked: Bool) -> Bool {
+        !isLocked
     }
 
     private func swiftUICenter(for bottomOriginFrame: CGRect) -> CGPoint {
@@ -109,12 +190,108 @@ struct OverlayResizeInteractionLayer: View {
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { value in
-                        onResizeChanged(edge, value.translation)
+                        activeEdge = edge
+                        let current = NSEvent.mouseLocation
+                        let start =
+                            dragStartScreenLocation
+                            ?? OverlayScreenDragTranslation.inferredStartLocation(
+                                currentScreenLocation: current,
+                                initialSwiftUITranslation: value.translation
+                            )
+                        dragStartScreenLocation = start
+                        onResizeChanged(
+                            edge,
+                            OverlayScreenDragTranslation.swiftUITranslation(
+                                from: start,
+                                to: current
+                            )
+                        )
                     }
                     .onEnded { _ in
+                        activeEdge = nil
+                        dragStartScreenLocation = nil
+                        if hoveredEdge == nil {
+                            NSCursor.arrow.set()
+                        }
                         onResizeEnded()
                     }
             )
+            .onHover { isHovering in
+                if isHovering {
+                    hoveredEdge = edge
+                    resizeCursor(for: edge).set()
+                } else if hoveredEdge == edge {
+                    hoveredEdge = nil
+                    if activeEdge == nil {
+                        NSCursor.arrow.set()
+                    }
+                }
+            }
+    }
+
+    private func gripCenter(
+        for edge: ClampedPanelInteractionController.ResizeEdge
+    ) -> CGPoint {
+        let inset: CGFloat = 18
+        return CGPoint(
+            x: edge == .bottomLeft ? inset : metrics.size.width - inset,
+            y: metrics.size.height - inset
+        )
+    }
+
+    private func resizeCursor(
+        for edge: ClampedPanelInteractionController.ResizeEdge
+    ) -> NSCursor {
+        if #available(macOS 15.0, *) {
+            return NSCursor.frameResize(
+                position: frameResizePosition(for: edge),
+                directions: .all
+            )
+        }
+
+        switch Self.cursorStyle(for: edge) {
+        case .horizontal:
+            return .resizeLeftRight
+        case .vertical:
+            return .resizeUpDown
+        case .diagonalNorthwestSoutheast:
+            return diagonalCursor(symbolName: "arrow.up.left.and.arrow.down.right")
+        case .diagonalNortheastSouthwest:
+            return diagonalCursor(symbolName: "arrow.up.right.and.arrow.down.left")
+        }
+    }
+
+    @available(macOS 15.0, *)
+    private func frameResizePosition(
+        for edge: ClampedPanelInteractionController.ResizeEdge
+    ) -> NSCursor.FrameResizePosition {
+        switch edge {
+        case .top: .top
+        case .bottom: .bottom
+        case .left: .left
+        case .right: .right
+        case .topLeft: .topLeft
+        case .topRight: .topRight
+        case .bottomLeft: .bottomLeft
+        case .bottomRight: .bottomRight
+        }
+    }
+
+    private func diagonalCursor(symbolName: String) -> NSCursor {
+        guard
+            let symbol = NSImage(
+                systemSymbolName: symbolName,
+                accessibilityDescription: nil
+            )?.withSymbolConfiguration(
+                NSImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+            )
+        else {
+            return .crosshair
+        }
+        return NSCursor(
+            image: symbol,
+            hotSpot: NSPoint(x: symbol.size.width / 2, y: symbol.size.height / 2)
+        )
     }
 
     private func isCorner(
@@ -139,6 +316,46 @@ struct OverlayResizeInteractionLayer: View {
         case .bottomLeft: "privatePresenter.resizeBottomLeft"
         case .bottomRight: "privatePresenter.resizeBottomRight"
         }
+    }
+}
+
+private struct OverlayCornerResizeGrip: View {
+    let edge: ClampedPanelInteractionController.ResizeEdge
+    let isHighlighted: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            for length in [CGFloat(4), 8, 12] {
+                switch edge {
+                case .bottomLeft:
+                    path.move(to: CGPoint(x: length, y: size.height - 1))
+                    path.addLine(to: CGPoint(x: 1, y: size.height - length))
+                case .bottomRight:
+                    path.move(
+                        to: CGPoint(x: size.width - length, y: size.height - 1)
+                    )
+                    path.addLine(
+                        to: CGPoint(x: size.width - 1, y: size.height - length)
+                    )
+                default:
+                    break
+                }
+            }
+            context.stroke(
+                path,
+                with: .color(
+                    isHighlighted
+                        ? OverlayVisualTokens.resizeGripActive.swiftUIColor
+                        : OverlayVisualTokens.resizeGrip.swiftUIColor
+                ),
+                style: StrokeStyle(
+                    lineWidth: OverlayVisualTokens.resizeGripLineWidth,
+                    lineCap: .round
+                )
+            )
+        }
+        .frame(width: 14, height: 14)
     }
 }
 

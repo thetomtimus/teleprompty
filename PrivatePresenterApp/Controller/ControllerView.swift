@@ -126,12 +126,8 @@ struct ControllerView: View {
                 HStack {
                     Text("Font size")
                     Stepper(
-                        value: Binding(
-                            get: { model.preferences.fontSizePoints },
-                            set: { model.send(.setFontSize($0)) }
-                        ),
-                        in: 24...96,
-                        step: 2
+                        onIncrement: { model.send(.increaseFontSize) },
+                        onDecrement: { model.send(.decreaseFontSize) }
                     ) { EmptyView() }
                     .labelsHidden()
                     .presenterAccessibility(

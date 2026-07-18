@@ -72,6 +72,24 @@ final class ControllerPresentationTests: XCTestCase {
         XCTAssertTrue(strings.contains("Private Presenter"))
     }
 
+    func testApplicationMenuProvidesStandardEditingKeyboardShortcuts() throws {
+        let mainMenu = ApplicationMenuInstaller.makeMainMenu()
+        let editMenu = try XCTUnwrap(mainMenu.item(withTitle: "Edit")?.submenu)
+        let expected: [(String, String, Selector)] = [
+            ("Cut", "x", #selector(NSText.cut(_:))),
+            ("Copy", "c", #selector(NSText.copy(_:))),
+            ("Paste", "v", #selector(NSText.paste(_:))),
+            ("Select All", "a", #selector(NSText.selectAll(_:))),
+        ]
+
+        for (title, keyEquivalent, action) in expected {
+            let item = try XCTUnwrap(editMenu.item(withTitle: title))
+            XCTAssertEqual(item.keyEquivalent, keyEquivalent)
+            XCTAssertEqual(item.keyEquivalentModifierMask, .command)
+            XCTAssertEqual(item.action, action)
+        }
+    }
+
     func testWindowMenuDiagnosticAndAccessibilityLabelsExcludeSentinelPrivateContent() {
         let sentinels = ["SENTINEL_PRIVATE_TITLE", "SENTINEL_PRIVATE_SCRIPT"]
         let document = ScriptDocument(
