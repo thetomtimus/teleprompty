@@ -197,6 +197,7 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
         let seams = AppRuntimeStartupSeams(
             observeAndQuery: { .failure(M5SyntheticTopologyError()) },
             registerDiagnosticHotKey: { 0 },
+            presentsControllerAtStartup: false,
             record: { event in
                 switch event {
                 case .load:
@@ -216,8 +217,9 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             restorePerformanceMode: .benchmark,
             startupSeams: seams
         )
+        M5OffscreenReaderLayoutHost.prepare(runtime.overlayController)
         let layoutCountBeforeLoad = recorder.completedCount(for: .readerLayout)
-        var editorWindow: NSWindow?
+        var editorHost: NSScrollView?
         var syntheticEditor: EditorTextSystem?
         var fixtureWasRestored = false
         var editorAttached = false
@@ -242,15 +244,8 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
                 frame: NSRect(x: 0, y: 0, width: 720, height: 300)
             )
             scrollView.documentView = editor.textView
-            let window = NSWindow(
-                contentRect: scrollView.frame,
-                styleMask: [.borderless],
-                backing: .buffered,
-                defer: false
-            )
-            window.contentView = scrollView
-            editorWindow = window
-            editorAttached = editor.textView.window === window
+            editorHost = scrollView
+            editorAttached = scrollView.documentView === editor.textView
             if editorAttached { endpointEvents.append(.editorAttached) }
 
             if let viewport = runtime.overlayController.readerTextSystem.viewportAdapter {
@@ -292,8 +287,9 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
         let syntheticEditCount = runtime.model.document.revision == 2 ? 1 : 0
         let didTerminate = await runtime.stopAndFlush()
         withExtendedLifetime(syntheticEditor) {
-            editorWindow?.close()
+            editorHost?.documentView = nil
         }
+        editorHost = nil
         syntheticEditor = nil
 
         if measured {
@@ -405,7 +401,7 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             performanceRegistry: registry,
             onEvent: { events.append($0) }
         )
-        weak var weakSession = session
+        weak let weakSession = session
         let generation = issuedScrollGeneration()
         let initialMutationCount = system.textMutationCount
         let initialReplacementCount = system.fullReplacementCount
@@ -465,7 +461,7 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             performanceRegistry: registry,
             onEvent: { _ in }
         )
-        weak var weakSession = session
+        weak let weakSession = session
         let generation = issuedScrollGeneration()
         let initialMutationCount = system.textMutationCount
         let initialReplacementCount = system.fullReplacementCount
@@ -583,6 +579,7 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
             editToVisibleIntervalCount: rig.recorder.completedCount(for: .editToVisible),
             editToVisibleDuration: editDurations.first ?? .infinity,
             finalDocumentRevision: rig.model.document.revision,
+            finalSnapshotRevision: rig.model.snapshotRevision,
             finalPersistedRevision: status.persistedRevision ?? 0,
             snapshotWriteCount: delayedFileSystem.atomicCommitCount,
             flushCompleted: flushCompleted,
@@ -649,6 +646,18 @@ final class M5PerformanceTestHarness: M5PerformanceHarnessing {
 }
 
 private struct M5SyntheticTopologyError: Error {}
+
+@MainActor
+private enum M5OffscreenReaderLayoutHost {
+    static func prepare(_ overlay: OverlayPanelController) {
+        guard let contentView = overlay.teleprompterPanel.contentViewController?.view else {
+            return
+        }
+        contentView.frame = NSRect(x: 0, y: 0, width: 700, height: 350)
+        contentView.needsLayout = true
+        contentView.layoutSubtreeIfNeeded()
+    }
+}
 
 @MainActor
 private final class M5EditingRig {
@@ -801,20 +810,26 @@ private final class M5HarnessSignposter: PerformanceSignposting, @unchecked Send
 @MainActor
 private final class M5ReaderHost {
     let view: ReaderViewportContainerView
-    let window: NSWindow
+    let window: NSWindow?
     let viewport: ReaderViewportAdapter
 
     init(system: ReaderTextSystem, ordersWindowFront: Bool) throws {
         let resolvedView = ReaderTextView.makeReaderView(system: system)
         resolvedView.frame = NSRect(x: 0, y: 0, width: 700, height: 350)
-        let resolvedWindow = NSWindow(
-            contentRect: resolvedView.frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        resolvedWindow.contentView = resolvedView
-        if ordersWindowFront { resolvedWindow.orderFront(nil) }
+        let resolvedWindow: NSWindow?
+        if ordersWindowFront {
+            let window = NSWindow(
+                contentRect: resolvedView.frame,
+                styleMask: [.borderless],
+                backing: .buffered,
+                defer: false
+            )
+            window.contentView = resolvedView
+            window.orderFront(nil)
+            resolvedWindow = window
+        } else {
+            resolvedWindow = nil
+        }
         resolvedView.needsLayout = true
         resolvedView.layoutSubtreeIfNeeded()
         let resolvedViewport = resolvedView.viewportAdapter!
@@ -825,9 +840,8 @@ private final class M5ReaderHost {
     }
 
     func close() {
-        window.orderOut(nil)
-        window.contentView = nil
-        window.close()
+        window?.orderOut(nil)
+        window?.close()
     }
 }
 

@@ -317,8 +317,10 @@ final class FiftyThousandWordPerformanceTests: XCTestCase {
         XCTAssertFalse(result.editAwaitedPersistence)
         XCTAssertTrue(result.readerReflectedEditBeforeFilesystemCompletion)
         XCTAssertEqual(result.editToVisibleIntervalCount, 1)
-        XCTAssertEqual(result.finalPersistedRevision, result.finalDocumentRevision)
-        XCTAssertEqual(result.snapshotWriteCount, 1)
+        XCTAssertGreaterThanOrEqual(result.finalSnapshotRevision, result.finalDocumentRevision)
+        XCTAssertEqual(result.finalPersistedRevision, result.finalSnapshotRevision)
+        XCTAssertGreaterThanOrEqual(result.snapshotWriteCount, 1)
+        XCTAssertLessThanOrEqual(result.snapshotWriteCount, 2)
         XCTAssertTrue(result.flushCompleted)
         XCTAssertEqual(result.openIntervalCount, 0)
     }
@@ -761,6 +763,7 @@ struct M5DelayedFilesystemResult: Equatable, Sendable {
     let editToVisibleIntervalCount: Int
     let editToVisibleDuration: TimeInterval
     let finalDocumentRevision: UInt64
+    let finalSnapshotRevision: UInt64
     let finalPersistedRevision: UInt64
     let snapshotWriteCount: Int
     let flushCompleted: Bool

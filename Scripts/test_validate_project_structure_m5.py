@@ -116,7 +116,7 @@ EXPECTED_INDEPENDENT_REVIEW_NAMED_TESTS = (
     "testDebouncedSaveSupersessionEndsRealIntervals",
     "testProductTeardownCancelsEveryOpenInterval",
     "testTerminationDuringDelayedStartupAwaitsLoadedRevisionBeforeExactFlushAndRetry",
-    "testHostedOverlayChromeBridgesHelpAndActualFortyFourPointFrames",
+    "testOverlayChromeSemanticsMatchActualFortyFourPointLayoutFrames",
 )
 
 EXPECTED_PROTECTED_PATHS = (

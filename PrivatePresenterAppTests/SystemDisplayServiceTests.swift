@@ -304,7 +304,7 @@ final class SystemDisplayServiceTests: XCTestCase {
                 remove: { source.remove() }
             )
         )
-        weak var weakService = service
+        weak let weakService = service
         service?.onReconfigurationBegan = { _ in
             RuntimeDisplayGeneration(rawValue: 2)
         }

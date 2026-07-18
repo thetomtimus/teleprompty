@@ -38,6 +38,7 @@ struct AppRuntimeStartupSeams {
     var registerDiagnosticHotKey: (@MainActor () -> Int32)?
     #if DEBUG
     var registerDiagnosticHotKeys: (@MainActor () -> DiagnosticHotKeyRegistrationStatus)?
+    var presentsControllerAtStartup: Bool
     #endif
 
     #if DEBUG
@@ -57,6 +58,7 @@ struct AppRuntimeStartupSeams {
         registerDiagnosticHotKey: (@MainActor () -> Int32)? = nil,
         registerDiagnosticHotKeys:
             (@MainActor () -> DiagnosticHotKeyRegistrationStatus)? = nil,
+        presentsControllerAtStartup: Bool = true,
         record: @escaping @MainActor (AppRuntimeStartupEvent) -> Void = { _ in },
         recordDiagnosticLifecycle:
             @escaping @MainActor (
@@ -67,6 +69,7 @@ struct AppRuntimeStartupSeams {
         self.observeAndQuery = observeAndQuery
         self.registerDiagnosticHotKey = registerDiagnosticHotKey
         self.registerDiagnosticHotKeys = registerDiagnosticHotKeys
+        self.presentsControllerAtStartup = presentsControllerAtStartup
         self.record = record
         self.recordDiagnosticLifecycle = recordDiagnosticLifecycle
     }
@@ -352,7 +355,13 @@ final class AppRuntime {
         }
         #endif
         startupSeams.record(.shieldController)
+        #if DEBUG
+        if startupSeams.presentsControllerAtStartup {
+            controllerWindowController.presentShieldedControllerAtStartup(on: nil)
+        }
+        #else
         controllerWindowController.presentShieldedControllerAtStartup(on: nil)
+        #endif
 
         startupSeams.record(.load)
         dependencies.restorePerformanceGate.begin(

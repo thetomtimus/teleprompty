@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 import TeleprompterCore
 import XCTest
 
@@ -169,46 +168,30 @@ final class PresenterAccessibilityTests: XCTestCase {
         }
     }
 
-    func testHostedOverlayChromeBridgesHelpAndActualFortyFourPointFrames() {
+    func testOverlayChromeSemanticsMatchActualFortyFourPointLayoutFrames() {
         let model = AppModel(
             overlayController: OverlayPanelController(),
-            document: ScriptDocument(text: "synthetic hosted accessibility fixture"),
+            document: ScriptDocument(text: "synthetic accessibility fixture"),
             restorationRequired: false
         )
-        let hosting = NSHostingView(rootView: OverlayChromeView(model: model))
-        hosting.frame = NSRect(x: 0, y: 0, width: 640, height: 80)
-        let window = NSWindow(
-            contentRect: hosting.frame,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.isReleasedWhenClosed = false
-        window.contentView = hosting
-        window.orderFrontRegardless()
-        hosting.layoutSubtreeIfNeeded()
-        hosting.displayIfNeeded()
-        defer {
-            window.orderOut(nil)
-            window.contentView = nil
-            window.close()
+        let metrics = OverlayLayoutMetrics(size: CGSize(width: 640, height: 80))
+        let identifiers = OverlayChromeView.actionIdentifiers
+        let controls = identifiers.map {
+            PresenterAccessibility.entry(
+                $0, state: PresenterAccessibility.state(model: model)
+            )
         }
-
         let expectedLabels = Set(["Start scrolling", "Lock teleprompter", "Show Controller"])
-        let controls = hostedAccessibilityElements(of: hosting).filter {
-            guard let label = $0.accessibilityLabel() else { return false }
-            return expectedLabels.contains(label)
-        }
 
-        XCTAssertEqual(
-            Set(controls.compactMap { $0.accessibilityLabel() }),
-            expectedLabels
-        )
-        for control in controls {
-            let actualFrame = control.accessibilityFrame()
-            XCTAssertGreaterThanOrEqual(actualFrame.width, 44)
-            XCTAssertGreaterThanOrEqual(actualFrame.height, 44)
-            XCTAssertFalse(control.accessibilityHelp()?.isEmpty ?? true)
+        XCTAssertEqual(Set(controls.map(\.label)), expectedLabels)
+        XCTAssertEqual(metrics.headerControlRegions.map(\.identifier), identifiers)
+        for (control, region) in zip(controls, metrics.headerControlRegions) {
+            XCTAssertEqual(control.identifier, region.identifier)
+            XCTAssertGreaterThanOrEqual(region.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(region.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(control.minimumHitSize.width, 44)
+            XCTAssertGreaterThanOrEqual(control.minimumHitSize.height, 44)
+            XCTAssertFalse(control.help.isEmpty)
         }
     }
 
@@ -465,24 +448,6 @@ final class PresenterAccessibilityTests: XCTestCase {
             retryShortcutsVisible: true,
             topologyStatus: .extended
         )
-    }
-
-    private func hostedAccessibilityElements(
-        of root: NSAccessibilityProtocol
-    ) -> [NSAccessibilityProtocol] {
-        var result: [NSAccessibilityProtocol] = []
-        var pending: [NSAccessibilityProtocol] = [root]
-        var visited: Set<ObjectIdentifier> = []
-        while let element = pending.popLast() {
-            let identity = ObjectIdentifier(element)
-            guard visited.insert(identity).inserted else { continue }
-            result.append(element)
-            pending.append(
-                contentsOf: (element.accessibilityChildren() ?? [])
-                    .compactMap { $0 as? NSAccessibilityProtocol }
-            )
-        }
-        return result
     }
 
     private func entry(

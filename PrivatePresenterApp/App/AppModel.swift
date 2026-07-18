@@ -54,7 +54,7 @@ final class AppModel {
     @ObservationIgnored private(set) var diagnosticCorrelationID: UUID?
     #endif
 
-    @ObservationIgnored private let overlayController: OverlayPanelController
+    @ObservationIgnored private let overlayController: OverlayPanelController?
     @ObservationIgnored private let privacyCoordinator: PrivacyCoordinator
     @ObservationIgnored private let topologyEvaluator = DisplayTopologyEvaluator()
     @ObservationIgnored private let now: @MainActor () -> Date
@@ -105,6 +105,28 @@ final class AppModel {
     ) {
         self.init(
             overlayController: overlayController,
+            testConfigurationSnapshot: nil,
+            privacyCoordinator: privacyCoordinator,
+            document: document,
+            now: now,
+            restorationRequired: restorationRequired,
+            diagnosticEvidenceRecorderObject: diagnosticEvidenceRecorder,
+            effectHandler: effectHandler
+        )
+    }
+
+    convenience init(
+        testConfigurationSnapshot: OverlayConfigurationSnapshot,
+        privacyCoordinator: PrivacyCoordinator = PrivacyCoordinator(),
+        document: ScriptDocument? = nil,
+        now: @escaping @MainActor () -> Date = { Date() },
+        restorationRequired: Bool = false,
+        diagnosticEvidenceRecorder: DiagnosticEvidenceRecorder? = nil,
+        effectHandler: @escaping @MainActor (AppEffect) -> Void
+    ) {
+        self.init(
+            overlayController: nil,
+            testConfigurationSnapshot: testConfigurationSnapshot,
             privacyCoordinator: privacyCoordinator,
             document: document,
             now: now,
@@ -124,6 +146,7 @@ final class AppModel {
     ) {
         self.init(
             overlayController: overlayController,
+            testConfigurationSnapshot: nil,
             privacyCoordinator: privacyCoordinator,
             document: document,
             now: now,
@@ -135,7 +158,8 @@ final class AppModel {
     #endif
 
     private init(
-        overlayController: OverlayPanelController,
+        overlayController: OverlayPanelController?,
+        testConfigurationSnapshot: OverlayConfigurationSnapshot?,
         privacyCoordinator: PrivacyCoordinator,
         document: ScriptDocument?,
         now: @escaping @MainActor () -> Date,
@@ -157,16 +181,27 @@ final class AppModel {
         focusChromeTransitionDuration = 0.18
         restorationCompleted = !restorationRequired
         isPersistenceLoadSafe = !restorationRequired
-        proofConfigurationSnapshot = overlayController.configurationSnapshot
+        guard
+            let configurationSnapshot =
+                testConfigurationSnapshot ?? overlayController?.configurationSnapshot
+        else {
+            preconditionFailure("AppModel requires an overlay configuration")
+        }
+        proofConfigurationSnapshot = configurationSnapshot
         #if DEBUG
         diagnosticEvidenceRecorder =
             diagnosticEvidenceRecorderObject
             as? DiagnosticEvidenceRecorder
         #endif
-        self.effectHandler =
-            effectHandler ?? { effect in
+        if let effectHandler {
+            self.effectHandler = effectHandler
+        } else if let overlayController {
+            self.effectHandler = { effect in
                 Self.applyDefault(effect, overlayController: overlayController)
             }
+        } else {
+            preconditionFailure("Offscreen AppModel requires an effect handler")
+        }
     }
 
     var isPaused: Bool {
@@ -203,7 +238,7 @@ final class AppModel {
     }
 
     var configurationSnapshot: OverlayConfigurationSnapshot {
-        overlayController.configurationSnapshot
+        overlayController?.configurationSnapshot ?? proofConfigurationSnapshot
     }
 
     func send(_ command: AppCommand) {
@@ -270,6 +305,10 @@ final class AppModel {
             setScriptTitle(title)
         case .setFontSize(let size):
             setFontSize(size)
+        case .decreaseFontSize:
+            adjustFontSize(by: -TeleprompterPreferences.fontSizeStep)
+        case .increaseFontSize:
+            adjustFontSize(by: TeleprompterPreferences.fontSizeStep)
         case .setTextAlignment(let alignment):
             setTextAlignment(alignment)
         case .setActiveBandEnabled(let enabled):
@@ -566,6 +605,7 @@ final class AppModel {
     }
 
     func captureFocus(label: String) {
+        guard let overlayController else { return }
         focusEvidence.append(
             LabeledFocusSnapshot(
                 label: label,
@@ -666,6 +706,10 @@ final class AppModel {
         invalidatePendingClearForDurableChange()
         preferences.fontSizePoints = normalized
         commitReaderAppearanceChange()
+    }
+
+    private func adjustFontSize(by delta: Double) {
+        setFontSize(preferences.fontSizePoints + delta)
     }
 
     private func setTextAlignment(_ alignment: TeleprompterTextAlignment) {
@@ -1545,6 +1589,7 @@ final class AppModel {
             .teardownScrollSession,
             .focusChromeStateChanged, .focusChromeTransitionDurationChanged,
             .replaceScript, .applyScriptEdit, .setScriptTitle, .setFontSize,
+            .decreaseFontSize, .increaseFontSize,
             .setTextAlignment, .setActiveBandEnabled, .panelFrameChanged, .requestClear,
             .confirmClear, .cancelClear,
             .start, .togglePlayback, .restart, .setSpeed, .moveBackward, .moveForward,

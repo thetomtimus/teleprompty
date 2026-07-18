@@ -311,24 +311,25 @@ EXPECTED_M5_VISUAL_SOURCE_MARKERS = (
 )
 
 EXPECTED_REPAIR_NAMED_TESTS = (
-    "testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint",
-    "testHostedRootDispatchesEveryControlResizeAndTitleRouteAcrossTiers",
-    "testHostedSettingsPressShowsExistingControllerExactlyOnceWithoutActivation",
-    "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
-    "testDefaultUnlockedHostedHeaderOffersLockTeleprompter",
+    "testOffscreenQuickControlsUseFullRectangularTargetsWithCircularPaint",
+    "testOffscreenProbeDoesNotOrderOrLeakApplicationWindows",
+    "testOffscreenRootDispatchesEveryControlResizeAndTitleRouteAcrossTiers",
+    "testOffscreenSettingsPressShowsExistingControllerExactlyOnceWithoutActivation",
+    "testOffscreenLockedChromeLeavesSemanticsAndReaderStateUnchanged",
+    "testDefaultUnlockedOffscreenHeaderOffersLockTeleprompter",
     "testPlaybackTargetsRespectExistingPresentationEligibility",
 )
 EXPECTED_REPAIR_SOURCE_MARKERS = (
     ("rectangular-hit-shape", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".contentShape(Rectangle())", 1),
     ("circular-paint", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", "Circle().fill(fill(configuration:", 1),
-    ("hosted-probe", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "final class HostedRootProbe", 1),
-    ("real-window-events", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "window.sendEvent(event)", 1),
-    ("real-hit-testing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "hosting.hitTest(point)", 1),
-    ("real-ax-children", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "compactMap { $0 as? NSAccessibilityProtocol }", 1),
-    ("real-ax-press", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "private static func performAccessibilityPress", 1),
+    ("offscreen-probe", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "final class OffscreenRootProbe", 1),
+    ("offscreen-hit-testing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "hosting.hitTest(point)", 1),
+    ("product-hit-routing", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "OverlayHitRegionResolver(metrics: metrics).resolve(point: point)", 1),
+    ("manifest-semantics", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "PresenterAccessibility.entry(", 1),
+    ("windowless-model-seam", "PrivatePresenterApp/App/AppModel.swift", "testConfigurationSnapshot: OverlayConfigurationSnapshot", 2),
     ("resize-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "resizeChanges.append(change)", 1),
     ("title-callback", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "titleChanges.append(translation)", 1),
-    ("hosted-ax-navigation", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "!accessibilityIdentifiers.intersection(Self.chromeIdentifiers).isEmpty", 1),
+    ("window-isolation-regression", "PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift", "testOffscreenProbeDoesNotOrderOrLeakApplicationWindows", 1),
     ("controller-playback-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "let playbackPresentation = ControllerPresentation(", 1),
     ("playing-pause-eligible", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.isPlaying || playbackPresentation.isEnabled(.start)", 1),
     ("disabled-visual", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".opacity(accessibility.isEnabled ? 1 : 0.45)", 1),
@@ -336,7 +337,9 @@ EXPECTED_REPAIR_SOURCE_MARKERS = (
 )
 EXPECTED_REPAIR_FORBIDDEN_MARKERS = (
     ("circular-hit-shape", "PrivatePresenterApp/Overlay/OverlayQuickControlsView.swift", ".contentShape(Circle())"),
-    ("caller-echoed-ax", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "chromeIsAccessibilityNavigable: state == .unlocked"),
+    ("globally-ordered-test-window", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "orderFrontRegardless()"),
+    ("shared-test-window", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "NSWindow("),
+    ("stale-ax-query", "PrivatePresenterAppTests/M6VisualTestSupport.swift", "accessibilityChildren()"),
     ("duplicated-empty-policy", "PrivatePresenterApp/Accessibility/PresenterAccessibility.swift", "state.scriptText.trimmingCharacters"),
 )
 
@@ -405,9 +408,9 @@ EXPECTED_ORACLE_REPAIR_FORBIDDEN_MARKERS = (
 )
 
 EXPECTED_HOSTED_EVIDENCE_REPAIR_NAMED_TESTS = (
-    "testHostedQuickControlsUseFullRectangularTargetsWithCircularPaint",
-    "testHostedProbeConfirmsPrivatePresenterBeforePlaybackMutation",
-    "testHostedLockedChromeLeavesAccessibilityAndReaderStateUnchanged",
+    "testOffscreenQuickControlsUseFullRectangularTargetsWithCircularPaint",
+    "testOffscreenProbeConfirmsPrivatePresenterBeforePlaybackMutation",
+    "testOffscreenLockedChromeLeavesSemanticsAndReaderStateUnchanged",
 )
 EXPECTED_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS = (
     (
@@ -422,29 +425,32 @@ EXPECTED_HOSTED_EVIDENCE_REPAIR_SOURCE_MARKERS = (
         1,
     ),
     ("real-show-command", "model.send(.showOverlay)", 1),
-    ("eligible-playback-command", "model.send(.togglePlayback)", 1),
+    ("eligible-playback-command", "model.send(.togglePlayback)", 2),
     (
-        "hosted-hit-identifier",
-        "func hostedIdentifier(at point: CGPoint) -> String?",
+        "offscreen-hit-identifier",
+        "func offscreenIdentifier(at point: CGPoint) -> String?",
         1,
     ),
     (
-        "actual-ax-frame-cache",
-        "private func cacheHostedAccessibilityControlFrames()",
+        "product-hit-resolver",
+        "OverlayHitRegionResolver(metrics: metrics).resolve(point: point)",
         1,
     ),
-    ("active-band-frame-evidence", "activeBandFrame: system.activeBandView.frame", 1),
+    ("manifest-control", "func semanticControl(identifier: String)", 1),
+    ("active-band-frame-evidence", "activeBandFrame: system.activeBandView.frame", 2),
     (
         "text-container-inset-evidence",
         "textContainerInset: system.textView.textContainerInset",
-        1,
+        2,
     ),
-    ("panel-window-frame-evidence", "panelWindowFrame: window.frame", 1),
+    ("offscreen-frame-evidence", "offscreenFrame: hosting.frame", 1),
 )
 EXPECTED_HOSTED_EVIDENCE_REPAIR_FORBIDDEN_MARKERS = (
     ("fabricated-shield-state", "model.isShielded ="),
     ("fabricated-confirmation-state", "model.isSelectionConfirmed ="),
-    ("synthetic-hit-identifier", "OverlayHitRegionResolver(metrics:"),
+    ("globally-visible-window", "orderFrontRegardless()"),
+    ("shared-app-window", "NSWindow("),
+    ("stale-ax-traversal", "accessibilityChildren()"),
 )
 
 EXPECTED_M1_REQUIRED_PATHS = (
@@ -1052,8 +1058,9 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         if not (ROOT / support_path).is_file():
             return
         support = VALIDATOR.read(support_path)
-        self.assertNotIn("OverlayVisualTokens", support)
-        self.assertNotIn("OverlayLayoutMetrics", support)
+        oracle_support = support.split("static func makeCanonicalSemanticOracle", 1)[-1]
+        self.assertNotIn("OverlayVisualTokens", oracle_support)
+        self.assertNotIn("OverlayLayoutMetrics", oracle_support)
         for forbidden in (
             "WKWebView", "HTML", "CGWindowListCreateImage",
             "SCScreenshotManager", "recordBaseline", "golden",
@@ -1516,7 +1523,7 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
 
     def testM6VisualAnchorAssertionsUseCurrentContextModel(self) -> None:
         source = VALIDATOR.read("PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift")
-        self.assertIn("XCTAssertEqual(adapter.lastRestoredAnchor, baselineAnchor)", source)
+        self.assertIn("XCTAssertEqual(adapter.lastRestoredAnchor, baselineResizeAnchor)", source)
         self.assertIn("XCTAssertEqual(viewport.adapter.lastRestoredAnchor, anchor)", source)
         self.assertNotIn("lastRestoredAnchor?.document", source)
         self.assertNotIn("anchor.document", source)
@@ -1582,18 +1589,20 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertNotIn("var currentViewport = firstViewport", source)
         self.assertNotIn("readerViewportProvider: { currentViewport }", source)
 
-    def testM6FinalNativeFixturesOwnWindowsClocksAndAppKitAssertions(self) -> None:
+    def testM6FinalNativeFixturesIsolateWindowsClocksAndAppKitAssertions(self) -> None:
         support = VALIDATOR.read("PrivatePresenterAppTests/M6VisualTestSupport.swift")
         overlay = VALIDATOR.read("PrivatePresenterAppTests/OverlayVisualSnapshotTests.swift")
         accessibility = VALIDATOR.read("PrivatePresenterAppTests/PresenterAccessibilityTests.swift")
         scroll = VALIDATOR.read("PrivatePresenterAppTests/ScrollSessionControllerTests.swift")
         display = VALIDATOR.read("PrivatePresenterAppTests/SystemDisplayServiceTests.swift")
 
-        self.assertIn("window.orderFrontRegardless()", support)
-        self.assertIn("func close()", support)
-        self.assertGreaterEqual(overlay.count(".close()"), 12)
-        self.assertIn("window.orderFrontRegardless()", accessibility)
-        self.assertIn("private func hostedAccessibilityElements", accessibility)
+        self.assertNotIn("orderFrontRegardless()", support)
+        self.assertNotIn("NSWindow(", support)
+        self.assertNotIn("accessibilityChildren()", support)
+        self.assertIn("final class OffscreenRootProbe", support)
+        self.assertIn("testOffscreenProbeDoesNotOrderOrLeakApplicationWindows", overlay)
+        self.assertNotIn("orderFrontRegardless()", accessibility)
+        self.assertNotIn("NSWindow(", accessibility)
         self.assertIn("selectedRange().length, 0", scroll)
         self.assertIn("let expectedBandY = min(", scroll)
         self.assertIn("XCTAssertTrue(presentation.isEnabled(.focusMode))", scroll)
@@ -1608,17 +1617,20 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         )
         self.assertEqual(VALIDATOR.M6_FINAL_CHANGED_PATHS, EXPECTED_FINAL_CHANGED_PATHS)
 
-    def testM6NativeFixturesUseProtocolAXAndValidGeometry(self) -> None:
+    def testM6NativeFixturesUseDeterministicSemanticsAndValidGeometry(self) -> None:
         support = VALIDATOR.read("PrivatePresenterAppTests/M6VisualTestSupport.swift")
         accessibility = VALIDATOR.read("PrivatePresenterAppTests/PresenterAccessibilityTests.swift")
         scroll = VALIDATOR.read("PrivatePresenterAppTests/ScrollSessionControllerTests.swift")
         display_test = VALIDATOR.read("PrivatePresenterAppTests/SystemDisplayServiceTests.swift")
 
-        self.assertIn("in root: NSAccessibilityProtocol", support)
-        self.assertIn("-> [NSAccessibilityProtocol]", support)
-        self.assertIn("of root: NSAccessibilityProtocol", accessibility)
-        self.assertIn("window.isReleasedWhenClosed = false", accessibility)
-        self.assertIn("window.contentView = nil", accessibility)
+        self.assertIn("func semanticControl(identifier: String)", support)
+        self.assertIn("OverlayHitRegionResolver(metrics: metrics)", support)
+        self.assertNotIn("NSAccessibilityProtocol", support)
+        self.assertNotIn("NSAccessibilityProtocol", accessibility)
+        self.assertIn(
+            "testOverlayChromeSemanticsMatchActualFortyFourPointLayoutFrames",
+            accessibility,
+        )
         self.assertIn("size: NSSize(width: 260, height: 226)", scroll)
         self.assertIn(
             "let anchor = viewport.adapter.captureAnchor(viewportFraction: 0.5)",
@@ -1629,11 +1641,11 @@ class Milestone6ValidatorContractTests(unittest.TestCase):
         self.assertIn("XCTAssertGreaterThan(replacementViewport.clipOriginY, 270)", scroll)
         self.assertIn('"the passRetained ownership forever"', display_test)
 
-    def testM6FinalMarkersRecordProtocolAXTraversal(self) -> None:
+    def testM6FinalMarkersRecordOffscreenSemanticTraversal(self) -> None:
         marker = (
-            "real-ax-children",
+            "product-hit-routing",
             "PrivatePresenterAppTests/M6VisualTestSupport.swift",
-            "compactMap { $0 as? NSAccessibilityProtocol }",
+            "OverlayHitRegionResolver(metrics: metrics).resolve(point: point)",
             1,
         )
         self.assertIn(marker, EXPECTED_REPAIR_SOURCE_MARKERS)

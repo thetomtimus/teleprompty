@@ -1,6 +1,73 @@
 import SwiftUI
 import TeleprompterCore
 
+enum OverlayControlToolTipPlacement {
+    case above
+    case belowTrailing
+
+    var alignment: Alignment {
+        switch self {
+        case .above: .top
+        case .belowTrailing: .bottomTrailing
+        }
+    }
+
+    var verticalOffset: CGFloat {
+        switch self {
+        case .above: -36
+        case .belowTrailing: 36
+        }
+    }
+}
+
+struct OverlayControlHoverLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(OverlayVisualTokens.readingText.swiftUIColor)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background {
+                RoundedRectangle(
+                    cornerRadius: OverlayVisualTokens.toolTipRadius,
+                    style: .continuous
+                )
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            OverlayVisualTokens.toolTipTop.swiftUIColor,
+                            OverlayVisualTokens.toolTipBottom.swiftUIColor,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: OverlayVisualTokens.toolTipRadius,
+                        style: .continuous
+                    )
+                    .strokeBorder(
+                        OverlayVisualTokens.toolTipBorder.swiftUIColor,
+                        lineWidth: 1
+                    )
+                }
+                .shadow(
+                    color: OverlayVisualTokens.toolTipShadow.swiftUIColor,
+                    radius: 8,
+                    x: 0,
+                    y: 4
+                )
+            }
+            .fixedSize()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 /// A visual button whose policy and semantics are supplied by the app model and
 /// the centralized accessibility manifest. Hover and focus are transient render
 /// state only; commands remain the sole owner of product state.
@@ -12,8 +79,10 @@ struct OverlayIconButton: View {
     let isPrimary: Bool
     let isSelected: Bool
     let accessibility: PresenterAccessibility.Entry
+    let toolTipPlacement: OverlayControlToolTipPlacement
     let action: @MainActor () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
     @FocusState private var isFocused: Bool
 
@@ -47,11 +116,29 @@ struct OverlayIconButton: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
+        .overlay(alignment: toolTipPlacement.alignment) {
+            if isHovered {
+                OverlayControlHoverLabel(text: accessibility.label)
+                    .offset(y: toolTipPlacement.verticalOffset)
+                    .transition(
+                        .opacity.combined(
+                            with: .scale(scale: 0.96, anchor: .center)
+                        )
+                    )
+            }
+        }
         .focused($isFocused)
         .onHover { isHovered = $0 }
+        .animation(
+            reduceMotion ? nil : .easeOut(duration: 0.12),
+            value: isHovered
+        )
         .opacity(accessibility.isEnabled ? 1 : 0.45)
-        .presenterAccessibility(accessibility)
-        .zIndex(1)
+        .presenterAccessibility(
+            accessibility,
+            showsSystemToolTip: false
+        )
+        .zIndex(isHovered ? 100 : 1)
     }
 }
 
@@ -112,10 +199,10 @@ struct OverlayQuickControlsView: View {
     var body: some View {
         HStack(spacing: metrics.toolbarActionSpacing) {
             iconButton(index: 0) {
-                model.send(.setFontSize(model.preferences.fontSizePoints - PresenterAccessibility.fontSizeStep))
+                model.send(.decreaseFontSize)
             }
             iconButton(index: 1) {
-                model.send(.setFontSize(model.preferences.fontSizePoints + PresenterAccessibility.fontSizeStep))
+                model.send(.increaseFontSize)
             }
             iconButton(index: 2) {
                 model.send(
@@ -223,6 +310,7 @@ struct OverlayQuickControlsView: View {
             accessibility: PresenterAccessibility.entry(
                 Self.actionIdentifiers[index], state: state
             ),
+            toolTipPlacement: .above,
             action: action
         )
     }

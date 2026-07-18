@@ -120,7 +120,10 @@ class TeleprompterPanel: NSPanel {
 
     func setLocked(_ locked: Bool) {
         isOverlayLocked = locked
-        ignoresMouseEvents = locked
+        // The SwiftUI root blocks every locked interaction except the header
+        // lock target. Keeping the nonactivating panel mouse-aware lets that
+        // same visible control unlock the overlay without accepting key focus.
+        ignoresMouseEvents = false
         if locked, isKeyWindow {
             resignKey()
         }

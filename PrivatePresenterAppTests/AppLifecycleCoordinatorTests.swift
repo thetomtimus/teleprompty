@@ -305,9 +305,9 @@ final class AppLifecycleCoordinatorTests: XCTestCase {
 
     func testRuntimeOwnersDeallocateAfterTeardown() async {
         var runtime: AppRuntime? = AppRuntime(proofLevel: .floating)
-        weak var weakRuntime = runtime
-        weak var weakModel = runtime?.model
-        weak var weakOverlay = runtime?.overlayController
+        weak let weakRuntime = runtime
+        weak let weakModel = runtime?.model
+        weak let weakOverlay = runtime?.overlayController
 
         let stopped = await runtime?.stopAndFlush()
         XCTAssertTrue(stopped == true)

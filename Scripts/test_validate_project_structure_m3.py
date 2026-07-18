@@ -183,8 +183,8 @@ class Milestone3ValidatorContractTests(unittest.TestCase):
     def test_validator_requires_textkit2_and_display_link_hot_path_contracts(self) -> None:
         path = "PrivatePresenterApp/Overlay/ReaderTextSystem.swift"
         source = VALIDATOR.read(path).replace(
-            "NSTextView(usingTextLayoutManager: true)",
-            "NSTextView(usingTextLayoutManager: false)",
+            "NSTextLayoutManager()",
+            "NSTextLayoutManager_BROKEN()",
         ) + "\n// mutation reader.layoutManager\n"
         violations = self.violations_with({path: source})
         self.assertIn("textkit:reader-not-textkit2", violations)

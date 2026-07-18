@@ -72,6 +72,24 @@ final class ControllerPresentationTests: XCTestCase {
         XCTAssertTrue(strings.contains("Private Presenter"))
     }
 
+    func testApplicationMenuProvidesStandardEditingKeyboardShortcuts() throws {
+        let mainMenu = ApplicationMenuInstaller.makeMainMenu()
+        let editMenu = try XCTUnwrap(mainMenu.item(withTitle: "Edit")?.submenu)
+        let expected: [(String, String, Selector)] = [
+            ("Cut", "x", #selector(NSText.cut(_:))),
+            ("Copy", "c", #selector(NSText.copy(_:))),
+            ("Paste", "v", #selector(NSText.paste(_:))),
+            ("Select All", "a", #selector(NSText.selectAll(_:))),
+        ]
+
+        for (title, keyEquivalent, action) in expected {
+            let item = try XCTUnwrap(editMenu.item(withTitle: title))
+            XCTAssertEqual(item.keyEquivalent, keyEquivalent)
+            XCTAssertEqual(item.keyEquivalentModifierMask, .command)
+            XCTAssertEqual(item.action, action)
+        }
+    }
+
     func testWindowMenuDiagnosticAndAccessibilityLabelsExcludeSentinelPrivateContent() {
         let sentinels = ["SENTINEL_PRIVATE_TITLE", "SENTINEL_PRIVATE_SCRIPT"]
         let document = ScriptDocument(
@@ -108,7 +126,8 @@ final class ControllerPresentationTests: XCTestCase {
         let source = try String(contentsOfFile: sourcePath("ControllerPrivacyShieldView.swift"))
 
         XCTAssertTrue(source.contains("topologyStatus"))
-        XCTAssertTrue(source.contains("ControllerPresentation.topologyLabel"))
+        XCTAssertTrue(source.contains("PresenterAccessibility.genericSafetyState"))
+        XCTAssertFalse(source.contains("ControllerPresentation.topologyLabel"))
     }
 
     func testEmptyInstructionAndDisabledStart() {
@@ -175,8 +194,18 @@ final class ControllerPresentationTests: XCTestCase {
         if case .restart? = presentation.productCommand(for: .restart) {} else {
             XCTFail("Restart must dispatch through AppModel")
         }
-        // Speed carries a bound value and therefore dispatches directly from the slider.
+        // Speed carries a bound value and therefore dispatches directly from its control.
         XCTAssertNil(presentation.productCommand(for: .speed))
+    }
+
+    func testControllerUsesCompatibleInteractiveControls() throws {
+        let source = try String(contentsOfFile: sourcePath("ControllerView.swift"))
+
+        XCTAssertFalse(source.contains("Slider("))
+        XCTAssertFalse(source.contains("ScriptEditorTextView("))
+        XCTAssertEqual(source.components(separatedBy: "Stepper(").count - 1, 2)
+        XCTAssertTrue(source.contains("axis: .vertical"))
+        XCTAssertTrue(source.contains("ControllerTextEditing.minimalEdit"))
     }
 
     func testM4FocusModeIsEnabledWithoutPlaceholderCopy() {

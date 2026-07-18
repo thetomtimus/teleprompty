@@ -284,6 +284,22 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(snapshots.last?.preferences.isActiveBandEnabled, false)
     }
 
+    func testFontSizeStepCommandsSaturateAtBoundsWithoutWrapping() {
+        let model = AppModel(overlayController: OverlayPanelController())
+
+        model.send(.setFontSize(94))
+        for _ in 0..<10 {
+            model.send(.increaseFontSize)
+        }
+        XCTAssertEqual(model.preferences.fontSizePoints, 96)
+
+        model.send(.setFontSize(26))
+        for _ in 0..<10 {
+            model.send(.decreaseFontSize)
+        }
+        XCTAssertEqual(model.preferences.fontSizePoints, 24)
+    }
+
     func testAcceptedEditSchedulesAutosaveAfterAuthoritativeMutation() throws {
         var observedText: String?
         let model = AppModel(
@@ -1000,6 +1016,10 @@ final class AppModelTests: XCTestCase {
         runtime.model.send(.requestClear)
         let token = try XCTUnwrap(runtime.model.pendingClearToken)
         runtime.model.send(.confirmClear(token: token))
+        for _ in 0..<100 where !runtime.model.document.text.isEmpty {
+            try await ContinuousClock().sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(runtime.model.document.text, "")
 
         let didFlush = await runtime.stopAndFlush()
 
@@ -1007,15 +1027,17 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(runtime.model.isTerminationQuiescing)
         XCTAssertEqual(runtime.model.document.text, "")
         let status = await store.status()
-        XCTAssertEqual(status.persistedRevision, 2)
+        let terminalRevision = runtime.model.snapshotRevision
+        XCTAssertGreaterThanOrEqual(terminalRevision, 2)
+        XCTAssertEqual(status.persistedRevision, terminalRevision)
         let data = try Data(contentsOf: store.snapshotURL)
         let persisted = try SnapshotMigrator().migrate(data)
-        XCTAssertEqual(persisted.revision, 2)
+        XCTAssertEqual(persisted.revision, terminalRevision)
         XCTAssertEqual(persisted.document.text, "")
         XCTAssertEqual(events, [.flushPersistence, .stopServices])
         runtime.model.send(.replaceScript(text: "late mutation"))
         XCTAssertEqual(runtime.model.document.text, "")
-        XCTAssertEqual(runtime.model.snapshotRevision, 2)
+        XCTAssertEqual(runtime.model.snapshotRevision, terminalRevision)
     }
 
     func testTerminationDuringDelayedStartupAwaitsLoadedRevisionBeforeExactFlushAndRetry() async throws {
@@ -1069,17 +1091,23 @@ final class AppModelTests: XCTestCase {
         let didStop = await stop.value
         XCTAssertTrue(didStop)
         XCTAssertEqual(runtime.model.document.revision, 41)
-        XCTAssertEqual(runtime.model.snapshotRevision, 41)
+        XCTAssertEqual(runtime.model.snapshotRevision, restoredSnapshot.revision + 1)
         XCTAssertTrue(runtime.model.isPaused)
         XCTAssertTrue(runtime.model.isShielded)
         XCTAssertEqual(runtime.model.overlaySession.visibility, .hidden)
 
         let statusAfterFirstStop = await store.status()
-        XCTAssertEqual(statusAfterFirstStop.persistedRevision, 41)
+        XCTAssertEqual(
+            statusAfterFirstStop.persistedRevision,
+            runtime.model.snapshotRevision
+        )
         let didRetry = await runtime.stopAndFlush()
         XCTAssertTrue(didRetry, "retry must not strand startup or revision")
         let statusAfterRetry = await store.status()
-        XCTAssertEqual(statusAfterRetry.persistedRevision, 41)
+        XCTAssertEqual(
+            statusAfterRetry.persistedRevision,
+            runtime.model.snapshotRevision
+        )
     }
 
     func testControllerStartsShielded() {
@@ -1689,7 +1717,7 @@ extension AppModelTests {
         model.confirmSelectedDisplay(generation: stale)
         model.completeShieldedMove(screenID: privateDisplay.id, generation: stale)
         model.showOverlay()
-        model.send(.start)
+        model.send(.togglePlayback)
 
         XCTAssertTrue(effects.isEmpty)
         XCTAssertTrue(model.isShielded)

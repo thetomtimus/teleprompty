@@ -1,6 +1,46 @@
 import AppKit
 import TeleprompterCore
 
+@MainActor
+final class ReaderTextLayoutView: NSView {
+    private let contentStorage = NSTextContentStorage()
+    private let layoutManager = NSTextLayoutManager()
+    private let layoutContainer = NSTextContainer()
+
+    var textStorage: NSTextStorage? { contentStorage.textStorage }
+    var textLayoutManager: NSTextLayoutManager? { layoutManager }
+    var textContainer: NSTextContainer? { layoutContainer }
+    var textContainerInset = NSSize.zero
+    var textContainerOrigin: NSPoint {
+        NSPoint(x: textContainerInset.width, y: textContainerInset.height)
+    }
+    var isEditable = false
+    var isSelectable = false
+    var isRichText = false
+    var isAutomaticLinkDetectionEnabled = false
+    var isAutomaticTextReplacementEnabled = false
+    var drawsBackground = false
+    var isVerticallyResizable = true
+    var isHorizontallyResizable = false
+    var minSize = NSSize.zero
+    var maxSize = NSSize.zero
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        contentStorage.addTextLayoutManager(layoutManager)
+        layoutManager.textContainer = layoutContainer
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func selectedRange() -> NSRange {
+        NSRange(location: 0, length: 0)
+    }
+}
+
 enum ReaderFullReplacementReason: String, CaseIterable, Equatable, Hashable, Sendable {
     case initial
     case restore
@@ -10,8 +50,9 @@ enum ReaderFullReplacementReason: String, CaseIterable, Equatable, Hashable, Sen
 
 @MainActor
 final class ReaderTextSystem {
-    let textView: NSTextView
+    let textView: ReaderTextLayoutView
     let textStorage: NSTextStorage
+    let renderView: ReaderDrawingView
     let activeBandView: NSView
     private(set) var appliedRevision: UInt64
     private(set) var isAwaitingResync = false
@@ -36,12 +77,14 @@ final class ReaderTextSystem {
         ),
         onResyncRequested: (@MainActor (UInt64) -> Void)? = nil
     ) {
-        let textView = NSTextView(usingTextLayoutManager: true)
+        let textView = ReaderTextLayoutView(frame: .zero)
         guard let textStorage = textView.textStorage else {
             preconditionFailure("TextKit 2 reader requires text storage")
         }
+        let renderView = ReaderDrawingView()
         self.textView = textView
         self.textStorage = textStorage
+        self.renderView = renderView
         activeBandView = ReaderActiveBandView()
         appliedRevision = revision
         self.performanceRegistry = performanceRegistry
@@ -67,6 +110,7 @@ final class ReaderTextSystem {
         configureViewport(NSSize(width: 640, height: 360))
         textStorage.replaceCharacters(in: NSRange(location: 0, length: 0), with: text)
         textMutationCount += 1
+        renderView.connect(to: self)
         updateAttributes(fontSize: 42, fontWeight: .regular, alignment: .left)
     }
 
@@ -110,6 +154,7 @@ final class ReaderTextSystem {
         }
         appliedRevision = edit.revision
         incrementalMutationCount += 1
+        renderView.refresh()
     }
 
     func replaceAuthoritatively(
@@ -148,6 +193,7 @@ final class ReaderTextSystem {
         appliedRevision = revision
         fullReplacementCount += 1
         isAwaitingResync = false
+        renderView.refresh()
     }
 
     func updateAttributes(
@@ -174,6 +220,7 @@ final class ReaderTextSystem {
                 range: NSRange(location: 0, length: textStorage.length)
             )
         }
+        renderView.refresh()
         viewportAdapter?.invalidateActiveBandLineMetrics()
     }
 
@@ -205,6 +252,8 @@ final class ReaderTextSystem {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = true
+        renderView.frame = textView.frame
+        renderView.refresh()
     }
 
     static func appKitWeight(for weight: TeleprompterFontWeight) -> NSFont.Weight {
@@ -230,6 +279,7 @@ final class ReaderTextSystem {
             with: text
         )
         textMutationCount += 1
+        renderView.refresh()
     }
     #endif
 

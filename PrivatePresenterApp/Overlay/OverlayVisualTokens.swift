@@ -79,6 +79,16 @@ enum OverlayVisualTokens {
     static let toolbarShadow = NamedSRGBColor(
         red: 7.0 / 255, green: 12.0 / 255, blue: 30.0 / 255, opacity: 0.34
     )
+    static let toolTipTop = NamedSRGBColor(
+        red: 45.0 / 255, green: 61.0 / 255, blue: 101.0 / 255, opacity: 0.98
+    )
+    static let toolTipBottom = NamedSRGBColor(
+        red: 28.0 / 255, green: 40.0 / 255, blue: 71.0 / 255, opacity: 0.98
+    )
+    static let toolTipBorder = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.18)
+    static let toolTipShadow = NamedSRGBColor(
+        red: 7.0 / 255, green: 12.0 / 255, blue: 30.0 / 255, opacity: 0.42
+    )
     static let controlHover = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.09)
     static let controlPressed = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.14)
     static let primaryControlFill = readingText
@@ -88,10 +98,16 @@ enum OverlayVisualTokens {
     static let controlFocus = NamedSRGBColor(
         red: 190.0 / 255, green: 211.0 / 255, blue: 248.0 / 255, opacity: 0.88
     )
+    static let resizeGrip = NamedSRGBColor(red: 1, green: 1, blue: 1, opacity: 0.38)
+    static let resizeGripActive = NamedSRGBColor(
+        red: 1, green: 1, blue: 1, opacity: 0.82
+    )
     static let cardRadius: CGFloat = 30
     static let cardBorderWidth: CGFloat = 1
     static let activeBandRadius: CGFloat = 8
     static let activeBandAccentWidth: CGFloat = 3
+    static let resizeGripLineWidth: CGFloat = 1.5
+    static let toolTipRadius: CGFloat = 9
 }
 
 struct OverlayLayoutMetrics: Equatable {
@@ -315,7 +331,7 @@ struct OverlayLayoutMetrics: Equatable {
     }
 
     var cornerResizeRegions: [ResizeRegion] {
-        let extent: CGFloat = 18
+        let extent: CGFloat = 28
         return [
             ResizeRegion(
                 edge: .bottomLeft,

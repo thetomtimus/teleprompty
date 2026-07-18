@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The private overlay header. Only its title/empty region owns the custom drag
@@ -16,6 +17,7 @@ struct OverlayChromeView: View {
     let onDragEnded: () -> Void
     let onResizeChanged: (ClampedPanelInteractionController.ResizeEdge, CGSize) -> Void
     let onResizeEnded: () -> Void
+    @State private var dragStartScreenLocation: NSPoint?
 
     init(
         model: AppModel,
@@ -54,6 +56,9 @@ struct OverlayChromeView: View {
 
             OverlayResizeInteractionLayer(
                 metrics: metrics,
+                showsCornerGrips: OverlayResizeInteractionLayer.cornerGripsAreVisible(
+                    isLocked: model.isLocked
+                ),
                 onResizeChanged: onResizeChanged,
                 onResizeEnded: onResizeEnded
             )
@@ -137,8 +142,26 @@ struct OverlayChromeView: View {
         .accessibilityHidden(true)
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                .onChanged { onDragChanged($0.translation) }
-                .onEnded { _ in onDragEnded() }
+                .onChanged { value in
+                    let current = NSEvent.mouseLocation
+                    let start =
+                        dragStartScreenLocation
+                        ?? OverlayScreenDragTranslation.inferredStartLocation(
+                            currentScreenLocation: current,
+                            initialSwiftUITranslation: value.translation
+                        )
+                    dragStartScreenLocation = start
+                    onDragChanged(
+                        OverlayScreenDragTranslation.swiftUITranslation(
+                            from: start,
+                            to: current
+                        )
+                    )
+                }
+                .onEnded { _ in
+                    dragStartScreenLocation = nil
+                    onDragEnded()
+                }
         )
     }
 
@@ -163,6 +186,7 @@ struct OverlayChromeView: View {
             accessibility: PresenterAccessibility.entry(
                 Self.actionIdentifiers[index], state: state
             ),
+            toolTipPlacement: .belowTrailing,
             action: action
         )
     }

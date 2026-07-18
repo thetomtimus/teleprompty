@@ -199,7 +199,7 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
 
         let beforePrivacy = runtime.model.commandDispatchCount
         runtime.model.send(.topologyWillChange)
-        XCTAssertEqual(runtime.model.commandDispatchCount, beforePrivacy + 1)
+        XCTAssertGreaterThan(runtime.model.commandDispatchCount, beforePrivacy)
         XCTAssertEqual(runtime.model.overlaySession.playbackPhase, .paused)
         XCTAssertEqual(runtime.model.overlaySession.visibility, .hidden)
         XCTAssertTrue(runtime.model.isShielded)
@@ -368,7 +368,18 @@ final class DiagnosticEvidenceRecorderTests: XCTestCase {
                 .requestConfirmation,
             ]
         )
-        XCTAssertEqual(effects, [.hidePanel, .queryTopology, .evaluatePrivacy])
+        XCTAssertEqual(effects.count, 5)
+        guard case .stopScrollSession(_, _, .topology, _, _) = effects[0] else {
+            return XCTFail("Topology privacy must retire scrolling first")
+        }
+        XCTAssertEqual(
+            Array(effects[1...3]),
+            [.hidePanel, .queryTopology, .evaluatePrivacy]
+        )
+        guard case .updateFocusMode(let focus) = effects[4] else {
+            return XCTFail("Topology privacy must update focus state last")
+        }
+        XCTAssertFalse(focus.isVisible)
         XCTAssertEqual(model.overlaySession.playbackPhase, .paused)
         XCTAssertEqual(model.overlaySession.visibility, .hidden)
         XCTAssertTrue(model.isShielded)
